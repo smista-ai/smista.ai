@@ -5,9 +5,10 @@ Guidance for Claude Code (and other agents) working in this repository.
 ## Project
 
 smista.ai is a local-first agent and CLI that deterministically routes each
-phase of an AI workflow to the most suitable model. The full design lives in
-[docs/reference/specification.md](docs/reference/specification.md). Read it
-before making non-trivial changes.
+phase of an AI workflow to the most suitable model. Reference the public
+documentation under [docs/](docs/) for design and guidance. The full
+specification is private and is not published; it will be provided to you
+directly when needed.
 
 Core invariant: **routing is deterministic and never depends on an LLM.**
 Routing, policy evaluation, context selection and tool mediation belong to

@@ -9,7 +9,3 @@
 # Technical
 
 - [Architecture](technical/architecture.md)
-
-# Reference
-
-- [Specification](reference/specification.md)
