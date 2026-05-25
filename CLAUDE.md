@@ -44,14 +44,23 @@ lives in `docs/`.
 
 ## Commands
 
-```sh
-# Rust
-cargo build --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all --check
+Tasks are driven by [`just`](https://just.systems); run `just` to list recipes.
 
-# SDK
-cd sdk && npm install && npm run build && npm run check
+```sh
+# Build
+just build_all          # crates + SDK
+just build_crates       # cargo build --workspace
+
+# Checks (what CI runs)
+just check_code         # nightly fmt --check, clippy -D warnings, SDK lint + typecheck
+just test_all           # cargo test --workspace + SDK vitest
+
+# SDK (all npm scripts are exposed as `sdk_*` recipes)
+just sdk_check          # biome ci
+just sdk_test           # vitest
+
+# Publish (crates in dependency order with retry, then SDK)
+just publish_all
 
 # Docs
 mdbook build docs

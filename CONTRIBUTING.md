@@ -12,13 +12,16 @@ participating, you are expected to uphold it.
 
 1. Fork and clone the repository.
 2. Install the toolchain pinned in `rust-toolchain.toml` (rustup handles this
-   automatically), plus [Node.js](https://nodejs.org) 20+ for the SDK.
+   automatically), [Node.js](https://nodejs.org) 22+ for the SDK, and
+   [`just`](https://just.systems).
 3. Build everything:
 
    ```sh
-   cargo build --workspace
-   cd sdk && npm install && npm run build
+   just sdk_install
+   just build_all
    ```
+
+Run `just` to list every available recipe.
 
 ## Branches and commits
 
@@ -33,10 +36,9 @@ participating, you are expected to uphold it.
 Run the same checks CI runs:
 
 ```sh
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cd sdk && npm run check && npm run build
+just check_code   # fmt --check, clippy -D warnings, SDK lint + typecheck
+just test_all     # crate + SDK tests
+just build_all
 ```
 
 If you changed any GitHub Actions workflow, run `zizmor .github/workflows` and
