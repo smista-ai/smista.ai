@@ -6,12 +6,14 @@ on:
       - main
     paths:
       - "sdk/**"
+      - "just/sdk.just"
       - ".github/workflows/sdk.yml"
   pull_request:
     branches:
       - main
     paths:
       - "sdk/**"
+      - "just/sdk.just"
       - ".github/workflows/sdk.yml"
 
 permissions:
@@ -20,21 +22,24 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: sdk
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: sdk/package-lock.json
+      - name: Install just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Install dependencies
-        run: npm ci
+        run: just sdk_install
       - name: Lint and format check
-        run: npm run check
+        run: just sdk_check
+      - name: Type check
+        run: just sdk_typecheck
+      - name: Test
+        run: just sdk_test
       - name: Build
-        run: npm run build
+        run: just build_sdk

@@ -1,4 +1,4 @@
-name: build_and_test
+name: crates
 
 on:
   push:
@@ -23,8 +23,10 @@ jobs:
         with:
           toolchain: nightly
           components: rustfmt
+      - name: Install just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Check formatting
-        run: cargo +nightly fmt --all --check
+        run: just fmt_nightly "--check"
 
   clippy:
     runs-on: ubuntu-latest
@@ -44,8 +46,10 @@ jobs:
         with:
           toolchain: 1.95.0
           components: clippy
+      - name: Install just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: just clippy "-- -D warnings"
 
   test:
     runs-on: ubuntu-latest
@@ -64,8 +68,10 @@ jobs:
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: 1.95.0
+      - name: Install just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Test
-        run: cargo test --workspace
+        run: just test
 
   build:
     runs-on: ubuntu-latest
@@ -84,5 +90,29 @@ jobs:
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: 1.95.0
+      - name: Install just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Build
-        run: cargo build --workspace
+        run: just build_crates
+
+  doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-doc-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: 1.95.0
+      - name: Install just
+        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+      - name: Build docs
+        run: just doc
