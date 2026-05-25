@@ -1,0 +1,11 @@
+[package]
+name = "smista-trace"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+description = "Execution trace types and recording logic for smista.ai."
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+categories = { workspace = true }
+keywords = { workspace = true }

@@ -1,0 +1,19 @@
+.project
+/target
+*.swp
+
+.artifact/
+
+# rust rover
+.idea/
+
+.claude/
+
+.DS_Store
+
+docs/book/
+
+# Node / SDK
+node_modules/
+sdk/dist/
+*.tsbuildinfo

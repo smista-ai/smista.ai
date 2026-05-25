@@ -1,0 +1,12 @@
+[book]
+title = "smista.ai"
+description = "Local-first agent and CLI that deterministically routes each phase of an AI workflow to the most suitable model."
+authors = ["Christian Visintin"]
+language = "en"
+src = "."
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/veeso/smista.ai"
+additional-css = []

@@ -1,0 +1,37 @@
+{
+  "name": "@smista-ai/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript/JavaScript SDK for interacting with the smista-router HTTP API.",
+  "license": "MIT",
+  "author": "Christian Visintin <christian.visintin@veeso.dev>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/veeso/smista.ai.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://smista.ai",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome ci ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "typescript": "5.7.2"
+  }
+}
