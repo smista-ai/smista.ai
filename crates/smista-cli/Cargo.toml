@@ -1,0 +1,15 @@
+[package]
+name = "smista-cli"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+description = "smista command-line interface."
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+categories = { workspace = true }
+keywords = { workspace = true }
+
+[[bin]]
+name = "smista"
+path = "src/main.rs"

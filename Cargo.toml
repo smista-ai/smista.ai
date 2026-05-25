@@ -1,0 +1,48 @@
+[workspace]
+members = [
+  "crates/smista-cli",
+  "crates/smista-core",
+  "crates/smista-providers",
+  "crates/smista-router",
+  "crates/smista-storage",
+  "crates/smista-trace",
+  "crates/smista-web",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95.0"
+authors = ["Christian Visintin <christian.visintin@veeso.dev>"]
+description = "Local-first agent and CLI that deterministically routes each phase of an AI workflow to the most suitable model."
+license = "MIT"
+repository = "https://github.com/veeso/smista.ai"
+homepage = "https://smista.ai"
+keywords = ["ai", "llm", "cli", "agent", "routing"]
+categories = ["command-line-utilities", "development-tools"]
+
+[workspace.dependencies]
+anyhow = "1"
+axum = "0.8"
+clap = { version = "4", features = ["derive"] }
+ratatui = "0.29"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+rig-core = "0.21"
+secrecy = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+smista-core = { version = "0.1", path = "crates/smista-core" }
+smista-providers = { version = "0.1", path = "crates/smista-providers" }
+smista-router = { version = "0.1", path = "crates/smista-router" }
+smista-storage = { version = "0.1", path = "crates/smista-storage" }
+smista-trace = { version = "0.1", path = "crates/smista-trace" }
+smista-web = { version = "0.1", path = "crates/smista-web" }
+surrealdb = "2"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ts-rs = "10"
+uuid = { version = "1", features = ["v7"] }
