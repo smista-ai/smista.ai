@@ -18,15 +18,16 @@ Routing, policy evaluation, context selection and tool mediation belong to
 
 This is a Cargo workspace. All crates live under `crates/`:
 
-| Crate              | Kind | Responsibility                                       |
-| ------------------ | ---- | ---------------------------------------------------- |
-| `smista-core`      | lib  | Shared domain types, config, policy, errors.         |
-| `smista-storage`   | lib  | Storage traits and SurrealDB implementation.         |
-| `smista-providers` | lib  | Model abstraction and provider adapters (via `rig`). |
-| `smista-trace`     | lib  | Execution trace types and recording.                 |
-| `smista-router`    | bin  | Routing/orchestration service.                       |
-| `smista-web`       | lib  | `axum` HTTP JSON API for the router.                 |
-| `smista-cli`       | bin  | The `smista` CLI (`ratatui` + `clap`).               |
+| Crate                  | Kind | Responsibility                                       |
+| ---------------------- | ---- | ---------------------------------------------------- |
+| `smista-core`          | lib  | Shared domain types, config, policy, errors.         |
+| `smista-storage`       | lib  | Storage traits and SurrealDB implementation.         |
+| `smista-providers`     | lib  | Model abstraction and provider adapters (via `rig`). |
+| `smista-trace`         | lib  | Execution trace types and recording.                 |
+| `smista-router`        | bin  | Routing/orchestration service.                       |
+| `smista-web`           | lib  | `axum` HTTP JSON API for the router.                 |
+| `smista-router-client` | lib  | Async Rust client for the router HTTP API.           |
+| `smista-cli`           | bin  | The `smista` CLI (`ratatui` + `clap`).               |
 
 The TypeScript SDK lives in `sdk/` (`@smista-ai/sdk`). Documentation (mdBook)
 lives in `docs/`.

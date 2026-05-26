@@ -4,6 +4,7 @@ members = [
   "crates/smista-core",
   "crates/smista-providers",
   "crates/smista-router",
+  "crates/smista-router-client",
   "crates/smista-storage",
   "crates/smista-trace",
   "crates/smista-web",
@@ -35,6 +36,7 @@ serde_json = "1"
 smista-core = { version = "0.0", path = "crates/smista-core" }
 smista-providers = { version = "0.0", path = "crates/smista-providers" }
 smista-router = { version = "0.0", path = "crates/smista-router" }
+smista-router-client = { version = "0.0", path = "crates/smista-router-client" }
 smista-storage = { version = "0.0", path = "crates/smista-storage" }
 smista-trace = { version = "0.0", path = "crates/smista-trace" }
 smista-web = { version = "0.0", path = "crates/smista-web" }
