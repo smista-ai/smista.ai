@@ -2,7 +2,7 @@
 #
 # Mirrors the configuration described in the specification. Used as a parsing
 # fixture in tests and as the worked example in the documentation. Secrets are
-# referenced by key name (see api_key_ref) and never stored inline.
+# referenced with the ${secret:NAME} form and never stored inline.
 
 # --- Providers -------------------------------------------------------------
 
@@ -13,7 +13,7 @@ api_key_env = "OPENAI_API_KEY"
 
 [providers.anthropic]
 type = "anthropic"
-api_key_env = "ANTHROPIC_API_KEY"
+api_key = "${secret:anthropic}"
 
 [providers.ollama]
 type = "ollama"

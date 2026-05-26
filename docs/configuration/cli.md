@@ -99,6 +99,43 @@ max_context_tokens = 32768
 > For local models through Ollama, see
 > [Using Local Models with Ollama](ollama.md).
 
+## Provider credentials
+
+Never write an API key directly into `config.toml`. A provider reads its key
+either from an environment variable named by `api_key_env`, or from `api_key`
+using the `${secret:NAME}` reference form:
+
+```toml
+[providers.openai]
+type = "openai"
+api_key_env = "OPENAI_API_KEY"
+
+[providers.anthropic]
+type = "anthropic"
+api_key = "${secret:anthropic}"
+```
+
+A `${secret:NAME}` reference is resolved against the following sources, from
+highest to lowest precedence:
+
+1. An environment variable named `NAME`.
+2. The `.smista/secrets` file. The project file (`.smista/secrets` in the
+   current directory) overrides the global file (`~/.smista/secrets`).
+
+The first source that provides the key wins. A reference that resolves nowhere
+is an error, and the message names the missing key and the field that referenced
+it — never a secret value.
+
+The `.smista/secrets` file uses a dotenv-style format: one `NAME=value` pair per
+line, without quotes. Lines starting with `#` are comments. Keep this file out
+of version control.
+
+```dotenv
+# .smista/secrets
+openai=sk-...
+anthropic=sk-ant-...
+```
+
 ## Routing rules
 
 A routing rule decides which model handles a task. Rules match on intent, skill,
