@@ -9,6 +9,8 @@
 //!
 //! Implementation is tracked in milestone M6.
 
+pub mod config;
+
 fn main() {
     println!("smista: not yet implemented");
 }

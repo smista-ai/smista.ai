@@ -10,3 +10,8 @@ test test_name="":
 # Run the TypeScript SDK tests (Vitest)
 [group('test')]
 test_sdk: sdk_test
+
+# Run tests for a single crate, e.g. `just test_crate smista-core`
+[group('test')]
+test_crate crate test_name="":
+  cargo test -p {{ crate }} {{ test_name }}

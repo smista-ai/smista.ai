@@ -8,4 +8,3 @@
 //! endpoints, integrated through `rig` where practical. `rig` remains an
 //! implementation detail of this adapter layer.
 //!
-//! Implementation is tracked in milestone M3.

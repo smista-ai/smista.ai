@@ -7,11 +7,13 @@
 //! configuration schemas, error types and common validation logic. It must not
 //! depend on terminal-specific or server-specific concerns.
 //!
-//! Implementation is tracked in milestone M1.
 
 pub mod error;
 pub mod intent;
 pub mod message;
 pub mod model;
+pub mod paths;
+pub mod policy;
+pub mod secret;
 pub mod stream;
 pub mod usage;

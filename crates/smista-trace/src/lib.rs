@@ -6,4 +6,3 @@
 //!
 //! Trace events are append-only and back the `/trace` and `/why` commands.
 //!
-//! Implementation is tracked in milestone M4.

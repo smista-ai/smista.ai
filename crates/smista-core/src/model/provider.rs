@@ -32,7 +32,7 @@ use crate::error::{ParseError, SmistaError};
 /// The identifier of a provider, used for configuration and routing.
 ///
 /// Each variant serializes to its lowercase name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
     /// Anthropic, serving the Claude family of models.
