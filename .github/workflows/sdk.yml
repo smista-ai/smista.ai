@@ -4,17 +4,9 @@ on:
   push:
     branches:
       - main
-    paths:
-      - "sdk/**"
-      - "just/sdk.just"
-      - ".github/workflows/sdk.yml"
   pull_request:
     branches:
       - main
-    paths:
-      - "sdk/**"
-      - "just/sdk.just"
-      - ".github/workflows/sdk.yml"
 
 permissions:
   contents: read
