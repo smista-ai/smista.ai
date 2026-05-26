@@ -5,7 +5,8 @@
 //! models and providers, mediates tool calls and records traces. It is the
 //! source of truth for routing decisions and hosts the HTTP JSON API.
 //!
-//! Implementation is tracked in milestones M4 and M5.
+
+pub mod config;
 
 fn main() {
     println!("smista-router: not yet implemented");

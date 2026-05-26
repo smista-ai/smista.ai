@@ -254,6 +254,33 @@ request_timeout_ms = 120000
 auth_source = "keychain"
 ```
 
+## Local preferences
+
+Local preferences are personal, uncommitted overrides — the only layer that is
+not version-controlled. They live under `[local_preferences]` and tune your own
+experience without changing the shared project policy. Every field is optional;
+an unset field defers to the layers below.
+
+```toml
+[local_preferences]
+auto_apply = false
+stream = true
+local_only = false
+no_network = false
+```
+
+| Field        | Effect                                             |
+| ------------ | -------------------------------------------------- |
+| `auto_apply` | Apply file writes without prompting for each diff. |
+| `stream`     | Stream model output when the provider supports it. |
+| `local_only` | Use only local models for this session.            |
+| `no_network` | Forbid network access for this session.            |
+
+> [!IMPORTANT]
+> Local preferences may tighten safety, never loosen it. Enabling `local_only`
+> or `no_network` here adds a restriction, but a preference can never weaken a
+> project's privacy modes or a tool set to `deny`.
+
 ## Validation
 
 Configuration is validated before execution. Validation rejects unknown

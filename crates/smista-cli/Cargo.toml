@@ -13,3 +13,10 @@ keywords = { workspace = true }
 [[bin]]
 name = "smista"
 path = "src/main.rs"
+
+[dependencies]
+secrecy = { workspace = true }
+serde = { workspace = true }
+smista-core = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }

@@ -8,4 +8,3 @@
 //! directly; SurrealDB-specific code stays behind this boundary and supports
 //! both embedded (local-first) and remote (SaaS) deployments.
 //!
-//! Implementation is tracked in milestone M2.

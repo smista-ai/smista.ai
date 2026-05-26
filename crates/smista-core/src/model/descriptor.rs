@@ -48,7 +48,7 @@ use super::{
 use crate::error::CapabilityError;
 
 /// A complete description of a model offered by a provider.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelDescriptor {
     /// Provider that offers the model.
     pub provider: Provider,

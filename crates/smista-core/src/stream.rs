@@ -3,7 +3,7 @@
 //! A [`StreamEvent`] is one item in the stream of server-sent events a model
 //! invocation produces: incremental text, tool-call activity, usage totals,
 //! errors and a terminal marker. The trait that *produces* these lives in
-//! smista-providers (M3); only the value types belong here, shared with trace
+//! smista-providers; only the value types belong here, shared with trace
 //! and the web API.
 //!
 //! Events are internally tagged with a `type` field, matching the SSE wire

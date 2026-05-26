@@ -7,4 +7,3 @@
 //! It handles request authentication, session tokens, credential headers,
 //! streaming responses and secret redaction.
 //!
-//! Implementation is tracked in milestone M4.
