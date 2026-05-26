@@ -40,6 +40,10 @@ lives in `docs/`.
   `-D warnings`. Use `module_name.rs`, not `mod.rs`.
 - **TypeScript**: Biome for lint + format; strict `tsconfig`. No `any`.
 - **Markdown**: keep tables aligned; end files with a single newline.
+- **Docs**: any change to the codebase that affects user-facing behaviour
+  (config, CLI commands, API, providers) must come with a user-friendly update
+  to [docs/](docs/). Write for the user performing a task, not as a spec dump:
+  task-oriented section names, runnable examples, no internal jargon.
 - **GitHub Actions**: must pass `zizmor`; pin actions by commit SHA and set
   `persist-credentials: false` on checkout.
 

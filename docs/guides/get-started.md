@@ -45,6 +45,3 @@ Configuration lives locally and can be versioned per project:
 
 - Global: `~/.config/smista/config.toml`
 - Project: `.smista/config.toml` (overrides global)
-
-See the [Specification](../reference/specification.md) for the full
-configuration and policy model.
