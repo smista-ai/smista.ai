@@ -6,11 +6,11 @@ is deterministic, versionable and inspectable — routing never depends on an LL
 
 ## Where configuration lives
 
-| Layer                  | Location                                    | Scope                  |
-| ---------------------- | ------------------------------------------- | ---------------------- |
-| Global (POSIX)         | `~/.config/smista/config.toml`              | All projects           |
-| Global (Windows)       | `C:\Users\$USER\.smista\config.toml`        | All projects           |
-| Project                | `.smista/config.toml`                       | The current repository |
+| Layer            | Location                             | Scope                  |
+| ---------------- | ------------------------------------ | ---------------------- |
+| Global (POSIX)   | `~/.config/smista/config.toml`       | All projects           |
+| Global (Windows) | `C:\Users\$USER\.smista\config.toml` | All projects           |
+| Project          | `.smista/config.toml`                | The current repository |
 
 Run `smista init` to scaffold `.smista/config.toml` in a project. Project
 configuration is safe to commit when it contains no secrets, so a team shares
@@ -37,6 +37,12 @@ Local always overrides global; values the local layer does not set are kept.
 Providers and models are configured separately from routing rules. Reference a
 model anywhere with `provider/model` syntax (e.g. `anthropic/claude-sonnet`).
 
+The part before the first `/` is the provider identifier (case-insensitive);
+everything after it is the model name, which may itself contain `/` (e.g.
+`ollama/library/llama3`). Both parts must be non-empty, and the provider must be
+one of the identifiers below — otherwise the reference is rejected during
+validation.
+
 ```toml
 [providers.openai]
 type = "openai"
@@ -51,6 +57,17 @@ api_key_env = "ANTHROPIC_API_KEY"
 type = "ollama"
 base_url = "http://localhost:11434"
 ```
+
+The `type` field selects the provider backend. It is case-insensitive and must
+be one of the supported identifiers:
+
+| Identifier  | Backend                               |
+| ----------- | ------------------------------------- |
+| `anthropic` | Anthropic, serving the Claude models. |
+| `openai`    | OpenAI, serving the GPT models.       |
+| `ollama`    | Ollama, serving local models.         |
+
+An unknown identifier is rejected during validation.
 
 Models declare their capabilities, which the router validates before execution
 (for example, a task needing tools is never routed to a model without tool
