@@ -47,4 +47,3 @@ through a trace.
 
 - Read the [Get Started](guides/get-started.md) guide.
 - Understand the [Architecture](technical/architecture.md).
-- Dive into the full [Specification](reference/specification.md).
