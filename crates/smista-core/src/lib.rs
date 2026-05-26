@@ -8,3 +8,10 @@
 //! depend on terminal-specific or server-specific concerns.
 //!
 //! Implementation is tracked in milestone M1.
+
+pub mod error;
+pub mod intent;
+pub mod message;
+pub mod model;
+pub mod stream;
+pub mod usage;
