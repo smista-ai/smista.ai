@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use smista_core::model::Provider;
 use smista_core::policy::{ClassificationConfig, PrivacyPolicy, RoutingPolicy, ToolsConfig};
-use smista_core::secret::SecretRef;
 
 /// The merged CLI/policy configuration loaded from `config.toml`.
 ///
@@ -35,9 +34,11 @@ pub struct Config {
 
 /// How a provider is configured client-side.
 ///
-/// Mirrors a `[providers.<id>]` table. The `type` key names the provider kind;
-/// credentials are referenced, never inlined — via an environment variable
-/// (`api_key_env`) or a secret reference (`api_key_ref`).
+/// Mirrors a `[providers.<id>]` table. The `type` key names the provider kind.
+/// Credentials come from an environment variable named by `api_key_env`, or
+/// from `api_key`, which may hold a `${secret:NAME}` reference resolved against
+/// the secret sources (see `super::secrets`) or, where allowed, an inline
+/// literal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderConfig {
     /// Provider kind (serialized as `type`).
@@ -49,9 +50,9 @@ pub struct ProviderConfig {
     /// Name of the environment variable holding the API key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key_env: Option<String>,
-    /// Reference to the API key by secret key name (never the key itself).
+    /// API key value: a `${secret:NAME}` reference or, where allowed, a literal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_key_ref: Option<SecretRef>,
+    pub api_key: Option<String>,
 }
 
 /// A model and its capabilities, as declared in `config.toml`.
@@ -152,12 +153,14 @@ mod tests {
     }
 
     #[test]
-    fn should_parse_provider_with_type_and_secret_ref() {
+    fn should_parse_provider_with_type_and_secret_reference() {
+        use smista_core::secret::SecretRef;
+
         let toml = r#"
             [providers.openai]
             type = "openai"
             base_url = "https://api.openai.com/v1"
-            api_key_ref = "openai_api_key"
+            api_key = "${secret:openai_api_key}"
         "#;
         let config: Config = toml::from_str(toml).unwrap();
         let openai = config.providers.get(&Provider::OpenAI).unwrap();
@@ -167,8 +170,8 @@ mod tests {
             Some("https://api.openai.com/v1")
         );
         assert_eq!(
-            openai.api_key_ref.as_ref().unwrap(),
-            &SecretRef::new("openai_api_key")
+            SecretRef::parse(openai.api_key.as_deref().unwrap()),
+            Some(SecretRef::new("openai_api_key"))
         );
     }
 

@@ -121,6 +121,7 @@ mod tests {
     fn should_parse_complete_example_fixture() {
         use smista_core::model::Provider;
         use smista_core::policy::PermissionMode;
+        use smista_core::secret::SecretRef;
 
         let config = parse(
             include_str!("../../tests/fixtures/config.toml"),
@@ -133,6 +134,16 @@ mod tests {
         assert_eq!(
             config.providers[&Provider::OpenAI].api_key_env.as_deref(),
             Some("OPENAI_API_KEY")
+        );
+        // The Anthropic provider references its key with the ${secret:NAME} form.
+        assert_eq!(
+            SecretRef::parse(
+                config.providers[&Provider::Anthropic]
+                    .api_key
+                    .as_deref()
+                    .unwrap()
+            ),
+            Some(SecretRef::new("anthropic"))
         );
         assert_eq!(
             config.models["openai/gpt-5.5-thinking"].max_context_tokens,
