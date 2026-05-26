@@ -47,11 +47,11 @@ validation.
 [providers.openai]
 type = "openai"
 base_url = "https://api.openai.com/v1"
-api_key_env = "OPENAI_API_KEY"
+api_key = "${secret:OPENAI_API_KEY}"
 
 [providers.anthropic]
 type = "anthropic"
-api_key_env = "ANTHROPIC_API_KEY"
+api_key = "${secret:ANTHROPIC_API_KEY}"
 
 [providers.ollama]
 type = "ollama"
@@ -102,23 +102,23 @@ max_context_tokens = 32768
 ## Provider credentials
 
 Never write an API key directly into `config.toml`. A provider reads its key
-either from an environment variable named by `api_key_env`, or from `api_key`
-using the `${secret:NAME}` reference form:
+from `api_key` using the `${secret:NAME}` reference form:
 
 ```toml
 [providers.openai]
 type = "openai"
-api_key_env = "OPENAI_API_KEY"
+api_key = "${secret:OPENAI_API_KEY}"
 
 [providers.anthropic]
 type = "anthropic"
-api_key = "${secret:anthropic}"
+api_key = "${secret:ANTHROPIC_API_KEY}"
 ```
 
 A `${secret:NAME}` reference is resolved against the following sources, from
 highest to lowest precedence:
 
-1. An environment variable named `NAME`.
+1. An environment variable named `NAME` (e.g. set `OPENAI_API_KEY` in your
+   shell).
 2. The `.smista/secrets` file. The project file (`.smista/secrets` in the
    current directory) overrides the global file (`~/.smista/secrets`).
 
@@ -132,8 +132,8 @@ of version control.
 
 ```dotenv
 # .smista/secrets
-openai=sk-...
-anthropic=sk-ant-...
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ## Routing rules

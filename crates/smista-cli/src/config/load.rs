@@ -131,11 +131,17 @@ mod tests {
 
         // Providers and models.
         assert_eq!(config.providers.len(), 3);
+        // Each authenticated provider references its key with the ${secret:NAME}
+        // form; the OpenAI reference resolves the OPENAI_API_KEY env var first.
         assert_eq!(
-            config.providers[&Provider::OpenAI].api_key_env.as_deref(),
-            Some("OPENAI_API_KEY")
+            SecretRef::parse(
+                config.providers[&Provider::OpenAI]
+                    .api_key
+                    .as_deref()
+                    .unwrap()
+            ),
+            Some(SecretRef::new("OPENAI_API_KEY"))
         );
-        // The Anthropic provider references its key with the ${secret:NAME} form.
         assert_eq!(
             SecretRef::parse(
                 config.providers[&Provider::Anthropic]

@@ -35,10 +35,10 @@ pub struct Config {
 /// How a provider is configured client-side.
 ///
 /// Mirrors a `[providers.<id>]` table. The `type` key names the provider kind.
-/// Credentials come from an environment variable named by `api_key_env`, or
-/// from `api_key`, which may hold a `${secret:NAME}` reference resolved against
-/// the secret sources (see `super::secrets`) or, where allowed, an inline
-/// literal.
+/// The credential lives in `api_key`, which holds a `${secret:NAME}` reference
+/// resolved against the secret sources (see `super::secrets`) — an environment
+/// variable named `NAME` first, then the `.smista/secrets` files — or, where
+/// allowed, an inline literal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderConfig {
     /// Provider kind (serialized as `type`).
@@ -47,9 +47,6 @@ pub struct ProviderConfig {
     /// Base URL for the provider endpoint, if non-default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
-    /// Name of the environment variable holding the API key.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_key_env: Option<String>,
     /// API key value: a `${secret:NAME}` reference or, where allowed, a literal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,

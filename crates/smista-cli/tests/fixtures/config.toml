@@ -9,7 +9,7 @@
 [providers.openai]
 type = "openai"
 base_url = "https://api.openai.com/v1"
-api_key_env = "OPENAI_API_KEY"
+api_key = "${secret:OPENAI_API_KEY}"
 
 [providers.anthropic]
 type = "anthropic"
