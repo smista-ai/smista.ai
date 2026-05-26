@@ -46,6 +46,9 @@ lives in `docs/`.
   task-oriented section names, runnable examples, no internal jargon.
 - **GitHub Actions**: must pass `zizmor`; pin actions by commit SHA and set
   `persist-credentials: false` on checkout.
+- **Tasks**: drive builds, checks, tests and publishing through the `just`
+  recipes below — do not invoke the underlying `cargo`/`npm` commands directly.
+  If a task has no recipe, add one rather than running it ad hoc.
 
 ## Commands
 
