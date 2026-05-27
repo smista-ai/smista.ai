@@ -26,6 +26,7 @@ categories = ["command-line-utilities", "development-tools"]
 [workspace.dependencies]
 anyhow = "1"
 axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 dirs = "6"
 ratatui = "0.30"
@@ -48,4 +49,4 @@ toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ts-rs = "12"
-uuid = { version = "1", features = ["v7"] }
+uuid = { version = "1", features = ["serde", "v7"] }
