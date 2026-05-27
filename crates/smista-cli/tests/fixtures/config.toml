@@ -51,6 +51,7 @@ fallbacks = ["ollama/qwen2.5-coder"]
 [[routing.rules]]
 name = "review security-sensitive code locally"
 priority = 5
+effort = "low"
 intent = "review"
 paths = ["src/crypto/**", "src/auth/**"]
 local_only = true

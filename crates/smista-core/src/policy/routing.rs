@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::effort::Effort;
 use crate::intent::TaskIntent;
 use crate::model::ModelReference;
 
@@ -29,14 +30,19 @@ const DEFAULT_PRIORITY: u32 = 1000;
 /// When [`local_only`](Self::local_only) is set, a matched rule must not fall
 /// back to remote models — its fallback chain is restricted to local models.
 ///
+/// A matched rule also declares the [`effort`](Self::effort) the model should
+/// spend on the task, defaulting to [`Effort::Medium`].
+///
 /// # Examples
 ///
 /// ```
+/// use smista_core::effort::Effort;
 /// use smista_core::policy::RoutingRule;
 ///
 /// let rule: RoutingRule = serde_json::from_value(serde_json::json!({
 ///     "name": "auth code uses Claude",
 ///     "priority": 30,
+///     "effort": "high",
 ///     "intent": "edit",
 ///     "paths": ["src/auth/**"],
 ///     "model": "anthropic/claude-sonnet",
@@ -45,6 +51,7 @@ const DEFAULT_PRIORITY: u32 = 1000;
 /// .unwrap();
 /// assert_eq!(rule.name, "auth code uses Claude");
 /// assert_eq!(rule.priority, 30);
+/// assert_eq!(rule.effort, Effort::High);
 /// assert_eq!(rule.model.model, "claude-sonnet");
 /// assert_eq!(rule.paths, vec!["src/auth/**".to_string()]);
 /// ```
@@ -56,6 +63,10 @@ pub struct RoutingRule {
     /// first). Defaults to `1000` when unset.
     #[serde(default = "default_priority")]
     pub priority: u32,
+    /// Reasoning effort the model should spend on a matched task. Defaults to
+    /// [`Effort::Medium`] when unset.
+    #[serde(default)]
+    pub effort: Effort,
     /// Required task intent, if any.
     #[serde(default)]
     pub intent: Option<TaskIntent>,
@@ -152,6 +163,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(rule.priority, DEFAULT_PRIORITY);
+        assert_eq!(rule.effort, Effort::Medium);
         assert!(rule.intent.is_none());
         assert!(rule.skill.is_none());
         assert!(rule.paths.is_empty());
@@ -180,6 +192,7 @@ mod tests {
         let rule: RoutingRule = serde_json::from_value(serde_json::json!({
             "name": "review security-sensitive code locally",
             "priority": 5,
+            "effort": "low",
             "intent": "review",
             "paths": ["src/crypto/**", "src/auth/**"],
             "local_only": true,
@@ -187,6 +200,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(rule.priority, 5);
+        assert_eq!(rule.effort, Effort::Low);
         assert_eq!(rule.intent, Some(TaskIntent::Review));
         assert_eq!(
             rule.paths,
@@ -224,6 +238,7 @@ mod tests {
             rules: vec![RoutingRule {
                 name: "auth code uses Claude".to_string(),
                 priority: 30,
+                effort: Effort::High,
                 intent: Some(TaskIntent::Edit),
                 skill: None,
                 paths: vec!["src/auth/**".to_string()],

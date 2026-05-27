@@ -8,6 +8,7 @@
 //! depend on terminal-specific or server-specific concerns.
 //!
 
+pub mod effort;
 pub mod error;
 pub mod intent;
 pub mod message;
