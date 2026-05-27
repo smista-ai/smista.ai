@@ -167,6 +167,7 @@ fallbacks = ["openai/gpt-5.5-thinking"]
 [[routing.rules]]
 name = "review security-sensitive code locally"
 priority = 5
+effort = "low"
 intent = "review"
 paths = ["src/crypto/**", "src/auth/**"]
 local_only = true
@@ -180,6 +181,27 @@ model = "ollama/qwen2.5-coder"
 - Values **within one field** combine with **OR** — `paths = ["src/auth/**",
   "src/security/**"]` matches either path.
 - Undefined fields are ignored.
+
+### Effort
+
+Each rule may set an `effort`, telling the matched model how much reasoning
+effort to spend on the task. Accepted values, from least to most:
+
+- `low`
+- `medium`
+- `high`
+- `xhigh`
+
+When omitted, a rule defaults to `medium`.
+
+```toml
+[[routing.rules]]
+name = "plan with maximum reasoning"
+priority = 10
+effort = "xhigh"
+intent = "plan"
+model = "openai/gpt-5.5-thinking"
+```
 
 ### Rule precedence
 

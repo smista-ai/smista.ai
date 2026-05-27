@@ -119,6 +119,7 @@ mod tests {
 
     #[test]
     fn should_parse_complete_example_fixture() {
+        use smista_core::effort::Effort;
         use smista_core::model::Provider;
         use smista_core::policy::PermissionMode;
         use smista_core::secret::SecretRef;
@@ -162,7 +163,10 @@ mod tests {
         assert_eq!(default.model.to_string(), "openai/gpt-5.5-mini");
         let local_rule = &config.routing.rules[0];
         assert_eq!(local_rule.priority, 5);
+        assert_eq!(local_rule.effort, Effort::Low);
         assert!(local_rule.local_only);
+        // A rule without an explicit effort defaults to medium.
+        assert_eq!(config.routing.rules[1].effort, Effort::Medium);
 
         // Classification.
         assert_eq!(config.classification.rules.len(), 2);

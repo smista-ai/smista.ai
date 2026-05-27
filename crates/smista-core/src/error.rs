@@ -22,6 +22,9 @@ pub enum ParseError {
     /// A model reference was not in the expected `provider/model` form.
     #[error("invalid model reference: {0}")]
     InvalidModelReference(String),
+    /// A reasoning effort name was not recognized.
+    #[error("unknown effort: {0}")]
+    UnknownEffort(String),
     /// A task intent name was not recognized.
     #[error("unknown task intent: {0}")]
     UnknownIntent(String),
