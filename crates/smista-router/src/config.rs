@@ -6,6 +6,7 @@
 //! in [`paths`].
 
 pub mod paths;
+pub mod validate;
 
 mod load;
 mod model;
@@ -15,3 +16,4 @@ pub use model::{
     CorsConfig, LoggingConfig, OllamaConfig, OllamaLimits, OllamaModels, RetentionConfig,
     RouterAuthConfig, RouterConfig, RouterLimits, StorageConfig, StorageEngine, StorageMode,
 };
+pub use validate::{Severity, ValidationCode, ValidationError, ValidationReport};

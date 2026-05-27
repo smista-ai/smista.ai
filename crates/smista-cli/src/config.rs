@@ -19,6 +19,7 @@
 pub mod layers;
 pub mod paths;
 pub mod secrets;
+pub mod validate;
 
 mod load;
 mod model;
@@ -27,3 +28,5 @@ pub use layers::{ConfigLayer, merge};
 pub use load::{ConfigError, load, parse};
 pub use model::{AuthSource, Config, LocalPreferences, ProviderConfig, RouterClientConfig};
 pub use secrets::{SecretError, SecretResolver};
+#[doc(inline)]
+pub use validate::{Severity, ValidationCode, ValidationError, ValidationReport};
