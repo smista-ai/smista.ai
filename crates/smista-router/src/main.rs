@@ -8,6 +8,8 @@
 
 pub mod config;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     println!("smista-router: not yet implemented");
+
+    Ok(())
 }

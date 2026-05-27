@@ -11,6 +11,8 @@ categories = { workspace = true }
 keywords = { workspace = true }
 
 [dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
 serde = { workspace = true }
 smista-core = { workspace = true }
 thiserror = { workspace = true }

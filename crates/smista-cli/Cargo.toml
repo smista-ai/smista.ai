@@ -15,6 +15,8 @@ name = "smista"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
 globset = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
