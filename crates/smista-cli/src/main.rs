@@ -11,6 +11,8 @@
 
 pub mod config;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     println!("smista: not yet implemented");
+
+    Ok(())
 }
