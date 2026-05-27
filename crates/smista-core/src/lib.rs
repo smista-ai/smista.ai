@@ -8,6 +8,7 @@
 //! depend on terminal-specific or server-specific concerns.
 //!
 
+pub mod api;
 pub mod effort;
 pub mod error;
 pub mod intent;
@@ -16,5 +17,7 @@ pub mod model;
 pub mod paths;
 pub mod policy;
 pub mod secret;
+pub mod skill;
 pub mod stream;
+pub mod trace;
 pub mod usage;
