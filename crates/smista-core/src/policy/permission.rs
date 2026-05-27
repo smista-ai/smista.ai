@@ -30,6 +30,17 @@ pub enum PermissionMode {
     Deny,
 }
 
+impl core::fmt::Display for PermissionMode {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let name = match self {
+            Self::Allow => "allow",
+            Self::Ask => "ask",
+            Self::Deny => "deny",
+        };
+        f.write_str(name)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -37,6 +48,13 @@ mod tests {
     #[test]
     fn should_default_to_ask() {
         assert_eq!(PermissionMode::default(), PermissionMode::Ask);
+    }
+
+    #[test]
+    fn should_display_lowercase_name() {
+        assert_eq!(PermissionMode::Allow.to_string(), "allow");
+        assert_eq!(PermissionMode::Ask.to_string(), "ask");
+        assert_eq!(PermissionMode::Deny.to_string(), "deny");
     }
 
     #[test]

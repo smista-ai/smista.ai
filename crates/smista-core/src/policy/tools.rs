@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::PermissionMode;
+use crate::error::PolicyError;
 
 /// Tool permissions: the mode required for each named tool.
 ///
@@ -43,11 +44,37 @@ impl ToolsConfig {
     pub fn set(&mut self, tool: impl Into<String>, mode: PermissionMode) {
         self.permissions.insert(tool.into(), mode);
     }
+
+    /// Merges `over` onto `self`, allowing an override to tighten a tool's mode
+    /// (`allow -> ask -> deny`) but never loosen it.
+    ///
+    /// A new tool absent from `self` is accepted as-is. A loosening attempt
+    /// returns [`PolicyError::PermissionExpansion`] naming the tool.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PolicyError::PermissionExpansion`] when `over` weakens a mode.
+    pub fn narrow(mut self, over: &ToolsConfig) -> Result<Self, PolicyError> {
+        for (tool, &requested) in &over.permissions {
+            if let Some(&base) = self.permissions.get(tool)
+                && requested < base
+            {
+                return Err(PolicyError::PermissionExpansion {
+                    base,
+                    requested,
+                    tool: tool.clone(),
+                });
+            }
+            self.permissions.insert(tool.clone(), requested);
+        }
+        Ok(self)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::PolicyError;
 
     #[test]
     fn should_default_to_empty_permissions() {
@@ -57,6 +84,25 @@ mod tests {
     #[test]
     fn should_return_none_for_unlisted_tool() {
         assert_eq!(ToolsConfig::default().mode_for("anything"), None);
+    }
+
+    #[test]
+    fn should_error_when_override_loosens() {
+        let mut base = ToolsConfig::default();
+        base.set("shell", PermissionMode::Deny);
+
+        let mut over = ToolsConfig::default();
+        over.set("shell", PermissionMode::Allow);
+
+        let err = base.narrow(&over).unwrap_err();
+        assert_eq!(
+            err,
+            PolicyError::PermissionExpansion {
+                base: PermissionMode::Deny,
+                requested: PermissionMode::Allow,
+                tool: "shell".to_string(),
+            }
+        );
     }
 
     #[test]
@@ -85,5 +131,21 @@ mod tests {
         config.set("git", PermissionMode::Allow);
         let json = serde_json::to_string(&config).unwrap();
         assert_eq!(serde_json::from_str::<ToolsConfig>(&json).unwrap(), config);
+    }
+
+    #[test]
+    fn should_tighten_permissions_on_narrow() {
+        let mut base = ToolsConfig::default();
+        base.set("shell", PermissionMode::Ask);
+        base.set("network", PermissionMode::Allow);
+
+        let mut over = ToolsConfig::default();
+        over.set("shell", PermissionMode::Deny);
+        over.set("git", PermissionMode::Deny);
+
+        let merged = base.narrow(&over).unwrap();
+        assert_eq!(merged.mode_for("shell"), Some(PermissionMode::Deny));
+        assert_eq!(merged.mode_for("network"), Some(PermissionMode::Allow));
+        assert_eq!(merged.mode_for("git"), Some(PermissionMode::Deny));
     }
 }

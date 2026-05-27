@@ -1,6 +1,7 @@
 //! Error types for the Smista core library.
 
 use crate::model::Capability;
+use crate::policy::PermissionMode;
 
 /// Error types for the Smista core library.
 #[derive(Debug, thiserror::Error, PartialEq, Eq, Clone)]
@@ -11,6 +12,9 @@ pub enum SmistaError {
     /// A textual value could not be parsed into a domain type.
     #[error(transparent)]
     Parse(#[from] ParseError),
+    /// A policy was internally inconsistent.
+    #[error(transparent)]
+    Policy(#[from] PolicyError),
 }
 
 /// Errors produced when parsing a domain type from its textual form.
@@ -31,6 +35,21 @@ pub enum ParseError {
     /// A provider identifier was not recognized.
     #[error("unknown provider: {0}")]
     UnknownProvider(String),
+}
+
+/// Errors produced when evaluating or merging policy.
+#[derive(Debug, thiserror::Error, PartialEq, Eq, Clone)]
+pub enum PolicyError {
+    /// An override tried to loosen a tool permission it may only tighten.
+    #[error("tool '{tool}' permission '{requested}' would loosen the stricter '{base}'")]
+    PermissionExpansion {
+        /// The stricter base mode that must not be weakened.
+        base: PermissionMode,
+        /// The looser mode the override requested.
+        requested: PermissionMode,
+        /// The tool whose permission was loosened.
+        tool: String,
+    },
 }
 
 /// Errors produced when a model cannot satisfy a task's routing requirements.

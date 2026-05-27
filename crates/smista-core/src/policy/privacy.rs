@@ -1,8 +1,11 @@
 //! Privacy constraints applied when selecting and forwarding context.
 
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
 use super::PermissionMode;
+use super::glob::compile_globs;
 
 /// Privacy policy controlling what context may reach which model classes.
 ///
@@ -39,6 +42,24 @@ pub struct PrivacyPolicy {
     /// Constraints applied when sending context to local models.
     #[serde(default)]
     pub local: LocalPrivacy,
+}
+
+impl PrivacyPolicy {
+    /// Returns `true` when `path` must not be sent to remote providers.
+    ///
+    /// Combines [`restricted_paths`](Self::restricted_paths) and
+    /// [`remote.blocked_paths`](RemotePrivacy::blocked_paths). Globs are
+    /// matched via `globset`. Safety-critical: if a glob fails to compile, the
+    /// path is treated as restricted.
+    #[must_use]
+    pub fn is_restricted_for_remote(&self, path: &Path) -> bool {
+        let mut patterns = self.restricted_paths.clone();
+        patterns.extend(self.remote.blocked_paths.iter().cloned());
+        match compile_globs(&patterns) {
+            Ok(set) => set.is_match(path),
+            Err(_) => true,
+        }
+    }
 }
 
 /// Privacy constraints for remote providers.
@@ -85,6 +106,8 @@ impl LocalPrivacy {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     #[test]
@@ -123,5 +146,27 @@ mod tests {
             serde_json::from_str::<PrivacyPolicy>(&json).unwrap(),
             policy
         );
+    }
+
+    #[test]
+    fn should_fail_closed_on_invalid_glob() {
+        let mut policy = PrivacyPolicy::default();
+        policy.restricted_paths.push("[".to_string());
+        assert!(policy.is_restricted_for_remote(Path::new("anything")));
+    }
+
+    #[test]
+    fn should_restrict_paths_for_remote() {
+        let policy: PrivacyPolicy = serde_json::from_value(serde_json::json!({
+            "restricted_paths": ["secrets/**", "*.pem"],
+            "remote": { "mode": "ask", "blocked_paths": [".env"] },
+            "local": { "mode": "allow" },
+        }))
+        .unwrap();
+
+        assert!(policy.is_restricted_for_remote(Path::new("secrets/db.txt")));
+        assert!(policy.is_restricted_for_remote(Path::new("key.pem")));
+        assert!(policy.is_restricted_for_remote(Path::new(".env")));
+        assert!(!policy.is_restricted_for_remote(Path::new("src/main.rs")));
     }
 }

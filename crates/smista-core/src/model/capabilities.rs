@@ -37,16 +37,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ModelCapabilities {
     /// The model can stream its response incrementally.
+    #[serde(default)]
     pub streaming: bool,
     /// The model can call tools.
+    #[serde(default)]
     pub tools: bool,
     /// The model can be constrained to emit JSON.
+    #[serde(default)]
     pub json_output: bool,
     /// The model honors a separate system prompt.
+    #[serde(default)]
     pub system_prompt: bool,
     /// The model accepts image inputs.
+    #[serde(default)]
     pub images: bool,
     /// The model performs explicit reasoning.
+    #[serde(default)]
     pub reasoning: bool,
 }
 
