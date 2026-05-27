@@ -69,6 +69,14 @@ be one of the supported identifiers:
 
 An unknown identifier is rejected during validation.
 
+Each `[providers.<id>]` table accepts:
+
+| Key        | Type   | Default  | Purpose                                              |
+| ---------- | ------ | -------- | ---------------------------------------------------- |
+| `type`     | string | required | Provider kind: `anthropic`, `openai`, or `ollama`.   |
+| `base_url` | string | provider | Endpoint base URL; omit to use the provider default. |
+| `api_key`  | string | none     | A `${secret:NAME}` reference resolving the API key.  |
+
 Models declare their capabilities, which the router validates before execution
 (for example, a task needing tools is never routed to a model without tool
 support unless the policy allows degraded execution):
@@ -94,6 +102,20 @@ supports_streaming = true
 supports_tools = false
 max_context_tokens = 32768
 ```
+
+Each `[models."provider/model"]` table accepts:
+
+| Key                    | Type    | Default  | Purpose                                        |
+| ---------------------- | ------- | -------- | ---------------------------------------------- |
+| `provider`             | string  | required | Provider that offers the model.                |
+| `name`                 | string  | required | Model name as defined by the provider.         |
+| `requires_api_key`     | bool    | `false`  | Whether the model needs an API key.            |
+| `local`                | bool    | `false`  | Whether the model runs locally.                |
+| `supports_streaming`   | bool    | `false`  | Whether the model can stream responses.        |
+| `supports_tools`       | bool    | `false`  | Whether the model can call tools.              |
+| `supports_json_output` | bool    | `false`  | Whether the model can emit structured JSON.    |
+| `supports_reasoning`   | bool    | `false`  | Whether the model performs explicit reasoning. |
+| `max_context_tokens`   | integer | required | Maximum context tokens the model accepts.      |
 
 > [!NOTE]
 > For local models through Ollama, see
@@ -172,6 +194,50 @@ intent = "review"
 paths = ["src/crypto/**", "src/auth/**"]
 local_only = true
 model = "ollama/qwen2.5-coder"
+```
+
+### Rule fields
+
+Every routing rule supports the keys below. Match conditions are all optional; a
+rule with none matches every task.
+
+| Key                     | Type            | Purpose                                                       |
+| ----------------------- | --------------- | ------------------------------------------------------------- |
+| `name`                  | string          | Human-readable rule name (required).                          |
+| `priority`              | integer         | Lower value wins; defaults to `1000`.                         |
+| `effort`                | string          | Reasoning effort for the matched model; defaults to `medium`. |
+| `intent`                | string          | Match only this task intent.                                  |
+| `skill`                 | string          | Match only this invoked skill.                                |
+| `paths`                 | list of globs   | Match when a relevant path matches any glob.                  |
+| `local_only`            | bool            | Restrict the fallback chain to local models.                  |
+| `requires_capabilities` | table           | Capability gate; the model must satisfy each `true` flag.     |
+| `model`                 | string          | Model selected on match, as `provider/model` (required).      |
+| `fallbacks`             | list of strings | Models tried in order when the selected model is unavailable. |
+| `required_permissions`  | table           | Tool permissions the route requires (see below).              |
+| `cost_limit`            | string          | Per-task cost ceiling, as a decimal string (e.g. `"0.50"`).   |
+
+`requires_capabilities` gates a rule on what the model can do. Each flag defaults
+to `false`; set the ones a matched model must support: `streaming`, `tools`,
+`json_output`, `system_prompt`, `images`, `reasoning`.
+
+`required_permissions` declares the [tool permissions](#tool-permissions) the
+matched route needs. It is merged over the project defaults and may only *narrow*
+them — see [Tool permissions](#tool-permissions).
+
+`cost_limit` is written as a quoted decimal string for exact precision (it is
+never a floating-point number).
+
+```toml
+[[routing.rules]]
+name = "deep remote review of crypto"
+priority = 5
+intent = "review"
+paths = ["src/crypto/**"]
+requires_capabilities = { reasoning = true, tools = true }
+required_permissions = { permissions = { shell = "deny", network = "ask" } }
+cost_limit = "0.50"
+model = "anthropic/claude-sonnet"
+fallbacks = ["openai/gpt-5.5-thinking"]
 ```
 
 ### Match semantics
@@ -263,6 +329,21 @@ Lower `priority` wins. Explicit commands always beat automatic classification:
 `/plan refactor the auth middleware` is classified `plan` even if the text reads
 like an edit.
 
+Each `[[classification.rules]]` entry accepts:
+
+| Key                    | Type            | Default  | Purpose                                                       |
+| ---------------------- | --------------- | -------- | ------------------------------------------------------------- |
+| `intent`               | string          | required | Intent assigned when the rule matches.                        |
+| `priority`             | integer         | `1000`   | Lower value wins.                                             |
+| `keywords`             | list of strings | `[]`     | Rule matches when any keyword appears in the prompt.          |
+| `requires_any_context` | list of strings | `[]`     | Rule matches when any named context is present (`git_diff`…). |
+
+The `[classification]` table itself accepts:
+
+| Key              | Type   | Default | Purpose                           |
+| ---------------- | ------ | ------- | --------------------------------- |
+| `default_intent` | string | `chat`  | Intent used when no rule matches. |
+
 ## Privacy
 
 Privacy policies control which context may reach which model class. Restricted
@@ -281,6 +362,25 @@ blocked_paths = [".env", "secrets/**"]
 mode = "allow"
 ```
 
+The `[privacy]` table accepts:
+
+| Key                | Type          | Default | Purpose                                           |
+| ------------------ | ------------- | ------- | ------------------------------------------------- |
+| `restricted_paths` | list of globs | `[]`    | Paths treated as sensitive for every model class. |
+
+The `[privacy.remote]` table controls disclosure to remote providers:
+
+| Key             | Type          | Default | Purpose                                            |
+| --------------- | ------------- | ------- | -------------------------------------------------- |
+| `mode`          | string        | `ask`   | `allow`, `ask`, or `deny` for remote disclosure.   |
+| `blocked_paths` | list of globs | `[]`    | Paths that must never be sent to remote providers. |
+
+The `[privacy.local]` table controls disclosure to local models:
+
+| Key    | Type   | Default | Purpose                                         |
+| ------ | ------ | ------- | ----------------------------------------------- |
+| `mode` | string | `allow` | `allow`, `ask`, or `deny` for local disclosure. |
+
 ## Tool permissions
 
 Tool permissions define what models may request and what needs approval. Modes
@@ -295,8 +395,31 @@ network = "deny"
 git = "allow"
 ```
 
-Skill- or rule-specific permissions may narrow these defaults, but must not
-silently widen project restrictions.
+Skill- or rule-specific permissions (a rule's `required_permissions`) may
+*narrow* these defaults — tightening a tool from `allow` to `ask` to `deny`, or
+adding a tool not listed in the defaults. They may never *widen* them: an
+override that loosens a stricter mode (for example setting `shell = "allow"` when
+the project default is `shell = "deny"`) is a configuration error naming the
+offending tool, not a silent override.
+
+`[tools.permissions]` is a map of tool name to mode; a tool with no entry has no
+configured mode and falls back to the safe default. Each value is one of:
+
+| Mode    | Effect                                     |
+| ------- | ------------------------------------------ |
+| `allow` | The tool runs without confirmation.        |
+| `ask`   | The user is prompted before the tool runs. |
+| `deny`  | The tool is blocked.                       |
+
+The conventional tool keys are:
+
+| Tool         | Governs                           |
+| ------------ | --------------------------------- |
+| `file_read`  | Reading files from the workspace. |
+| `file_write` | Writing or modifying files.       |
+| `shell`      | Running shell commands.           |
+| `network`    | Outbound network access.          |
+| `git`        | Git operations (commit, push, …). |
 
 ## Connecting to the router
 
@@ -312,6 +435,16 @@ connect_timeout_ms = 5000
 request_timeout_ms = 120000
 auth_source = "keychain"
 ```
+
+The `[router]` table accepts:
+
+| Key                  | Type    | Default    | Purpose                                                                    |
+| -------------------- | ------- | ---------- | -------------------------------------------------------------------------- |
+| `url`                | string  | none       | Router base URL, e.g. `http://127.0.0.1:7331`.                             |
+| `auto_start`         | bool    | `false`    | Start a local router when none is reachable.                               |
+| `connect_timeout_ms` | integer | none       | Connection timeout in milliseconds.                                        |
+| `request_timeout_ms` | integer | none       | Request timeout in milliseconds.                                           |
+| `auth_source`        | string  | `keychain` | Where the auth credential is read: `keychain`, `env`, `file`, or `helper`. |
 
 ## Local preferences
 

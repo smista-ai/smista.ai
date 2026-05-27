@@ -76,6 +76,49 @@ pub struct ClassificationRule {
     pub requires_any_context: Vec<String>,
 }
 
+/// The deterministic result of classifying a task's intent.
+///
+/// Produced by the router's classifier; core only defines the shape. The
+/// matched rule, when any, is referenced by its index into
+/// [`ClassificationConfig::rules`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Classification {
+    /// The detected task intent.
+    pub intent: TaskIntent,
+    /// Whether the intent was explicit or inferred.
+    pub source: IntentSource,
+    /// Human-readable explanation of why this intent was chosen.
+    pub reason: String,
+    /// Index of the matched rule in `ClassificationConfig::rules`, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matched_rule: Option<usize>,
+    /// Optional deterministic confidence category.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<Confidence>,
+}
+
+/// Deterministic confidence category for an inferred intent. Not a probability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Confidence {
+    /// Weak signal.
+    Low,
+    /// Moderate signal.
+    Medium,
+    /// Strong signal.
+    High,
+}
+
+/// Whether an intent was given explicitly by the user or inferred by rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IntentSource {
+    /// The user named the intent.
+    Explicit,
+    /// The intent was inferred deterministically from classification rules.
+    Inferred,
+}
+
 /// The default intent when no classification rule matches.
 fn default_intent() -> TaskIntent {
     TaskIntent::Chat
@@ -104,6 +147,24 @@ mod tests {
         assert_eq!(
             ClassificationConfig::default().default_intent,
             TaskIntent::Chat
+        );
+    }
+
+    #[test]
+    fn should_build_inferred_classification_result() {
+        let result = Classification {
+            intent: TaskIntent::Review,
+            source: IntentSource::Inferred,
+            reason: "keyword 'review' matched rule 0".to_string(),
+            matched_rule: Some(0),
+            confidence: Some(Confidence::High),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["source"], "inferred");
+        assert_eq!(json["confidence"], "high");
+        assert_eq!(
+            serde_json::from_value::<Classification>(json).unwrap(),
+            result
         );
     }
 
@@ -141,5 +202,19 @@ mod tests {
             serde_json::from_str::<ClassificationConfig>(&json).unwrap(),
             config
         );
+    }
+
+    #[test]
+    fn should_omit_optional_fields_when_absent() {
+        let result = Classification {
+            intent: TaskIntent::Chat,
+            source: IntentSource::Explicit,
+            reason: "explicit --intent flag".to_string(),
+            matched_rule: None,
+            confidence: None,
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert!(json.get("matched_rule").is_none());
+        assert!(json.get("confidence").is_none());
     }
 }

@@ -8,11 +8,11 @@ policy (which model handles a task); that lives in
 
 ## Where configuration lives
 
-| Layer            | Location                                |
-| ---------------- | --------------------------------------- |
-| Global (POSIX)   | `~/.config/smista/router.toml`          |
-| Global (Windows) | `C:\Users\$USER\.smista\router.toml`    |
-| Project          | `.smista/router.toml`                   |
+| Layer            | Location                             |
+| ---------------- | ------------------------------------ |
+| Global (POSIX)   | `~/.config/smista/router.toml`       |
+| Global (Windows) | `C:\Users\$USER\.smista\router.toml` |
+| Project          | `.smista/router.toml`                |
 
 The default format is TOML. An invalid router configuration prevents the router
 from starting and reports which field to fix.
@@ -70,6 +70,13 @@ port = 7331
 The router is meant to be reached locally. Binding it to a public interface in
 local mode is flagged as unsafe by validation.
 
+The `[router]` table accepts:
+
+| Key    | Type    | Default     | Purpose    |
+| ------ | ------- | ----------- | ---------- |
+| `host` | string  | `127.0.0.1` | Bind host. |
+| `port` | integer | `7331`      | Bind port. |
+
 ## Storage
 
 Where users, sessions, tokens, traces and execution metadata are persisted.
@@ -85,6 +92,17 @@ namespace = "smista"
 database = "local"
 ```
 
+The `[router.storage]` table accepts:
+
+| Key         | Type   | Default     | Purpose                                        |
+| ----------- | ------ | ----------- | ---------------------------------------------- |
+| `engine`    | string | `surrealdb` | Storage engine; only `surrealdb` is supported. |
+| `mode`      | string | `embedded`  | `embedded` (on-disk) or `remote` (server).     |
+| `path`      | string | none        | Database file path, used in `embedded` mode.   |
+| `url`       | string | none        | Database server URL, used in `remote` mode.    |
+| `namespace` | string | `smista`    | SurrealDB namespace.                           |
+| `database`  | string | `local`     | SurrealDB database name.                       |
+
 ## Authentication
 
 Controls API-key bootstrap and the lifetime of short-lived session tokens.
@@ -98,6 +116,14 @@ local_bootstrap_enabled = true
 
 `local_bootstrap_enabled` lets the router mint a user and API key locally
 without a SaaS account. It must be disabled in remote/SaaS mode.
+
+The `[router.auth]` table accepts:
+
+| Key                       | Type    | Default | Purpose                                            |
+| ------------------------- | ------- | ------- | -------------------------------------------------- |
+| `token_ttl_seconds`       | integer | `86400` | Session token lifetime, in seconds.                |
+| `api_key_version`         | string  | `"01"`  | API key version segment.                           |
+| `local_bootstrap_enabled` | bool    | `true`  | Allow local API-key bootstrap; off in remote mode. |
 
 ## Runtime limits
 
@@ -114,6 +140,17 @@ provider_timeout_ms = 180000
 tool_timeout_ms = 60000
 ```
 
+The `[router.limits]` table accepts:
+
+| Key                       | Type    | Default    | Purpose                                   |
+| ------------------------- | ------- | ---------- | ----------------------------------------- |
+| `max_request_body_bytes`  | integer | `10485760` | Maximum request body size, in bytes.      |
+| `max_context_bytes`       | integer | `5242880`  | Maximum context size, in bytes.           |
+| `max_concurrent_requests` | integer | `8`        | Maximum concurrent requests.              |
+| `request_timeout_ms`      | integer | `120000`   | Overall request timeout, in milliseconds. |
+| `provider_timeout_ms`     | integer | `180000`   | Provider call timeout, in milliseconds.   |
+| `tool_timeout_ms`         | integer | `60000`    | Tool execution timeout, in milliseconds.  |
+
 ## Logging
 
 ```toml
@@ -125,6 +162,14 @@ redact_secrets = true
 
 Keep `redact_secrets = true`. API keys, provider credentials and auth tokens are
 never written to logs or traces.
+
+The `[router.logging]` table accepts:
+
+| Key              | Type   | Default   | Purpose                                  |
+| ---------------- | ------ | --------- | ---------------------------------------- |
+| `level`          | string | `info`    | Log level filter (e.g. `info`, `debug`). |
+| `format`         | string | `compact` | Log output format.                       |
+| `redact_secrets` | bool   | `true`    | Redact secrets from logs; keep enabled.  |
 
 ## CORS
 
@@ -140,6 +185,13 @@ allowed_origins = ["https://app.smista.ai"]
 > [!WARNING]
 > Never enable CORS with unrestricted origins in production.
 
+The `[router.cors]` table accepts:
+
+| Key               | Type            | Default | Purpose                       |
+| ----------------- | --------------- | ------- | ----------------------------- |
+| `enabled`         | bool            | `false` | Whether CORS is enabled.      |
+| `allowed_origins` | list of strings | `[]`    | Allowed origins when enabled. |
+
 ## Retention
 
 ```toml
@@ -148,6 +200,14 @@ trace_retention_days = 90
 session_retention_days = 365
 deleted_session_retention_days = 30
 ```
+
+The `[router.retention]` table accepts:
+
+| Key                              | Type    | Default | Purpose                                       |
+| -------------------------------- | ------- | ------- | --------------------------------------------- |
+| `trace_retention_days`           | integer | `90`    | Days to retain traces.                        |
+| `session_retention_days`         | integer | `365`   | Days to retain sessions.                      |
+| `deleted_session_retention_days` | integer | `30`    | Days to retain deleted sessions before purge. |
 
 ## Local models with Ollama
 
@@ -176,6 +236,33 @@ preload = ["llama3.1:8b", "qwen2.5-coder:7b"]
 allow_pull = false
 allowed_models = ["llama3.1:8b", "qwen2.5-coder:7b", "mistral:7b"]
 ```
+
+The `[router.ollama]` table accepts:
+
+| Key                              | Type    | Default                  | Purpose                                  |
+| -------------------------------- | ------- | ------------------------ | ---------------------------------------- |
+| `enabled`                        | bool    | `false`                  | Whether the Ollama backend is active.    |
+| `base_url`                       | string  | `http://127.0.0.1:11434` | Ollama endpoint base URL.                |
+| `auto_discover_models`           | bool    | `true`                   | Auto-discover installed models.          |
+| `startup_healthcheck`            | bool    | `true`                   | Health-check Ollama at startup.          |
+| `startup_required`               | bool    | `false`                  | Abort startup if the health-check fails. |
+| `model_refresh_interval_seconds` | integer | `300`                    | Model-list refresh interval, in seconds. |
+
+The `[router.ollama.limits]` table accepts:
+
+| Key                       | Type    | Default  | Purpose                              |
+| ------------------------- | ------- | -------- | ------------------------------------ |
+| `max_concurrent_requests` | integer | `4`      | Maximum concurrent Ollama requests.  |
+| `request_timeout_ms`      | integer | `180000` | Request timeout, in milliseconds.    |
+| `pull_timeout_ms`         | integer | `600000` | Model pull timeout, in milliseconds. |
+
+The `[router.ollama.models]` table accepts:
+
+| Key              | Type            | Default | Purpose                                            |
+| ---------------- | --------------- | ------- | -------------------------------------------------- |
+| `preload`        | list of strings | `[]`    | Models pulled or warmed at startup.                |
+| `allow_pull`     | bool            | `false` | Whether the router may pull models on demand.      |
+| `allowed_models` | list of strings | `[]`    | Allowed models; empty means all discovered models. |
 
 ## Validation
 

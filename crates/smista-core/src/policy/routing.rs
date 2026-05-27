@@ -1,16 +1,45 @@
 //! Deterministic routing rules and the routing policy.
 
+use std::path::PathBuf;
+
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use super::glob::compile_globs;
 use crate::effort::Effort;
 use crate::intent::TaskIntent;
-use crate::model::ModelReference;
+use crate::model::{ModelCapabilities, ModelReference};
+use crate::policy::ToolsConfig;
 
 /// Default priority for a rule that does not set one.
 ///
 /// Rules are evaluated in ascending priority order, so an unprioritized rule
 /// evaluates after any rule with an explicit lower number.
 const DEFAULT_PRIORITY: u32 = 1000;
+
+/// Match specificity of a routing rule, used as a precedence tie-breaker.
+///
+/// Higher is more specific. The ladder is
+/// `skill+path+intent > skill+path > path+intent > skill > path > intent > default`.
+/// A rule combining `skill` with `intent` but no `path` collapses to
+/// [`Skill`](Self::Skill); there is no dedicated skill+intent rung.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Specificity {
+    /// No match conditions.
+    Default = 0,
+    /// Intent only.
+    Intent = 1,
+    /// Path only.
+    Path = 2,
+    /// Skill (optionally with intent, no path).
+    Skill = 3,
+    /// Path and intent.
+    PathIntent = 4,
+    /// Skill and path.
+    SkillPath = 5,
+    /// Skill, path and intent.
+    SkillPathIntent = 6,
+}
 
 /// A single deterministic routing rule.
 ///
@@ -80,12 +109,102 @@ pub struct RoutingRule {
     /// fallback chain is restricted to local models.
     #[serde(default)]
     pub local_only: bool,
+    /// Capability gate: when set, the matched model must satisfy every
+    /// capability flagged `true` here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requires_capabilities: Option<ModelCapabilities>,
     /// Model selected when the rule matches. Using syntax supported by [`ModelReference`] (e.g. `"ollama/llama3"`).
     pub model: ModelReference,
     /// Models tried, in order, when the selected model is unavailable. Subject
     /// to [`local_only`](Self::local_only).
     #[serde(default)]
     pub fallbacks: Vec<ModelReference>,
+    /// Tool permissions the matched route requires.
+    ///
+    /// Merged over project defaults via [`ToolsConfig::narrow`].
+    #[serde(default)]
+    pub required_permissions: ToolsConfig,
+    /// Per-task cost ceiling for the matched route, in account currency.
+    ///
+    /// Serialized as a string for exact precision.
+    #[serde(
+        default,
+        with = "rust_decimal::serde::str_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cost_limit: Option<Decimal>,
+}
+
+/// The observable inputs a [`RoutingRule`] is matched against.
+///
+/// Built by the router from the classified task. Matching is LLM-free.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RoutingContext {
+    /// The classified task intent, if known.
+    pub intent: Option<TaskIntent>,
+    /// The invoked skill name, if any.
+    pub skill: Option<String>,
+    /// Candidate file paths relevant to the task.
+    pub paths: Vec<PathBuf>,
+}
+
+impl RoutingRule {
+    /// Returns `true` when every present condition holds for `ctx`.
+    ///
+    /// Conditions across fields are AND-combined; lists within a field (paths)
+    /// are OR-combined; absent conditions are ignored. A rule with no
+    /// conditions matches everything. Invalid path globs match nothing here
+    /// rather than panicking.
+    #[must_use]
+    pub fn matches(&self, ctx: &RoutingContext) -> bool {
+        if let Some(intent) = self.intent
+            && ctx.intent != Some(intent)
+        {
+            return false;
+        }
+        if let Some(skill) = &self.skill
+            && ctx.skill.as_deref() != Some(skill.as_str())
+        {
+            return false;
+        }
+        if !self.paths.is_empty() {
+            let set = compile_globs(&self.paths).unwrap_or_else(|_| globset::GlobSet::empty());
+            if !ctx.paths.iter().any(|path| set.is_match(path)) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Orders two rules by routing precedence: lower [`priority`](Self::priority)
+    /// first, then higher [`Specificity`](Self::specificity) first.
+    ///
+    /// Returns [`core::cmp::Ordering::Equal`] when both priority and specificity
+    /// match; configuration validation rejects that case rather than silently
+    /// tie-breaking. Callers preserve config order with a stable sort.
+    #[must_use]
+    pub fn precedence_cmp(a: &Self, b: &Self) -> core::cmp::Ordering {
+        a.priority
+            .cmp(&b.priority)
+            .then_with(|| b.specificity().cmp(&a.specificity()))
+    }
+
+    /// Returns the [`Specificity`] of this rule from its present conditions.
+    #[must_use]
+    pub fn specificity(&self) -> Specificity {
+        let intent = self.intent.is_some();
+        let path = !self.paths.is_empty();
+        let skill = self.skill.is_some();
+        match (skill, path, intent) {
+            (true, true, true) => Specificity::SkillPathIntent,
+            (true, true, false) => Specificity::SkillPath,
+            (false, true, true) => Specificity::PathIntent,
+            (true, false, _) => Specificity::Skill,
+            (false, true, false) => Specificity::Path,
+            (false, false, true) => Specificity::Intent,
+            (false, false, false) => Specificity::Default,
+        }
+    }
 }
 
 /// Returns the default rule priority.
@@ -146,7 +265,32 @@ pub struct DefaultRoute {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+    use std::path::PathBuf;
+    use std::str::FromStr;
+
+    use rust_decimal::Decimal;
+
     use super::*;
+    use crate::policy::PermissionMode;
+
+    fn rule_with(intent: bool, skill: bool, path: bool) -> RoutingRule {
+        let mut rule: RoutingRule = serde_json::from_value(serde_json::json!({
+            "name": "t",
+            "model": "ollama/llama3",
+        }))
+        .unwrap();
+        if intent {
+            rule.intent = Some(TaskIntent::Edit);
+        }
+        if skill {
+            rule.skill = Some("changelog".to_string());
+        }
+        if path {
+            rule.paths = vec!["src/**".to_string()];
+        }
+        rule
+    }
 
     #[test]
     fn should_default_to_empty_policy() {
@@ -168,7 +312,10 @@ mod tests {
         assert!(rule.skill.is_none());
         assert!(rule.paths.is_empty());
         assert!(!rule.local_only);
+        assert!(rule.requires_capabilities.is_none());
         assert!(rule.fallbacks.is_empty());
+        assert!(rule.required_permissions.permissions.is_empty());
+        assert!(rule.cost_limit.is_none());
     }
 
     #[test]
@@ -243,8 +390,11 @@ mod tests {
                 skill: None,
                 paths: vec!["src/auth/**".to_string()],
                 local_only: false,
+                requires_capabilities: None,
                 model: "anthropic/claude-sonnet".parse().unwrap(),
                 fallbacks: vec!["openai/gpt-5.5-thinking".parse().unwrap()],
+                required_permissions: ToolsConfig::default(),
+                cost_limit: None,
             }],
             default: Some(DefaultRoute {
                 model: "openai/gpt-5.5-mini".parse().unwrap(),
@@ -256,5 +406,127 @@ mod tests {
             serde_json::from_str::<RoutingPolicy>(&json).unwrap(),
             policy
         );
+    }
+
+    #[test]
+    fn should_match_empty_rule_against_anything() {
+        let rule = rule_with(false, false, false);
+        let ctx = RoutingContext {
+            intent: Some(TaskIntent::Chat),
+            skill: Some("x".to_string()),
+            paths: vec![PathBuf::from("a/b")],
+        };
+        assert!(rule.matches(&ctx));
+    }
+
+    #[test]
+    fn should_match_when_all_present_conditions_hold() {
+        let mut rule = rule_with(true, false, true);
+        rule.skill = None;
+
+        let hit = RoutingContext {
+            intent: Some(TaskIntent::Edit),
+            skill: None,
+            paths: vec![PathBuf::from("src/auth/login.rs")],
+        };
+        assert!(rule.matches(&hit));
+
+        let wrong_intent = RoutingContext {
+            intent: Some(TaskIntent::Review),
+            skill: None,
+            paths: vec![PathBuf::from("src/auth/login.rs")],
+        };
+        assert!(!rule.matches(&wrong_intent));
+
+        let no_path = RoutingContext {
+            intent: Some(TaskIntent::Edit),
+            skill: None,
+            paths: vec![PathBuf::from("docs/readme.md")],
+        };
+        assert!(!rule.matches(&no_path));
+    }
+
+    #[test]
+    fn should_order_by_priority_then_specificity() {
+        let mut low_priority = rule_with(true, true, true);
+        low_priority.priority = 100;
+        let mut high_priority = rule_with(true, false, false);
+        high_priority.priority = 10;
+
+        assert_eq!(
+            RoutingRule::precedence_cmp(&high_priority, &low_priority),
+            Ordering::Less
+        );
+
+        let mut a = rule_with(true, true, true);
+        a.priority = 10;
+        let mut b = rule_with(true, false, false);
+        b.priority = 10;
+        assert_eq!(RoutingRule::precedence_cmp(&a, &b), Ordering::Less);
+
+        let c = a.clone();
+        assert_eq!(RoutingRule::precedence_cmp(&a, &c), Ordering::Equal);
+    }
+
+    #[test]
+    fn should_parse_capabilities_permissions_and_cost_limit() {
+        let rule: RoutingRule = serde_json::from_value(serde_json::json!({
+            "name": "expensive remote review",
+            "priority": 5,
+            "intent": "review",
+            "requires_capabilities": { "reasoning": true, "tools": true },
+            "required_permissions": { "permissions": { "shell": "deny", "network": "ask" } },
+            "cost_limit": "0.50",
+            "model": "anthropic/claude-sonnet",
+        }))
+        .unwrap();
+
+        let caps = rule.requires_capabilities.expect("capabilities present");
+        assert!(caps.reasoning);
+        assert!(caps.tools);
+        assert_eq!(
+            rule.required_permissions.mode_for("shell"),
+            Some(PermissionMode::Deny)
+        );
+        assert_eq!(rule.cost_limit, Some(Decimal::from_str("0.50").unwrap()));
+    }
+
+    #[test]
+    fn should_rank_specificity_by_ladder() {
+        assert_eq!(
+            rule_with(false, false, false).specificity(),
+            Specificity::Default
+        );
+        assert_eq!(
+            rule_with(true, false, false).specificity(),
+            Specificity::Intent
+        );
+        assert_eq!(
+            rule_with(false, false, true).specificity(),
+            Specificity::Path
+        );
+        assert_eq!(
+            rule_with(false, true, false).specificity(),
+            Specificity::Skill
+        );
+        assert_eq!(
+            rule_with(true, false, true).specificity(),
+            Specificity::PathIntent
+        );
+        assert_eq!(
+            rule_with(false, true, true).specificity(),
+            Specificity::SkillPath
+        );
+        assert_eq!(
+            rule_with(true, true, true).specificity(),
+            Specificity::SkillPathIntent
+        );
+        assert_eq!(
+            rule_with(true, true, false).specificity(),
+            Specificity::Skill
+        );
+        assert!(Specificity::SkillPathIntent > Specificity::SkillPath);
+        assert!(Specificity::PathIntent > Specificity::Skill);
+        assert!(Specificity::Path > Specificity::Intent);
     }
 }

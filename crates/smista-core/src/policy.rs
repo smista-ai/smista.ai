@@ -7,13 +7,16 @@
 //! router, which evaluates the *same* types — there is no duplicated wire model.
 
 mod classification;
+mod glob;
 mod permission;
 mod privacy;
 mod routing;
 mod tools;
 
-pub use classification::{ClassificationConfig, ClassificationRule};
+pub use classification::{
+    Classification, ClassificationConfig, ClassificationRule, Confidence, IntentSource,
+};
 pub use permission::PermissionMode;
 pub use privacy::{LocalPrivacy, PrivacyPolicy, RemotePrivacy};
-pub use routing::{DefaultRoute, RoutingPolicy, RoutingRule};
+pub use routing::{DefaultRoute, RoutingContext, RoutingPolicy, RoutingRule, Specificity};
 pub use tools::ToolsConfig;
