@@ -41,6 +41,28 @@ supports_streaming = true
 supports_tools = false
 max_context_tokens = 32768
 
+[models."openai/gpt-5.5-mini"]
+provider = "openai"
+name = "gpt-5.5-mini"
+requires_api_key = true
+local = false
+supports_streaming = true
+supports_tools = true
+supports_json_output = true
+supports_reasoning = false
+max_context_tokens = 128000
+
+[models."anthropic/claude-sonnet"]
+provider = "anthropic"
+name = "claude-sonnet"
+requires_api_key = true
+local = false
+supports_streaming = true
+supports_tools = true
+supports_json_output = true
+supports_reasoning = false
+max_context_tokens = 200000
+
 # --- Routing ---------------------------------------------------------------
 
 # Used when no rule matches.
