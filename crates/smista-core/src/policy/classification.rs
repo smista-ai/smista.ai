@@ -1,21 +1,34 @@
-//! Deterministic task-classification configuration.
+//! Intent classification: deterministically maps a raw prompt to a [`TaskIntent`].
+//!
+//! Intent classification is the first stage of the routing pipeline. Given the
+//! user's prompt plus the kinds of context available for the task (for example
+//! `git_diff` or `pull_request`), an ordered list of [`ClassificationRule`]s is
+//! evaluated to produce a [`TaskIntent`]. The first matching rule wins; if
+//! none matches, [`ClassificationConfig::default_intent`] is used.
+//!
+//! Classification is purely deterministic — it never calls an LLM — and lives
+//! client-side in the CLI configuration (`[classification]` in `config.toml`).
+//! The resulting [`TaskIntent`] is then sent to the router, where a separate
+//! set of [`RoutingRule`](super::RoutingRule)s selects the model.
+//!
+//! This module only defines the configuration and result shapes; the
+//! classifier implementation lives elsewhere.
 
 use serde::{Deserialize, Serialize};
 
 use crate::intent::TaskIntent;
 
-/// Default priority for a classification rule that does not set one.
+/// Default priority for a rule that does not set one.
 ///
-/// Rules are evaluated in ascending priority order, so an unprioritized rule
-/// evaluates after any rule with an explicit lower number.
+/// Rules are evaluated in ascending priority order, so a rule without an
+/// explicit priority evaluates after any rule with a lower number.
 const DEFAULT_PRIORITY: u32 = 1000;
 
-/// Configuration for deterministic task classification.
+/// Configuration for intent classification.
 ///
-/// Classification never depends on an LLM. Ordered [`rules`](Self::rules) map
-/// observable signals — prompt keywords and required context — to a
-/// [`TaskIntent`]. [`default_intent`](Self::default_intent) is used when no rule
-/// matches.
+/// Holds the ordered set of [`rules`](Self::rules) used to infer a
+/// [`TaskIntent`] from a prompt and its available context kinds, plus the
+/// [`default_intent`](Self::default_intent) returned when no rule matches.
 ///
 /// # Examples
 ///
@@ -32,17 +45,23 @@ pub struct ClassificationConfig {
     /// Intent used when no rule matches.
     #[serde(default = "default_intent")]
     pub default_intent: TaskIntent,
-    /// Ordered classification rules.
+    /// Ordered intent-classification rules.
     #[serde(default)]
     pub rules: Vec<ClassificationRule>,
 }
 
-/// A single deterministic classification rule.
+/// A single intent-classification rule.
 ///
-/// All present conditions must hold for the rule to match. Conditions are
-/// [`keywords`](Self::keywords) (any keyword present in the prompt) and
-/// [`requires_any_context`](Self::requires_any_context) (at least one of the
-/// named context kinds is available, e.g. `git_diff`, `pull_request`).
+/// A rule maps observable signals in the request to a [`TaskIntent`]. All
+/// present conditions must hold for the rule to match:
+///
+/// - [`keywords`](Self::keywords) — at least one keyword appears in the prompt.
+/// - [`requires_any_context`](Self::requires_any_context) — at least one of the
+///   named context kinds (for example `git_diff` or `pull_request`) is
+///   available for the task.
+///
+/// Absent conditions are ignored; a rule with no conditions matches every
+/// request.
 ///
 /// # Examples
 ///
@@ -76,28 +95,35 @@ pub struct ClassificationRule {
     pub requires_any_context: Vec<String>,
 }
 
-/// The deterministic result of classifying a task's intent.
+/// The outcome of intent classification for one request.
 ///
-/// Produced by the router's classifier; core only defines the shape. The
-/// matched rule, when any, is referenced by its index into
-/// [`ClassificationConfig::rules`].
+/// Either the user supplied an explicit intent (see [`IntentSource::Explicit`])
+/// or one was inferred deterministically from a matching
+/// [`ClassificationRule`] (see [`IntentSource::Inferred`]). For an inferred
+/// intent, [`matched_rule`](Self::matched_rule) carries the index of the
+/// matching entry in [`ClassificationConfig::rules`] so traces can point back
+/// to the configured rule.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Classification {
     /// The detected task intent.
     pub intent: TaskIntent,
-    /// Whether the intent was explicit or inferred.
+    /// Whether the intent was given explicitly by the user or inferred.
     pub source: IntentSource,
     /// Human-readable explanation of why this intent was chosen.
     pub reason: String,
-    /// Index of the matched rule in `ClassificationConfig::rules`, if any.
+    /// Index of the matched rule in [`ClassificationConfig::rules`], if any.
+    ///
+    /// Refers to a [`ClassificationRule`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub matched_rule: Option<usize>,
-    /// Optional deterministic confidence category.
+    /// Optional deterministic confidence category for an inferred intent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<Confidence>,
 }
 
-/// Deterministic confidence category for an inferred intent. Not a probability.
+/// Deterministic confidence category for an inferred intent.
+///
+/// This is a coarse signal-strength label, not a probability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Confidence {
@@ -109,13 +135,13 @@ pub enum Confidence {
     High,
 }
 
-/// Whether an intent was given explicitly by the user or inferred by rules.
+/// Origin of the intent attached to a request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum IntentSource {
-    /// The user named the intent.
+    /// The user named the intent (for example via `--intent`).
     Explicit,
-    /// The intent was inferred deterministically from classification rules.
+    /// The intent was inferred from a matching [`ClassificationRule`].
     Inferred,
 }
 
