@@ -48,6 +48,8 @@ impl ToolsConfig {
     /// Merges `over` onto `self`, allowing an override to tighten a tool's mode
     /// (`allow -> ask -> deny`) but never loosen it.
     ///
+    /// > TL;DR a `deny` can't be overridden to `ask` or `allow`, but an `allow` can be tightened to `ask` or `deny`.
+    ///
     /// A new tool absent from `self` is accepted as-is. A loosening attempt
     /// returns [`PolicyError::PermissionExpansion`] naming the tool.
     ///
