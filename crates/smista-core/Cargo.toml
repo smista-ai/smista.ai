@@ -14,6 +14,7 @@ keywords = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
 globset = { workspace = true }
+http = { workspace = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

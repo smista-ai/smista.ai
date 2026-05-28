@@ -28,7 +28,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{ParseError, SmistaError};
+use crate::error::{CoreError, ParseError};
 
 /// The reasoning effort a model should spend on a routed task.
 ///
@@ -72,7 +72,7 @@ impl Display for Effort {
 }
 
 impl FromStr for Effort {
-    type Err = SmistaError;
+    type Err = CoreError;
 
     /// Parses the lowercase name of an effort, as produced by [`Display`].
     ///
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn should_fail_to_parse_unknown_effort() {
         let err = Effort::from_str("extreme").unwrap_err();
-        if let SmistaError::Parse(ParseError::UnknownEffort(unknown)) = err {
+        if let CoreError::Parse(ParseError::UnknownEffort(unknown)) = err {
             assert_eq!(unknown, "extreme");
         } else {
             panic!("Expected UnknownEffort error");

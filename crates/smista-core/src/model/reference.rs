@@ -28,7 +28,7 @@ use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::Provider;
-use crate::error::{ParseError, SmistaError};
+use crate::error::{CoreError, ParseError};
 
 /// A reference to a specific model offered by a provider.
 ///
@@ -51,7 +51,7 @@ impl Display for ModelReference {
 }
 
 impl FromStr for ModelReference {
-    type Err = SmistaError;
+    type Err = CoreError;
 
     /// Parses the `provider/model` form, as produced by [`Display`].
     ///
@@ -179,7 +179,7 @@ mod tests {
         let err = ModelReference::from_str("claude-sonnet").unwrap_err();
         assert!(matches!(
             err,
-            SmistaError::Parse(ParseError::InvalidModelReference(_))
+            CoreError::Parse(ParseError::InvalidModelReference(_))
         ));
     }
 
@@ -198,7 +198,7 @@ mod tests {
         let err = ModelReference::from_str("cohere/command").unwrap_err();
         assert!(matches!(
             err,
-            SmistaError::Parse(ParseError::UnknownProvider(_))
+            CoreError::Parse(ParseError::UnknownProvider(_))
         ));
     }
 }
