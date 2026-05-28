@@ -27,7 +27,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{ParseError, SmistaError};
+use crate::error::{CoreError, ParseError};
 
 /// The identifier of a provider, used for configuration and routing.
 ///
@@ -65,7 +65,7 @@ impl Display for Provider {
 }
 
 impl FromStr for Provider {
-    type Err = SmistaError;
+    type Err = CoreError;
 
     /// Parses the lowercase name of a provider, as produced by [`Display`].
     ///
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn should_fail_to_parse_unknown_provider() {
         let err = Provider::from_str("cohere").unwrap_err();
-        if let SmistaError::Parse(ParseError::UnknownProvider(unknown)) = err {
+        if let CoreError::Parse(ParseError::UnknownProvider(unknown)) = err {
             assert_eq!(unknown, "cohere");
         } else {
             panic!("Expected UnknownProvider error");

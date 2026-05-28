@@ -27,7 +27,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{ParseError, SmistaError};
+use crate::error::{CoreError, ParseError};
 
 /// The kind of work a single step of an AI workflow performs.
 ///
@@ -78,7 +78,7 @@ impl Display for TaskIntent {
 }
 
 impl FromStr for TaskIntent {
-    type Err = SmistaError;
+    type Err = CoreError;
 
     /// Parses the lowercase name of an intent, as produced by [`Display`].
     ///
@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn should_fail_to_parse_unknown_intent() {
         let err = TaskIntent::from_str("deploy").unwrap_err();
-        if let SmistaError::Parse(ParseError::UnknownIntent(unknown)) = err {
+        if let CoreError::Parse(ParseError::UnknownIntent(unknown)) = err {
             assert_eq!(unknown, "deploy");
         } else {
             panic!("Expected UnknownIntent error");

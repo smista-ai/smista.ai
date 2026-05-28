@@ -48,7 +48,7 @@ mod usage;
 
 pub use approval::{ApprovalDecision, SubmitApprovalRequest, SubmitApprovalResponse};
 pub use auth::{BootstrapResponse, MeResponse, SignInRequest, SignInResponse, SignOutResponse};
-pub use error::{ApiError, ApiErrorBody};
+pub use error::{ApiError, ApiErrorBody, ApiErrorResponse};
 pub use execute::{
     ContextFile, ContextInstruction, ContextOutcome, ExecuteContext, ExecutePermissions,
     ExecutePolicy, ExecutePrivacy, ExecuteRequest, ExecuteResponse, ExecuteRoutingPolicy,
