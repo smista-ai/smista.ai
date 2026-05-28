@@ -18,8 +18,11 @@ use serde::{Deserialize, Serialize};
 /// assert!(PermissionMode::Deny > PermissionMode::Ask);
 /// assert_eq!(PermissionMode::Ask.max(PermissionMode::Allow), PermissionMode::Ask);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, ts_rs::TS,
+)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum PermissionMode {
     /// The action runs without confirmation.
     Allow,

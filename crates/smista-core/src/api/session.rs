@@ -27,7 +27,8 @@ use uuid::Uuid;
 use crate::message::Message;
 
 /// Lightweight view of a session, used in listings and on creation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SessionSummary {
     /// Unique session identifier.
     pub id: Uuid,
@@ -45,7 +46,8 @@ pub struct SessionSummary {
 ///
 /// Carries the session's `messages` and free-form `metadata`. It omits
 /// `archived`, since archived sessions are not returned on fetch.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SessionDetail {
     /// Unique session identifier.
     pub id: Uuid,
@@ -62,21 +64,24 @@ pub struct SessionDetail {
 }
 
 /// Body of `POST /sessions`. The title is mandatory.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateSessionRequest {
     /// Title for the new session.
     pub title: String,
 }
 
 /// Response to `POST /sessions`, wrapping the created session.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CreateSessionResponse {
     /// The created session.
     pub session: SessionSummary,
 }
 
 /// Response to `GET /sessions/{id}`, wrapping the full session.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GetSessionResponse {
     /// The fetched session.
     pub session: SessionDetail,
@@ -85,18 +90,22 @@ pub struct GetSessionResponse {
 /// Body of `PUT /sessions/{id}`, updating title and/or archive state.
 ///
 /// Each field is optional; omit a field to leave it unchanged.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateSessionRequest {
     /// New title, if changing it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub title: Option<String>,
     /// New archive state, if changing it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub archived: Option<bool>,
 }
 
 /// Response to `DELETE /sessions/{id}`, confirming deletion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DeleteSessionResponse {
     /// Whether the session was deleted.
     pub deleted: bool,

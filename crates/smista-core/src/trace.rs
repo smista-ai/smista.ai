@@ -41,7 +41,8 @@ use crate::model::Provider;
 /// `matched_rule` is the human-readable description of the routing rule that
 /// selected the model, or `None` when the default route was used. `events`
 /// holds the ordered execution events as opaque JSON values.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Trace {
     /// Stable identifier of the trace, for example `trace:xyz`.
     pub id: String,
@@ -55,6 +56,7 @@ pub struct Trace {
     pub model: String,
     /// Description of the routing rule that matched, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub matched_rule: Option<String>,
     /// Ordered execution events, as opaque JSON values.
     pub events: Vec<serde_json::Value>,

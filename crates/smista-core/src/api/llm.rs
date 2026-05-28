@@ -32,14 +32,16 @@ use serde::{Deserialize, Serialize};
 use crate::model::{Provider, ProviderDescriptor};
 
 /// Response to `GET /llm/providers`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListProvidersResponse {
     /// Configured and available providers.
     pub providers: Vec<ProviderDescriptor>,
 }
 
 /// Response to `GET /llm/models`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ListModelsResponse {
     /// Available models across providers.
     pub models: Vec<ModelInfo>,
@@ -49,7 +51,8 @@ pub struct ListModelsResponse {
 ///
 /// Capability flags are reported as flat `supports_*` booleans.
 /// `supports_json_output` is omitted for models that do not report it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelInfo {
     /// Provider that offers the model.
     pub provider: Provider,
@@ -65,6 +68,7 @@ pub struct ModelInfo {
     pub supports_tools: bool,
     /// Whether the model can be constrained to emit JSON, when reported.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub supports_json_output: Option<bool>,
     /// Maximum number of context tokens the model accepts.
     pub max_context_tokens: u32,

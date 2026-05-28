@@ -43,6 +43,7 @@ token, which you send as a bearer token on every other request.
 ```http
 POST /api/v1/auth/bootstrap
 ```
+
 Creates a user. Returns `{ "user_id": "...", "api_key": "sk-smista-api01-..." }`.
 
 ```http
@@ -51,18 +52,21 @@ X-Smista-Api-Key: <api-key>
 
 { "user_id": "user:abc123" }
 ```
+
 Returns `{ "token": "st_...", "expires_at": "2026-05-25T12:00:00Z" }`.
 
 ```http
 POST /api/v1/auth/sign-out
 Authorization: Bearer <session-token>
 ```
+
 Revokes the current token. Returns `{ "revoked": true }`.
 
 ```http
 GET /api/v1/auth/me
 Authorization: Bearer <session-token>
 ```
+
 Returns the authenticated user.
 
 ## Sessions
@@ -113,7 +117,7 @@ model, builds the request and returns the result with a routing explanation:
   "usage": {
     "input_tokens": 1200,
     "output_tokens": 500,
-    "estimated_cost": 0.08,
+    "estimated_cost": "0.08",
     "currency": "USD"
   },
   "trace_id": "trace:xyz"
@@ -157,7 +161,7 @@ estimated cost range and the required permissions:
   "matched_rule": "task.review -> openai/gpt-5.5-thinking",
   "included_context": ["current git diff", "SMISTA.md"],
   "excluded_context": [".env", "target/**"],
-  "estimated_cost": { "min": 0.03, "max": 0.09, "currency": "USD" },
+  "estimated_cost": { "min": "0.03", "max": "0.09", "currency": "USD" },
   "required_permissions": [
     { "permission": "read_repository", "mode": "allow" },
     { "permission": "write_files", "mode": "ask" }

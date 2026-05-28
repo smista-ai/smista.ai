@@ -26,7 +26,8 @@ use super::session::SessionSummary;
 /// Response to `POST /auth/bootstrap`, returned once at user creation.
 ///
 /// `api_key` is a secret shown only here; the caller must store it securely.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct BootstrapResponse {
     /// Identifier of the created user, for example `user:abc123`.
     pub user_id: String,
@@ -35,7 +36,8 @@ pub struct BootstrapResponse {
 }
 
 /// Body of `POST /auth/sign-in`, naming the user to authenticate.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SignInRequest {
     /// Identifier of the user signing in.
     pub user_id: String,
@@ -45,7 +47,8 @@ pub struct SignInRequest {
 ///
 /// `token` is a secret bearer credential; `expires_at` is when it stops being
 /// valid.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SignInResponse {
     /// Session bearer token. Secret; sent as `Authorization: Bearer`.
     pub token: String,
@@ -54,14 +57,16 @@ pub struct SignInResponse {
 }
 
 /// Response to `POST /auth/sign-out`, confirming token revocation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SignOutResponse {
     /// Whether the session token was revoked.
     pub revoked: bool,
 }
 
 /// Response to `GET /auth/me`, listing the authenticated user's sessions.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct MeResponse {
     /// Summaries of the user's sessions.
     pub sessions: Vec<SessionSummary>,

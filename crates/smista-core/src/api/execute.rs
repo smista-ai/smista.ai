@@ -45,7 +45,8 @@ use crate::skill::Skill;
 use crate::usage::Usage;
 
 /// Full input to executing, streaming, or previewing a task.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExecuteRequest {
     /// What the user is asking for.
     pub input: TaskInput,
@@ -62,33 +63,40 @@ pub struct ExecuteRequest {
 }
 
 /// The user's request: prompt text, optional command and explicit model.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TaskInput {
     /// The prompt text.
     pub text: String,
     /// Explicit task command, overriding intent detection when set.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub command: Option<TaskIntent>,
     /// Explicit model to use, bypassing routing when set.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub explicit_model: Option<ModelReference>,
 }
 
 /// Snapshot of the workspace a task runs against.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Workspace {
     /// Absolute path to the workspace root.
     pub root: PathBuf,
     /// Current git branch, if the workspace is a git repository.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub git_branch: Option<String>,
     /// Current git diff, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub git_diff: Option<String>,
     /// Paths the user explicitly referenced.
     pub referenced_paths: Vec<PathBuf>,
     /// The file the user is actively editing, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub active_file: Option<PathBuf>,
 }
 
@@ -96,7 +104,8 @@ pub struct Workspace {
 ///
 /// `version` is the schema version of the snapshot; `source` records how it was
 /// assembled (for example `merged`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExecutePolicy {
     /// Schema version of the policy snapshot.
     pub version: u32,
@@ -114,7 +123,8 @@ pub struct ExecutePolicy {
 ///
 /// `fallbacks` maps a primary model to the ordered models to try if it is
 /// unavailable.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExecuteRoutingPolicy {
     /// Model used when no rule matches.
     pub default_model: ModelReference,
@@ -125,7 +135,8 @@ pub struct ExecuteRoutingPolicy {
 }
 
 /// A single routing rule: match criteria and the model to use.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExecuteRoutingRule {
     /// Criteria that select this rule.
     #[serde(rename = "match")]
@@ -136,17 +147,20 @@ pub struct ExecuteRoutingRule {
 }
 
 /// Criteria selecting a routing rule.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RuleMatch {
     /// Task type the rule applies to.
     pub task_type: TaskIntent,
     /// Glob of paths the rule applies to, if scoped.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub path: Option<String>,
 }
 
 /// Tool permission modes for a task.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExecutePermissions {
     /// Permission for reading files.
     pub file_read: PermissionMode,
@@ -159,7 +173,8 @@ pub struct ExecutePermissions {
 }
 
 /// Privacy constraints on the context sent to models.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExecutePrivacy {
     /// Glob patterns whose contents must not be sent to remote models.
     pub restricted_paths: Vec<String>,
@@ -168,7 +183,8 @@ pub struct ExecutePrivacy {
 }
 
 /// Client-side execution preferences.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct LocalPreferences {
     /// Apply edits automatically without confirmation.
     pub auto_apply: bool,
@@ -181,7 +197,8 @@ pub struct LocalPreferences {
 }
 
 /// A provider available to the request and the credential status of its models.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ProviderCredentialInfo {
     /// Provider identifier.
     pub id: Provider,
@@ -190,7 +207,8 @@ pub struct ProviderCredentialInfo {
 }
 
 /// A model offered by a provider and whether its credential is available.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ProviderModelInfo {
     /// Model name.
     pub model: String,
@@ -201,7 +219,8 @@ pub struct ProviderModelInfo {
 }
 
 /// The assembled context for a task.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExecuteContext {
     /// Relevant prior conversation messages.
     pub messages: Vec<Message>,
@@ -213,11 +232,13 @@ pub struct ExecuteContext {
     pub skills: Vec<Skill>,
     /// Prompt template applied to the input, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub prompt_template: Option<String>,
 }
 
 /// A file included as context, with a content hash for cache validation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ContextFile {
     /// Path of the file.
     pub path: PathBuf,
@@ -228,7 +249,8 @@ pub struct ContextFile {
 }
 
 /// An instruction document included as context.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ContextInstruction {
     /// Where the instruction came from, for example `SMISTA.md`.
     pub source: String,
@@ -240,12 +262,14 @@ pub struct ContextInstruction {
 ///
 /// `message` is the assistant's reply on completion; it may be absent when the
 /// task is awaiting an approval instead.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ExecuteResponse {
     /// Terminal status of the execution.
     pub status: ExecutionStatus,
     /// The assistant's reply, when the task produced one.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub message: Option<Message>,
     /// How the task was routed.
     pub routing: RoutingOutcome,
@@ -260,8 +284,9 @@ pub struct ExecuteResponse {
 /// Terminal status of a task execution.
 ///
 /// Each variant serializes to its snake_case name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum ExecutionStatus {
     /// The task completed and produced an assistant message.
     Completed,
@@ -270,7 +295,8 @@ pub enum ExecutionStatus {
 }
 
 /// How a task was routed to a model.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RoutingOutcome {
     /// Detected task type that drove routing.
     pub task_type: TaskIntent,
@@ -280,6 +306,7 @@ pub struct RoutingOutcome {
     pub model: String,
     /// Description of the routing rule that matched, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub matched_rule: Option<String>,
     /// Whether a fallback model was used.
     pub fallback_used: bool,
@@ -288,7 +315,8 @@ pub struct RoutingOutcome {
 }
 
 /// What context the router included and excluded for a task.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ContextOutcome {
     /// Human-readable descriptions of included context.
     pub included: Vec<String>,
@@ -419,7 +447,7 @@ mod tests {
                 "included": ["src/auth/middleware.rs", "SMISTA.md", "current git diff"],
                 "excluded": [".env", "secrets/**"]
             },
-            "usage": { "input_tokens": 1200, "output_tokens": 500, "estimated_cost": 0.08, "currency": "USD" },
+            "usage": { "input_tokens": 1200, "output_tokens": 500, "estimated_cost": "0.08", "currency": "USD" },
             "trace_id": "trace:xyz"
         }"#;
         let response: ExecuteResponse = serde_json::from_str(json).unwrap();

@@ -19,6 +19,7 @@
 //! assert_eq!(usage.currency(), "USD");
 //! ```
 
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 /// ISO 4217 currency code assumed when a [`Usage`] reports no currency.
@@ -27,31 +28,40 @@ const DEFAULT_CURRENCY: &str = "USD";
 /// Token usage and cost metadata for a single model invocation.
 ///
 /// All fields are optional and omitted from serialization when unset.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Usage {
     /// Tokens in the input/prompt.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub input_tokens: Option<u64>,
     /// Tokens generated in the output.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub output_tokens: Option<u64>,
     /// Input tokens served from a provider cache.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub cached_tokens: Option<u64>,
     /// Tokens spent on reasoning, when reported separately.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub reasoning_tokens: Option<u64>,
     /// Total tokens, when the provider reports a combined count.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub total_tokens: Option<u64>,
-    /// Cost estimated before the invocation.
+    /// Cost estimated before the invocation, serialized as a decimal string.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub estimated_cost: Option<f64>,
-    /// Cost reconciled after the invocation.
+    #[ts(optional, type = "string")]
+    pub estimated_cost: Option<Decimal>,
+    /// Cost reconciled after the invocation, serialized as a decimal string.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub actual_cost: Option<f64>,
+    #[ts(optional, type = "string")]
+    pub actual_cost: Option<Decimal>,
     /// ISO 4217 currency code for the costs; defaults to `USD` when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub currency: Option<String>,
 }
 
@@ -105,7 +115,7 @@ mod tests {
             input_tokens: Some(1_024),
             output_tokens: Some(256),
             total_tokens: Some(1_280),
-            actual_cost: Some(0.01),
+            actual_cost: Some("0.01".parse().unwrap()),
             currency: Some("USD".to_string()),
             ..Default::default()
         };

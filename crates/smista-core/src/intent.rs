@@ -33,8 +33,9 @@ use crate::error::{CoreError, ParseError};
 ///
 /// Used by smista-router to match a prompt against the user's routing policy.
 /// Each variant serializes to its lowercase name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum TaskIntent {
     /// Free-form conversation with no specialized objective.
     Chat,
