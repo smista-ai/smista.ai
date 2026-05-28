@@ -32,8 +32,11 @@ use crate::error::{CoreError, ParseError};
 /// The identifier of a provider, used for configuration and routing.
 ///
 /// Each variant serializes to its lowercase name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ts_rs::TS,
+)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum Provider {
     /// Anthropic, serving the Claude family of models.
     Anthropic,
@@ -88,7 +91,8 @@ impl FromStr for Provider {
 /// This is the shape returned by `GET /llm/providers`: it pairs a provider's
 /// identity and display name with whether usable credentials (or a base URL,
 /// for local providers) are currently configured.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ProviderDescriptor {
     /// The provider this descriptor refers to.
     pub id: Provider,

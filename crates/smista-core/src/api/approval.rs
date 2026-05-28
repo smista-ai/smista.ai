@@ -23,8 +23,9 @@ use serde::{Deserialize, Serialize};
 /// The decision made on a pending approval.
 ///
 /// Each variant serializes to its lowercase name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum ApprovalDecision {
     /// The action is permitted to proceed.
     Approved,
@@ -33,17 +34,20 @@ pub enum ApprovalDecision {
 }
 
 /// Body of `POST /sessions/{id}/approvals/{approval_id}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SubmitApprovalRequest {
     /// The decision being submitted.
     pub decision: ApprovalDecision,
     /// Optional human-readable reason for the decision.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub reason: Option<String>,
 }
 
 /// Response confirming the recorded approval decision.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SubmitApprovalResponse {
     /// Identifier of the approval the decision applies to.
     pub approval_id: String,

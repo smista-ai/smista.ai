@@ -40,7 +40,8 @@ use crate::error::{
 };
 
 /// Envelope wrapping the error body under an `error` key.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ApiError {
     /// The structured error payload.
     pub error: ApiErrorBody,
@@ -50,7 +51,8 @@ pub struct ApiError {
 ///
 /// `details` carries machine-readable context (such as the offending provider
 /// and model) and is omitted when there is none. It must never contain secrets.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ApiErrorBody {
     /// Stable machine-readable error code, for example `missing_provider_credentials`.
     pub code: String,
@@ -58,6 +60,7 @@ pub struct ApiErrorBody {
     pub message: String,
     /// Optional structured context; never carries secrets.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub details: Option<serde_json::Value>,
 }
 

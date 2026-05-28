@@ -32,7 +32,8 @@ use crate::model::Provider;
 use crate::usage::Usage;
 
 /// Response to `GET /sessions/{id}/usage`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SessionUsageResponse {
     /// Session the usage belongs to.
     pub session_id: Uuid,
@@ -41,7 +42,8 @@ pub struct SessionUsageResponse {
 }
 
 /// A session's usage total and its per-model and per-task-type breakdowns.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UsageBreakdown {
     /// Combined usage across the whole session.
     pub total: Usage,
@@ -52,7 +54,8 @@ pub struct UsageBreakdown {
 }
 
 /// Usage attributed to a single model.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelUsage {
     /// Provider that served the requests.
     pub provider: Provider,
@@ -66,7 +69,8 @@ pub struct ModelUsage {
 }
 
 /// Usage attributed to a single task type.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TaskTypeUsage {
     /// Task type the requests were classified as.
     pub task_type: TaskIntent,
@@ -125,7 +129,7 @@ mod tests {
         assert_eq!(response.usage.by_task_type[0].task_type, TaskIntent::Plan);
         assert_eq!(
             response.usage.by_task_type[0].usage.estimated_cost,
-            Some(0.18)
+            Some("0.18".parse().unwrap())
         );
     }
 

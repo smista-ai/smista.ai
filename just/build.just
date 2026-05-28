@@ -14,7 +14,13 @@ build_crates_release:
 
 # Build the TypeScript SDK
 [group('build')]
-build_sdk: sdk_build
+build_sdk: _generate_sdk_bindings sdk_build
+
+# Generate TypeScript bindings and build the SDK
+[private]
+_generate_sdk_bindings:
+  echo "Generating TypeScript bindings from Rust code..."
+  cargo test -p smista-core export_bindings
 
 # Clean build artifacts
 [group('build')]

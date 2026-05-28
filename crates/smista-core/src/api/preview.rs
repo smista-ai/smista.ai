@@ -14,11 +14,12 @@
 //! ```
 //! use smista_core::api::CostRange;
 //!
-//! let cost = CostRange { min: 0.03, max: 0.09, currency: "USD".to_string() };
+//! let cost = CostRange { min: "0.03".parse().unwrap(), max: "0.09".parse().unwrap(), currency: "USD".to_string() };
 //! let json = serde_json::to_string(&cost).unwrap();
 //! assert!(json.contains("\"currency\":\"USD\""));
 //! ```
 
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::intent::TaskIntent;
@@ -26,7 +27,8 @@ use crate::model::Provider;
 use crate::policy::PermissionMode;
 
 /// The predicted routing of a task, without calling the model.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PreviewResponse {
     /// Task type that would be detected.
     pub task_type: TaskIntent,
@@ -36,6 +38,7 @@ pub struct PreviewResponse {
     pub model: String,
     /// Description of the routing rule that would match, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub matched_rule: Option<String>,
     /// Human-readable descriptions of context that would be included.
     pub included_context: Vec<String>,
@@ -48,18 +51,24 @@ pub struct PreviewResponse {
 }
 
 /// An estimated cost range in a given currency.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// `min` and `max` serialize as decimal strings to preserve monetary precision.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct CostRange {
-    /// Lower bound of the estimate.
-    pub min: f64,
-    /// Upper bound of the estimate.
-    pub max: f64,
+    /// Lower bound of the estimate, as a decimal string.
+    #[ts(type = "string")]
+    pub min: Decimal,
+    /// Upper bound of the estimate, as a decimal string.
+    #[ts(type = "string")]
+    pub max: Decimal,
     /// ISO 4217 currency code for the bounds.
     pub currency: String,
 }
 
 /// A permission the task requires and the mode that would apply.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RequiredPermission {
     /// Name of the permission, for example `write_files`.
     pub permission: String,
@@ -80,7 +89,7 @@ mod tests {
             "matched_rule": "task.review -> openai/gpt-5.5-thinking",
             "included_context": ["current git diff", "SMISTA.md"],
             "excluded_context": [".env", "target/**"],
-            "estimated_cost": { "min": 0.03, "max": 0.09, "currency": "USD" },
+            "estimated_cost": { "min": "0.03", "max": "0.09", "currency": "USD" },
             "required_permissions": [
                 { "permission": "read_repository", "mode": "allow" },
                 { "permission": "write_files", "mode": "ask" }
@@ -90,7 +99,10 @@ mod tests {
 
         assert_eq!(preview.task_type, TaskIntent::Review);
         assert_eq!(preview.provider, Provider::OpenAI);
-        assert_eq!(preview.estimated_cost.max, 0.09);
+        assert_eq!(
+            preview.estimated_cost.max,
+            "0.09".parse::<Decimal>().unwrap()
+        );
         assert_eq!(
             preview.required_permissions[1],
             RequiredPermission {
@@ -110,8 +122,8 @@ mod tests {
             included_context: vec!["SMISTA.md".to_string()],
             excluded_context: Vec::new(),
             estimated_cost: CostRange {
-                min: 0.01,
-                max: 0.05,
+                min: "0.01".parse().unwrap(),
+                max: "0.05".parse().unwrap(),
                 currency: "USD".to_string(),
             },
             required_permissions: Vec::new(),

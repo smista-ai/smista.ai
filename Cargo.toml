@@ -51,5 +51,5 @@ tokio = { version = "1", features = ["full"] }
 toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-ts-rs = "12"
+ts-rs = { version = "12", features = ["chrono-impl", "serde-json-impl", "uuid-impl"] }
 uuid = { version = "1", features = ["serde", "v7"] }

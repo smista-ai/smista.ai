@@ -23,15 +23,28 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: sdk/package-lock.json
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: 1.95.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-sdk-${{ hashFiles('**/Cargo.lock') }}
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Install dependencies
         run: just sdk_install
+      - name: Build SDK
+        run: just build_sdk
       - name: Lint and format check
         run: just sdk_check
       - name: Type check
         run: just sdk_typecheck
       - name: Test
         run: just sdk_test
-      - name: Build
-        run: just build_sdk
+      - name: Check bindings are up to date
+        run: git diff --exit-code sdk/src/bindings/

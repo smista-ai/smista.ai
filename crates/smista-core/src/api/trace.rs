@@ -32,7 +32,8 @@ use serde::{Deserialize, Serialize};
 use crate::trace::Trace;
 
 /// Envelope wrapping a [`Trace`] under a `trace` key.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TraceResponse {
     /// The execution trace.
     pub trace: Trace,
