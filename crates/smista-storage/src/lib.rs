@@ -1,3 +1,6 @@
+#![doc(html_playground_url = "https://play.rust-lang.org")]
+#![doc(html_favicon_url = "https://smista.ai/logo-150.png")]
+#![doc(html_logo_url = "https://smista.ai/logo.png")]
 //! # smista-storage
 //!
 //! Storage layer for smista.ai. Defines the persistence entities (users,

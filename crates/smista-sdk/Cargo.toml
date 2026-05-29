@@ -6,9 +6,10 @@ authors = { workspace = true }
 description = "Rust SDK facade for smista.ai: a single entry point re-exporting the domain types and (later) the router client."
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
 categories = { workspace = true }
 keywords = { workspace = true }
+readme = "README.md"
+rust-version = { workspace = true }
 
 [dependencies]
 smista-core = { workspace = true }
