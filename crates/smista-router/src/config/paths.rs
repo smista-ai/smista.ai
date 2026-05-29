@@ -12,13 +12,31 @@ const DB_DIR: &str = "db";
 /// Returns the global `router.toml` path, if the global directory resolves.
 #[must_use]
 pub fn router_toml() -> Option<PathBuf> {
-    global_config_dir().map(|dir| dir.join(ROUTER_FILE))
+    match global_config_dir().map(|dir| dir.join(ROUTER_FILE)) {
+        Some(path) => {
+            tracing::debug!(config.path = %path.display(), "resolved router.toml path {{config.path}}");
+            Some(path)
+        }
+        None => {
+            tracing::warn!("could not resolve global config directory for router.toml");
+            None
+        }
+    }
 }
 
 /// Returns the default embedded database path under the global config dir.
 #[must_use]
 pub fn db_path() -> Option<PathBuf> {
-    global_config_dir().map(|dir| dir.join(DB_DIR))
+    match global_config_dir().map(|dir| dir.join(DB_DIR)) {
+        Some(path) => {
+            tracing::debug!(db.path = %path.display(), "resolved embedded database path {{db.path}}");
+            Some(path)
+        }
+        None => {
+            tracing::warn!("could not resolve global config directory for the database path");
+            None
+        }
+    }
 }
 
 #[cfg(test)]

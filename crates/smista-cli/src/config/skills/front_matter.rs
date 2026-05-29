@@ -21,7 +21,13 @@ pub(super) fn parse_front_matter(raw: &str) -> Result<FrontMatter, yaml_serde::E
     if raw.trim().is_empty() {
         return Ok(FrontMatter::default());
     }
-    yaml_serde::from_str(raw)
+    yaml_serde::from_str(raw).map_err(|source| {
+        tracing::error!(
+            error.message = %source,
+            "failed to parse skill front matter YAML"
+        );
+        source
+    })
 }
 
 /// Splits a `SKILL.md` into its YAML front matter and Markdown body.
@@ -29,6 +35,17 @@ pub(super) fn parse_front_matter(raw: &str) -> Result<FrontMatter, yaml_serde::E
 /// Returns `None` when the content does not open with a `---` fence on its
 /// first line. The body is everything after the closing `---` fence.
 pub(super) fn split_front_matter(contents: &str) -> Option<(&str, &str)> {
+    let result = split_front_matter_inner(contents);
+    if result.is_some() {
+        tracing::trace!("found YAML front matter fence");
+    } else {
+        tracing::trace!("no YAML front matter fence found");
+    }
+    result
+}
+
+/// Performs the front-matter split; [`split_front_matter`] traces the outcome.
+fn split_front_matter_inner(contents: &str) -> Option<(&str, &str)> {
     let after_open = contents
         .strip_prefix("---\n")
         .or_else(|| contents.strip_prefix("---\r\n"))?;

@@ -55,10 +55,23 @@ impl PrivacyPolicy {
     pub fn is_restricted_for_remote(&self, path: &Path) -> bool {
         let mut patterns = self.restricted_paths.clone();
         patterns.extend(self.remote.blocked_paths.iter().cloned());
-        match compile_globs(&patterns) {
+        let restricted = match compile_globs(&patterns) {
             Ok(set) => set.is_match(path),
-            Err(_) => true,
-        }
+            Err(source) => {
+                tracing::warn!(
+                    privacy.path = %path.display(),
+                    error.message = %source,
+                    "invalid privacy glob; failing closed and restricting {{privacy.path}}"
+                );
+                true
+            }
+        };
+        tracing::debug!(
+            privacy.path = %path.display(),
+            privacy.restricted = restricted,
+            "remote restriction check for {{privacy.path}}: restricted={{privacy.restricted}}"
+        );
+        restricted
     }
 }
 

@@ -16,6 +16,7 @@ use crate::config::model::RouterConfig;
 /// Any error means the router must not start.
 #[must_use]
 pub fn validate(config: &RouterConfig) -> ValidationReport {
+    tracing::debug!("validating router config");
     let mut report = ValidationReport::default();
 
     binding::check_binding(config, &mut report);
@@ -23,6 +24,18 @@ pub fn validate(config: &RouterConfig) -> ValidationReport {
     auth::check_auth(config, &mut report);
     limits::check_limits(config, &mut report);
     cors::check_cors(config, &mut report);
+
+    tracing::debug!(
+        validation.errors = report.errors().len(),
+        validation.warnings = report.warnings().len(),
+        "router config validation complete: {{validation.errors}} errors, {{validation.warnings}} warnings"
+    );
+    if !report.is_ok() {
+        tracing::warn!(
+            validation.errors = report.errors().len(),
+            "router config is invalid: {{validation.errors}} errors found"
+        );
+    }
 
     report
 }

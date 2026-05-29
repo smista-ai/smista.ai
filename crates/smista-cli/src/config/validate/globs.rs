@@ -15,14 +15,35 @@ pub fn check_globs(config: &Config, report: &mut ValidationReport) {
             &config.privacy.remote.blocked_paths,
         ),
     ];
+    let pattern_count: usize = lists
+        .iter()
+        .map(|(_, patterns)| patterns.len())
+        .sum::<usize>()
+        + config
+            .routing
+            .rules
+            .iter()
+            .map(|rule| rule.paths.len())
+            .sum::<usize>();
+    tracing::trace!(
+        globs.pattern_count = pattern_count,
+        "checking {{globs.pattern_count}} glob patterns"
+    );
     for (field, patterns) in lists {
         for (index, pattern) in patterns.iter().enumerate() {
             if let Err(err) = compile(pattern) {
+                let location = format!("{field}[{index}]");
+                tracing::warn!(
+                    globs.pattern = %pattern,
+                    globs.location = %location,
+                    error.message = %err,
+                    "invalid glob pattern at {{globs.location}}"
+                );
                 report.push(ValidationError {
                     code: ValidationCode::InvalidGlob,
                     severity: Severity::Error,
                     message: format!("invalid glob `{pattern}`: {err}; fix the pattern syntax"),
-                    location: Some(format!("{field}[{index}]")),
+                    location: Some(location),
                 });
             }
         }
@@ -30,11 +51,18 @@ pub fn check_globs(config: &Config, report: &mut ValidationReport) {
     for (r, rule) in config.routing.rules.iter().enumerate() {
         for (index, pattern) in rule.paths.iter().enumerate() {
             if let Err(err) = compile(pattern) {
+                let location = format!("routing.rules[{r}].paths[{index}]");
+                tracing::warn!(
+                    globs.pattern = %pattern,
+                    globs.location = %location,
+                    error.message = %err,
+                    "invalid glob pattern at {{globs.location}}"
+                );
                 report.push(ValidationError {
                     code: ValidationCode::InvalidGlob,
                     severity: Severity::Error,
                     message: format!("invalid glob `{pattern}`: {err}; fix the pattern syntax"),
-                    location: Some(format!("routing.rules[{r}].paths[{index}]")),
+                    location: Some(location),
                 });
             }
         }

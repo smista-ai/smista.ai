@@ -5,7 +5,9 @@ use crate::config::model::{RouterConfig, StorageMode};
 
 /// Local API-key bootstrap must be disabled when storage runs in remote mode.
 pub fn check_auth(config: &RouterConfig, report: &mut ValidationReport) {
+    tracing::trace!("checking router auth configuration");
     if config.storage.mode == StorageMode::Remote && config.auth.local_bootstrap_enabled {
+        tracing::warn!("local API-key bootstrap is enabled while storage mode is remote");
         report.push(ValidationError {
             code: ValidationCode::LocalBootstrapInRemote,
             severity: Severity::Error,

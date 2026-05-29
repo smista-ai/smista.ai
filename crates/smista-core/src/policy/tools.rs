@@ -57,10 +57,21 @@ impl ToolsConfig {
     ///
     /// Returns [`PolicyError::PermissionExpansion`] when `over` weakens a mode.
     pub fn narrow(mut self, over: &ToolsConfig) -> Result<Self, PolicyError> {
+        tracing::debug!(
+            tools.base = self.permissions.len(),
+            tools.over = over.permissions.len(),
+            "narrowing {{tools.base}} base permissions with {{tools.over}} overrides"
+        );
         for (tool, &requested) in &over.permissions {
             if let Some(&base) = self.permissions.get(tool)
                 && requested < base
             {
+                tracing::warn!(
+                    tool.name = %tool,
+                    tool.base = %base,
+                    tool.requested = %requested,
+                    "override loosens permission for {{tool.name}}; rejecting"
+                );
                 return Err(PolicyError::PermissionExpansion {
                     base,
                     requested,

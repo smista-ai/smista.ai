@@ -4,8 +4,9 @@
   <img src="assets/logo-150.png" alt="smista.ai logo" width="150" />
 </p>
 
-[![license-mit](https://img.shields.io/github/license/veeso/smista.ai)](https://opensource.org/licenses/MIT)
+[![license-mit](https://img.shields.io/crates/l/smista-sdk.svg?logo=rust)](https://opensource.org/licenses/MIT)
 [![repo-stars](https://img.shields.io/github/stars/veeso/smista.ai?style=flat)](https://github.com/veeso/smista.ai/stargazers)
+[![latest-version](https://img.shields.io/crates/v/smista-sdk.svg?logo=rust)](https://crates.io/crates/smista-sdk)
 [![conventional-commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 
 [![ci](https://github.com/veeso/smista.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/veeso/smista.ai/actions)
@@ -35,9 +36,9 @@ deterministic routing.
 | Component          | Description                                                        |
 | ------------------ | ------------------------------------------------------------------ |
 | `smista-cli`       | The `smista` command-line interface for developers.                |
-| `smista-router`    | Routing and orchestration service exposing a local HTTP JSON API.  |
 | `smista-core`      | Shared internal runtime: domain types, config, policy, validation. |
 | `smista-providers` | Model abstraction and provider adapters (OpenAI, Anthropic, …).    |
+| `smista-router`    | Routing and orchestration service exposing a local HTTP JSON API.  |
 | `smista-storage`   | Storage traits and the SurrealDB-backed persistence layer.         |
 | `smista-trace`     | Execution trace types and recording logic.                         |
 | `smista-web`       | `axum` HTTP JSON API server for the router.                        |

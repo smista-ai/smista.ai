@@ -64,11 +64,36 @@ impl SecretResolver {
     /// Returns [`SecretError::Io`] if a file exists but cannot be read, or
     /// [`SecretError::Parse`] if a file contains a malformed line.
     pub fn from_paths(global: Option<&Path>, project: &Path) -> Result<Self, SecretError> {
+        tracing::debug!(
+            secrets.has_global = global.is_some(),
+            secrets.project_path = %project.display(),
+            "building secret resolver"
+        );
         let mut file_values = HashMap::new();
+        let mut file_count = 0usize;
         if let Some(global) = global {
-            file_values.extend(read_dotenv(global)?);
+            let values = read_dotenv(global)?;
+            file_count += 1;
+            tracing::trace!(
+                secrets.path = %global.display(),
+                secrets.key_count = values.len(),
+                "loaded {{secrets.key_count}} keys from global secrets file"
+            );
+            file_values.extend(values);
         }
-        file_values.extend(read_dotenv(project)?);
+        let project_values = read_dotenv(project)?;
+        file_count += 1;
+        tracing::trace!(
+            secrets.path = %project.display(),
+            secrets.key_count = project_values.len(),
+            "loaded {{secrets.key_count}} keys from project secrets file"
+        );
+        file_values.extend(project_values);
+        tracing::debug!(
+            secrets.file_count = file_count,
+            secrets.key_count = file_values.len(),
+            "secret resolver ready with {{secrets.key_count}} keys"
+        );
         Ok(Self { file_values })
     }
 
@@ -85,12 +110,19 @@ impl SecretResolver {
     ///
     /// Returns [`SecretError::Unresolved`] if no source provides the key.
     pub fn resolve(&self, reference: &SecretRef) -> Result<SecretString, SecretError> {
+        tracing::trace!(secrets.key = %reference.key(), "resolving secret {{secrets.key}}");
         if let Ok(value) = std::env::var(reference.key()) {
+            tracing::trace!(secrets.key = %reference.key(), "resolved {{secrets.key}} from environment");
             return Ok(SecretString::from(value));
         }
         if let Some(value) = self.file_values.get(reference.key()) {
+            tracing::trace!(secrets.key = %reference.key(), "resolved {{secrets.key}} from secrets file");
             return Ok(SecretString::from(value.clone()));
         }
+        tracing::error!(
+            secrets.key = %reference.key(),
+            "secret reference {{secrets.key}} could not be resolved from any source"
+        );
         Err(SecretError::Unresolved(reference.key().to_string()))
     }
 
@@ -105,8 +137,18 @@ impl SecretResolver {
     /// Returns [`SecretError::Unresolved`] when a reference cannot be resolved.
     pub fn resolve_value(&self, raw: &str) -> Result<SecretString, SecretError> {
         match SecretRef::parse(raw) {
-            Some(reference) => self.resolve(&reference),
-            None => Ok(SecretString::from(raw.to_string())),
+            Some(reference) => {
+                tracing::trace!(
+                    secrets.key = %reference.key(),
+                    "config value is a secret reference to {{secrets.key}}"
+                );
+                self.resolve(&reference)
+            }
+            None => {
+                // The raw value is an inline literal and is never logged.
+                tracing::trace!("config value is an inline literal; using verbatim");
+                Ok(SecretString::from(raw.to_string()))
+            }
         }
     }
 }
@@ -114,13 +156,27 @@ impl SecretResolver {
 /// Reads and parses a dotenv-style secrets file, returning an empty map when the
 /// file is absent.
 fn read_dotenv(path: &Path) -> Result<HashMap<String, String>, SecretError> {
+    tracing::trace!(secrets.path = %path.display(), "reading secrets file {{secrets.path}}");
     match std::fs::read_to_string(path) {
         Ok(contents) => parse_dotenv(&contents, path),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(HashMap::new()),
-        Err(source) => Err(SecretError::Io {
-            path: path.display().to_string(),
-            source,
-        }),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            tracing::warn!(
+                secrets.path = %path.display(),
+                "secrets file {{secrets.path}} is absent; contributing no keys"
+            );
+            Ok(HashMap::new())
+        }
+        Err(source) => {
+            tracing::error!(
+                secrets.path = %path.display(),
+                error.message = %source,
+                "failed to read secrets file {{secrets.path}}"
+            );
+            Err(SecretError::Io {
+                path: path.display().to_string(),
+                source,
+            })
+        }
     }
 }
 
@@ -130,16 +186,30 @@ fn read_dotenv(path: &Path) -> Result<HashMap<String, String>, SecretError> {
 /// ignored. Values are taken verbatim after the first `=` (no quoting). A
 /// non-blank, non-comment line without `=` is a [`SecretError::Parse`].
 fn parse_dotenv(contents: &str, path: &Path) -> Result<HashMap<String, String>, SecretError> {
+    tracing::trace!(
+        secrets.path = %path.display(),
+        secrets.line_count = contents.lines().count(),
+        "parsing secrets file {{secrets.path}} ({{secrets.line_count}} lines)"
+    );
     let mut values = HashMap::new();
     for (index, raw_line) in contents.lines().enumerate() {
         let line = raw_line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let (key, value) = line.split_once('=').ok_or(SecretError::Parse {
-            path: path.display().to_string(),
-            line: index + 1,
-        })?;
+        let Some((key, value)) = line.split_once('=') else {
+            // Only the path and line number are logged; the line content (which
+            // may contain a secret) is never echoed.
+            tracing::error!(
+                secrets.path = %path.display(),
+                secrets.line = index + 1,
+                "malformed secrets line {{secrets.line}} in {{secrets.path}}; expected NAME=value"
+            );
+            return Err(SecretError::Parse {
+                path: path.display().to_string(),
+                line: index + 1,
+            });
+        };
         values.insert(key.trim().to_string(), value.trim().to_string());
     }
     Ok(values)

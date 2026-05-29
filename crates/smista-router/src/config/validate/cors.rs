@@ -5,7 +5,9 @@ use crate::config::model::RouterConfig;
 
 /// CORS enabled with `*` or no explicit origins is an unrestricted policy.
 pub fn check_cors(config: &RouterConfig, report: &mut ValidationReport) {
+    tracing::trace!("checking router CORS configuration");
     if !config.cors.enabled {
+        tracing::debug!("CORS is disabled; skipping CORS checks");
         return;
     }
     let unrestricted = config.cors.allowed_origins.is_empty()
@@ -15,6 +17,7 @@ pub fn check_cors(config: &RouterConfig, report: &mut ValidationReport) {
             .iter()
             .any(|origin| origin == "*");
     if unrestricted {
+        tracing::warn!("CORS is enabled with unrestricted origins");
         report.push(ValidationError {
             code: ValidationCode::UnsafeCors,
             severity: Severity::Error,
