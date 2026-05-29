@@ -1,3 +1,6 @@
+#![doc(html_playground_url = "https://play.rust-lang.org")]
+#![doc(html_favicon_url = "https://smista.ai/logo-150.png")]
+#![doc(html_logo_url = "https://smista.ai/logo.png")]
 //! # smista-core
 //!
 //! Shared internal runtime for smista.ai, used by both the CLI and the router.

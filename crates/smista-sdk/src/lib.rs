@@ -1,3 +1,6 @@
+#![doc(html_playground_url = "https://play.rust-lang.org")]
+#![doc(html_favicon_url = "https://smista.ai/logo-150.png")]
+#![doc(html_logo_url = "https://smista.ai/logo.png")]
 //! # smista-sdk
 //!
 //! Rust SDK facade for smista.ai. It is the single dependency a Rust consumer

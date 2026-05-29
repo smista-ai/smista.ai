@@ -6,9 +6,10 @@ authors = { workspace = true }
 description = "Shared domain types, configuration, routing policy and trace structures for smista.ai."
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
 categories = { workspace = true }
 keywords = { workspace = true }
+readme = "README.md"
+rust-version = { workspace = true }
 
 [dependencies]
 chrono = { workspace = true }

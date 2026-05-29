@@ -1,3 +1,6 @@
+#![doc(html_playground_url = "https://play.rust-lang.org")]
+#![doc(html_favicon_url = "https://smista.ai/logo-150.png")]
+#![doc(html_logo_url = "https://smista.ai/logo.png")]
 //! # smista-router-client
 //!
 //! Async Rust client for the `smista-router` HTTP JSON API (`/api/v1`).

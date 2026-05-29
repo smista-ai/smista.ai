@@ -6,9 +6,10 @@ authors = { workspace = true }
 description = "smista-router service: routing, orchestration and the HTTP API host."
 license = { workspace = true }
 repository = { workspace = true }
-rust-version = { workspace = true }
 categories = { workspace = true }
 keywords = { workspace = true }
+readme = "README.md"
+rust-version = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }

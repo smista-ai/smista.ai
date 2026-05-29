@@ -1,7 +1,7 @@
 # smista.ai
 
 <p align="center">
-  <img src="assets/logo-150.png" alt="smista.ai logo" width="150" />
+  <img src="https://smista.ai/logo-150.png" alt="smista.ai logo" width="150" />
 </p>
 
 [![license-mit](https://img.shields.io/crates/l/smista-sdk.svg?logo=rust)](https://opensource.org/licenses/MIT)
@@ -33,16 +33,18 @@ deterministic routing.
 
 ## Components
 
-| Component          | Description                                                        |
-| ------------------ | ------------------------------------------------------------------ |
-| `smista-cli`       | The `smista` command-line interface for developers.                |
-| `smista-core`      | Shared internal runtime: domain types, config, policy, validation. |
-| `smista-providers` | Model abstraction and provider adapters (OpenAI, Anthropic, …).    |
-| `smista-router`    | Routing and orchestration service exposing a local HTTP JSON API.  |
-| `smista-storage`   | Storage traits and the SurrealDB-backed persistence layer.         |
-| `smista-trace`     | Execution trace types and recording logic.                         |
-| `smista-web`       | `axum` HTTP JSON API server for the router.                        |
-| `@smista-ai/sdk`   | TypeScript SDK for building clients on top of the router.          |
+| Component                                                       | Description                                                       |
+| --------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`smista-cli`](crates/smista-cli/README.md)                     | The `smista` command-line interface for developers.               |
+| [`smista-core`](crates/smista-core/README.md)                   | Shared domain types, config, routing policy and validation.       |
+| [`smista-providers`](crates/smista-providers/README.md)         | Model abstraction and provider adapters (OpenAI, Anthropic, …).   |
+| [`smista-router`](crates/smista-router/README.md)               | Routing and orchestration service exposing a local HTTP JSON API. |
+| [`smista-router-client`](crates/smista-router-client/README.md) | Async Rust client for the router HTTP JSON API.                   |
+| [`smista-sdk`](crates/smista-sdk/README.md)                     | Rust SDK facade re-exporting the domain types (and the client).   |
+| [`smista-storage`](crates/smista-storage/README.md)             | Storage traits and the SurrealDB-backed persistence layer.        |
+| [`smista-trace`](crates/smista-trace/README.md)                 | Execution trace types and recording logic.                        |
+| [`smista-web`](crates/smista-web/README.md)                     | `axum` HTTP JSON API server for the router.                       |
+| [`@smista-ai/sdk`](sdk/README.md)                               | TypeScript SDK for building clients on top of the router.         |
 
 ## Golden workflow
 

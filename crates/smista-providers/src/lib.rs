@@ -1,3 +1,6 @@
+#![doc(html_playground_url = "https://play.rust-lang.org")]
+#![doc(html_favicon_url = "https://smista.ai/logo-150.png")]
+#![doc(html_logo_url = "https://smista.ai/logo.png")]
 //! # smista-providers
 //!
 //! Provider integration layer for smista.ai. Exposes a common internal model
