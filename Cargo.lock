@@ -848,7 +848,7 @@ dependencies = [
  "globset",
  "secrecy",
  "serde",
- "smista-core",
+ "smista-sdk",
  "thiserror",
  "toml",
 ]
@@ -888,6 +888,13 @@ dependencies = [
 [[package]]
 name = "smista-router-client"
 version = "0.0.0"
+
+[[package]]
+name = "smista-sdk"
+version = "0.0.0"
+dependencies = [
+ "smista-core",
+]
 
 [[package]]
 name = "smista-storage"

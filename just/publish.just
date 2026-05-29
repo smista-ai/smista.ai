@@ -4,7 +4,7 @@ publish_all: publish_crates publish_sdk
 
 # Publish all crates in dependency order
 [group('publish')]
-publish_crates: publish_smista_core publish_smista_trace publish_smista_storage publish_smista_providers publish_smista_web publish_smista_router publish_smista_router_client publish_smista_cli
+publish_crates: publish_smista_core publish_smista_trace publish_smista_storage publish_smista_providers publish_smista_web publish_smista_router publish_smista_router_client publish_smista_sdk publish_smista_cli
 
 [group('publish')]
 publish_smista_core: (_publish "smista-core")
@@ -26,6 +26,9 @@ publish_smista_router: (_publish "smista-router")
 
 [group('publish')]
 publish_smista_router_client: (_publish "smista-router-client")
+
+[group('publish')]
+publish_smista_sdk: (_publish "smista-sdk")
 
 [group('publish')]
 publish_smista_cli: (_publish "smista-cli")

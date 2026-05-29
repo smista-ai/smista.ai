@@ -20,6 +20,6 @@ clap = { workspace = true }
 globset = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
-smista-core = { workspace = true }
+smista-sdk = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }

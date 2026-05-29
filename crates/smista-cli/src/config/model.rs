@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use smista_core::model::Provider;
-use smista_core::policy::{ClassificationConfig, PrivacyPolicy, RoutingPolicy, ToolsConfig};
+use smista_sdk::core::model::Provider;
+use smista_sdk::core::policy::{ClassificationConfig, PrivacyPolicy, RoutingPolicy, ToolsConfig};
 
 /// The merged CLI/policy configuration loaded from `config.toml`.
 ///
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn should_parse_provider_with_type_and_secret_reference() {
-        use smista_core::secret::SecretRef;
+        use smista_sdk::core::secret::SecretRef;
 
         let toml = r#"
             [providers.openai]

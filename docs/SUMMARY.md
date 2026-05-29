@@ -20,6 +20,7 @@
 # Build on smista.ai
 
 - [HTTP API](api/http-api.md)
+- [Rust SDK](sdk/rust-sdk.md)
 
 # Technical
 

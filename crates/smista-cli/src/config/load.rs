@@ -119,10 +119,10 @@ mod tests {
 
     #[test]
     fn should_parse_complete_example_fixture() {
-        use smista_core::effort::Effort;
-        use smista_core::model::Provider;
-        use smista_core::policy::PermissionMode;
-        use smista_core::secret::SecretRef;
+        use smista_sdk::core::effort::Effort;
+        use smista_sdk::core::model::Provider;
+        use smista_sdk::core::policy::PermissionMode;
+        use smista_sdk::core::secret::SecretRef;
 
         let config = parse(
             include_str!("../../tests/fixtures/config.toml"),

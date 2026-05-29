@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use secrecy::SecretString;
-use smista_core::secret::SecretRef;
+use smista_sdk::core::secret::SecretRef;
 
 /// Errors raised while resolving secrets.
 #[derive(Debug, thiserror::Error)]

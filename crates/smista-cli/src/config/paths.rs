@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use smista_core::paths::{global_config_dir, home_smista_dir, project_dir};
+use smista_sdk::core::paths::{global_config_dir, home_smista_dir, project_dir};
 
 /// Configuration file name within a configuration directory.
 const CONFIG_FILE: &str = "config.toml";

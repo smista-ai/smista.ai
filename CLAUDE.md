@@ -27,6 +27,7 @@ This is a Cargo workspace. All crates live under `crates/`:
 | `smista-router`        | bin  | Routing/orchestration service.                       |
 | `smista-web`           | lib  | `axum` HTTP JSON API for the router.                 |
 | `smista-router-client` | lib  | Async Rust client for the router HTTP API.           |
+| `smista-sdk`           | lib  | Rust SDK facade re-exporting core types (+ client).  |
 | `smista-cli`           | bin  | The `smista` CLI (`ratatui` + `clap`).               |
 
 The TypeScript SDK lives in `sdk/` (`@smista-ai/sdk`). Documentation (mdBook)

@@ -1,6 +1,6 @@
 //! Inline-secret checks: credentials must be `${secret:..}` references.
 
-use smista_core::secret::SecretRef;
+use smista_sdk::core::secret::SecretRef;
 
 use super::report::{Severity, ValidationCode, ValidationError, ValidationReport};
 use crate::config::Config;
