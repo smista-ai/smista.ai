@@ -12,6 +12,20 @@ permissions:
   contents: read
 
 jobs:
+  toolchain:
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.extract.outputs.result }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Extract toolchain channel from rust-toolchain.toml
+        id: extract
+        uses: mikefarah/yq@751d8ad57b84f1794661bc70c0afb92a22ad7b3c # v4.53.2
+        with:
+          cmd: yq '.toolchain.channel' rust-toolchain.toml
+
   fmt:
     runs-on: ubuntu-latest
     steps:
@@ -29,6 +43,7 @@ jobs:
         run: just fmt_nightly "--check"
 
   clippy:
+    needs: toolchain
     strategy:
       fail-fast: false
       matrix:
@@ -48,7 +63,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
-          toolchain: 1.95.0
+          toolchain: ${{ needs.toolchain.outputs.channel }}
           components: clippy
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
@@ -56,6 +71,7 @@ jobs:
         run: just clippy "-- -D warnings"
 
   test:
+    needs: toolchain
     strategy:
       fail-fast: false
       matrix:
@@ -75,13 +91,14 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
-          toolchain: 1.95.0
+          toolchain: ${{ needs.toolchain.outputs.channel }}
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Test
         run: just test
 
   build:
+    needs: toolchain
     strategy:
       fail-fast: false
       matrix:
@@ -101,13 +118,14 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
-          toolchain: 1.95.0
+          toolchain: ${{ needs.toolchain.outputs.channel }}
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Build
         run: just build_crates
 
   doc:
+    needs: toolchain
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -123,7 +141,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
-          toolchain: 1.95.0
+          toolchain: ${{ needs.toolchain.outputs.channel }}
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
       - name: Build docs

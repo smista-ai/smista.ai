@@ -2,8 +2,8 @@
 
 use std::collections::BTreeSet;
 
-use smista_core::model::ModelReference;
-use smista_core::policy::RoutingRule;
+use smista_sdk::core::model::ModelReference;
+use smista_sdk::core::policy::RoutingRule;
 
 use super::report::{Severity, ValidationCode, ValidationError, ValidationReport};
 use crate::config::Config;

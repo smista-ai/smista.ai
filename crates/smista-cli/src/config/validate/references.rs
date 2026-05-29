@@ -1,6 +1,6 @@
 //! Provider and model reference resolution checks.
 
-use smista_core::model::ModelReference;
+use smista_sdk::core::model::ModelReference;
 
 use super::report::{Severity, ValidationCode, ValidationError, ValidationReport};
 use crate::config::Config;

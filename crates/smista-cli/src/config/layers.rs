@@ -29,7 +29,7 @@
 
 use std::collections::BTreeMap;
 
-use smista_core::policy::{PermissionMode, PrivacyPolicy, ToolsConfig};
+use smista_sdk::core::policy::{PermissionMode, PrivacyPolicy, ToolsConfig};
 
 use super::model::{Config, LocalPreferences, RouterClientConfig};
 
@@ -214,7 +214,7 @@ fn merge_mode(
 
 #[cfg(test)]
 mod tests {
-    use smista_core::policy::{PermissionMode, PrivacyPolicy, RemotePrivacy};
+    use smista_sdk::core::policy::{PermissionMode, PrivacyPolicy, RemotePrivacy};
 
     use super::*;
 

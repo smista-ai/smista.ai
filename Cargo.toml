@@ -5,6 +5,7 @@ members = [
   "crates/smista-providers",
   "crates/smista-router",
   "crates/smista-router-client",
+  "crates/smista-sdk",
   "crates/smista-storage",
   "crates/smista-trace",
   "crates/smista-web",
@@ -14,7 +15,7 @@ resolver = "3"
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.95.0"
+rust-version = "1.88.0"
 authors = ["Christian Visintin <christian.visintin@veeso.dev>"]
 description = "Local-first agent and CLI that deterministically routes each phase of an AI workflow to the most suitable model."
 license = "MIT"
@@ -34,7 +35,10 @@ http = "1"
 ratatui = "0.30"
 reqwest = { version = "0.13", features = ["json", "stream"] }
 rig-core = "0.37"
-rust_decimal = { version = "1", default-features = false, features = ["serde-with-str", "std"] }
+rust_decimal = { version = "1", default-features = false, features = [
+  "serde-with-str",
+  "std",
+] }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -42,6 +46,7 @@ smista-core = { version = "0.0", path = "crates/smista-core" }
 smista-providers = { version = "0.0", path = "crates/smista-providers" }
 smista-router = { version = "0.0", path = "crates/smista-router" }
 smista-router-client = { version = "0.0", path = "crates/smista-router-client" }
+smista-sdk = { version = "0.0", path = "crates/smista-sdk" }
 smista-storage = { version = "0.0", path = "crates/smista-storage" }
 smista-trace = { version = "0.0", path = "crates/smista-trace" }
 smista-web = { version = "0.0", path = "crates/smista-web" }
@@ -51,5 +56,9 @@ tokio = { version = "1", features = ["full"] }
 toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-ts-rs = { version = "12", features = ["chrono-impl", "serde-json-impl", "uuid-impl"] }
+ts-rs = { version = "12", features = [
+  "chrono-impl",
+  "serde-json-impl",
+  "uuid-impl",
+] }
 uuid = { version = "1", features = ["serde", "v7"] }
