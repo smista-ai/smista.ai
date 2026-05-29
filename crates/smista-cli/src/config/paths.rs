@@ -5,7 +5,9 @@
 
 use std::path::{Path, PathBuf};
 
-use smista_sdk::core::paths::{global_config_dir, home_smista_dir, project_dir};
+use smista_sdk::core::paths::{
+    global_config_dir, home_agents_dir, home_smista_dir, project_agents_dir, project_dir,
+};
 
 /// Configuration file name within a configuration directory.
 const CONFIG_FILE: &str = "config.toml";
@@ -45,10 +47,30 @@ pub fn global_secrets_file() -> Option<PathBuf> {
     home_smista_dir().map(|dir| dir.join(SECRETS_FILE))
 }
 
-/// Returns the project skills directory: `<cwd>/.smista/skills`.
+/// Returns the project skills directory: `<cwd>/.agents/skills`.
+///
+/// Skills are shared across agent tools, so they live under the cross-tool
+/// `.agents` directory rather than under smista's own `.smista` directory.
+///
+/// The use of `.agents` dir allows to share skills between different tools and implicitly support skills
+/// installed with Vercel's `skill` CLI tool.
 #[must_use]
 pub fn skills_dir(cwd: &Path) -> PathBuf {
-    project_dir(cwd).join(SKILLS_DIR)
+    project_agents_dir(cwd).join(SKILLS_DIR)
+}
+
+/// Returns the global skills directory: `~/.agents/skills`, if the home
+/// directory resolves.
+///
+/// Like the project skills directory (see [`skills_dir`]), global skills live
+/// under the cross-tool `~/.agents` directory. Project skills take precedence
+/// over these.
+///
+/// The use of `.agents` dir allows to share skills between different tools and implicitly support skills
+/// installed with Vercel's `skill` CLI tool.
+#[must_use]
+pub fn global_skills_dir() -> Option<PathBuf> {
+    home_agents_dir().map(|dir| dir.join(SKILLS_DIR))
 }
 
 /// Returns the project plans directory: `<cwd>/.smista/plans`.
@@ -89,5 +111,18 @@ mod tests {
     fn should_build_skills_and_plans_dirs() {
         assert!(skills_dir(Path::new("/repo")).ends_with("skills"));
         assert!(plans_dir(Path::new("/repo")).ends_with("plans"));
+    }
+
+    #[test]
+    fn should_place_project_skills_under_agents() {
+        let path = skills_dir(Path::new("/repo"));
+        assert_eq!(path, Path::new("/repo").join(".agents").join("skills"));
+    }
+
+    #[test]
+    fn should_build_global_skills_under_home_agents() {
+        if let Some(path) = global_skills_dir() {
+            assert!(path.ends_with(Path::new(".agents").join("skills")));
+        }
     }
 }
