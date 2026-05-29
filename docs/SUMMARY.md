@@ -16,6 +16,7 @@
 # Using smista.ai
 
 - [CLI Commands](usage/cli-commands.md)
+- [Skills](usage/skills.md)
 
 # Build on smista.ai
 
