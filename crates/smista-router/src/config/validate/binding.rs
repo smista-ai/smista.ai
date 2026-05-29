@@ -11,7 +11,16 @@ const PUBLIC_HOSTS: [&str; 2] = ["0.0.0.0", "::"];
 /// Validates the bind host and port, and warns on a public bind in embedded
 /// mode (a local deployment exposed to the network).
 pub fn check_binding(config: &RouterConfig, report: &mut ValidationReport) {
+    tracing::trace!(
+        bind.host = %config.host,
+        bind.port = config.port,
+        "checking router bind {{bind.host}}:{{bind.port}}"
+    );
     if config.port == 0 {
+        tracing::warn!(
+            bind.port = config.port,
+            "bind port {{bind.port}} is invalid"
+        );
         report.push(ValidationError {
             code: ValidationCode::InvalidPort,
             severity: Severity::Error,
@@ -21,6 +30,7 @@ pub fn check_binding(config: &RouterConfig, report: &mut ValidationReport) {
     }
 
     if !is_valid_host(&config.host) {
+        tracing::warn!(bind.host = %config.host, "bind host {{bind.host}} is invalid");
         report.push(ValidationError {
             code: ValidationCode::InvalidHost,
             severity: Severity::Error,
@@ -30,6 +40,10 @@ pub fn check_binding(config: &RouterConfig, report: &mut ValidationReport) {
     } else if PUBLIC_HOSTS.contains(&config.host.as_str())
         && config.storage.mode == StorageMode::Embedded
     {
+        tracing::warn!(
+            bind.host = %config.host,
+            "public bind {{bind.host}} in embedded mode exposes a local router to the network"
+        );
         report.push(ValidationError {
             code: ValidationCode::UnsafePublicBind,
             severity: Severity::Warning,

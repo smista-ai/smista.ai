@@ -160,19 +160,46 @@ impl RoutingRule {
         if let Some(intent) = self.intent
             && ctx.intent != Some(intent)
         {
+            tracing::debug!(
+                rule.name = %self.name,
+                rule.intent = %intent,
+                "rule {{rule.name}} does not match: intent mismatch"
+            );
             return false;
         }
         if let Some(skill) = &self.skill
             && ctx.skill.as_deref() != Some(skill.as_str())
         {
+            tracing::debug!(
+                rule.name = %self.name,
+                rule.skill = %skill,
+                "rule {{rule.name}} does not match: skill mismatch"
+            );
             return false;
         }
         if !self.paths.is_empty() {
-            let set = compile_globs(&self.paths).unwrap_or_else(|_| globset::GlobSet::empty());
+            let set = compile_globs(&self.paths).unwrap_or_else(|source| {
+                tracing::warn!(
+                    rule.name = %self.name,
+                    error.message = %source,
+                    "rule {{rule.name}} has invalid path globs; treating as no match"
+                );
+                globset::GlobSet::empty()
+            });
+            tracing::trace!(
+                rule.name = %self.name,
+                rule.paths = self.paths.len(),
+                "matching {{rule.paths}} path globs for rule {{rule.name}}"
+            );
             if !ctx.paths.iter().any(|path| set.is_match(path)) {
+                tracing::debug!(
+                    rule.name = %self.name,
+                    "rule {{rule.name}} does not match: no path matched"
+                );
                 return false;
             }
         }
+        tracing::debug!(rule.name = %self.name, "rule {{rule.name}} matches context");
         true
     }
 

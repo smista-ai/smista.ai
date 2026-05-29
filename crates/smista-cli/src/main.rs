@@ -11,7 +11,17 @@
 
 pub mod config;
 
+use tracing_subscriber::EnvFilter;
+
 fn main() -> anyhow::Result<()> {
+    // TODO: change, use different and adeguate config
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
+    tracing::debug!("smista CLI starting");
+
     println!("smista: not yet implemented");
 
     Ok(())

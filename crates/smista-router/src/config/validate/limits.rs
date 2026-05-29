@@ -13,6 +13,7 @@ const MAX_SANE_TIMEOUT_MS: u64 = 3_600_000;
 
 /// Validates limits: no zero timeout, no zero size limit, no absurd timeout.
 pub fn check_limits(config: &RouterConfig, report: &mut ValidationReport) {
+    tracing::trace!("checking router limits and timeouts");
     let timeouts = [
         (
             "router.limits.request_timeout_ms",
@@ -29,6 +30,10 @@ pub fn check_limits(config: &RouterConfig, report: &mut ValidationReport) {
     ];
     for (field, value) in timeouts {
         if value == 0 {
+            tracing::warn!(
+                limits.field = %field,
+                "timeout {{limits.field}} is zero"
+            );
             report.push(ValidationError {
                 code: ValidationCode::InvalidTimeout,
                 severity: Severity::Error,
@@ -36,6 +41,11 @@ pub fn check_limits(config: &RouterConfig, report: &mut ValidationReport) {
                 location: Some(field.into()),
             });
         } else if value > MAX_SANE_TIMEOUT_MS {
+            tracing::warn!(
+                limits.field = %field,
+                limits.value = value,
+                "timeout {{limits.field}} of {{limits.value}}ms is absurdly large"
+            );
             report.push(ValidationError {
                 code: ValidationCode::ExcessiveTimeout,
                 severity: Severity::Warning,
@@ -59,6 +69,10 @@ pub fn check_limits(config: &RouterConfig, report: &mut ValidationReport) {
     ];
     for (field, value) in limits {
         if value == 0 {
+            tracing::warn!(
+                limits.field = %field,
+                "size limit {{limits.field}} is zero"
+            );
             report.push(ValidationError {
                 code: ValidationCode::InvalidLimit,
                 severity: Severity::Error,

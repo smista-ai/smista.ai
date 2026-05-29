@@ -10,8 +10,19 @@ use crate::config::Config;
 /// Covers each routing rule `model`/`fallbacks`, the default route
 /// `model`/`fallbacks`. Pushes one finding per unresolved reference.
 pub fn check_references(config: &Config, report: &mut ValidationReport) {
+    tracing::trace!(
+        references.rule_count = config.routing.rules.len(),
+        references.provider_count = config.providers.len(),
+        references.model_count = config.models.len(),
+        "checking model references across {{references.rule_count}} rules"
+    );
     let mut visit = |reference: &ModelReference, location: String| {
         if !config.providers.contains_key(&reference.provider) {
+            tracing::warn!(
+                references.provider = %reference.provider,
+                references.location = %location,
+                "unresolved provider reference at {{references.location}}"
+            );
             report.push(ValidationError {
                 code: ValidationCode::UnknownProvider,
                 severity: Severity::Error,
@@ -23,6 +34,11 @@ pub fn check_references(config: &Config, report: &mut ValidationReport) {
             });
         }
         if !config.models.contains_key(&reference.to_string()) {
+            tracing::warn!(
+                references.model = %reference,
+                references.location = %location,
+                "unresolved model reference at {{references.location}}"
+            );
             report.push(ValidationError {
                 code: ValidationCode::UnknownModel,
                 severity: Severity::Error,

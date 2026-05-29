@@ -17,15 +17,30 @@ use crate::config::layers::ConfigLayer;
 /// Collects every finding in one pass. Errors block; warnings are advisory.
 #[must_use]
 pub fn validate(merged: &Config, layers: &[(ConfigLayer, Config)]) -> ValidationReport {
+    tracing::debug!(
+        validation.layer_count = layers.len(),
+        "validating merged configuration"
+    );
     let mut report = ValidationReport::default();
 
+    tracing::trace!("checking model and provider references");
     references::check_references(merged, &mut report);
+    tracing::trace!("checking routing structure");
     routing::check_routing_structure(merged, &mut report);
+    tracing::trace!("checking routing rule ambiguity");
     routing::check_rule_ambiguity(merged, &mut report);
+    tracing::trace!("checking glob patterns");
     globs::check_globs(merged, &mut report);
+    tracing::trace!("checking inline secrets");
     secrets::check_inline_secrets(merged, &mut report);
+    tracing::trace!("checking layer provenance");
     provenance::check_provenance(layers, &mut report);
 
+    tracing::debug!(
+        validation.error_count = report.errors().len(),
+        validation.warning_count = report.warnings().len(),
+        "validation complete: {{validation.error_count}} errors, {{validation.warning_count}} warnings"
+    );
     report
 }
 

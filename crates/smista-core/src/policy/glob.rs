@@ -8,11 +8,28 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 /// which configuration validation surfaces; callers in the hot path treat a
 /// failed compile conservatively rather than panicking.
 pub fn compile_globs(patterns: &[String]) -> Result<GlobSet, globset::Error> {
+    tracing::trace!(
+        glob.count = patterns.len(),
+        "compiling {{glob.count}} glob patterns"
+    );
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
-        builder.add(Glob::new(pattern)?);
+        let glob = Glob::new(pattern).inspect_err(|source| {
+            tracing::warn!(
+                glob.pattern = %pattern,
+                error.message = %source,
+                "invalid glob pattern {{glob.pattern}}; compilation failed"
+            );
+        })?;
+        builder.add(glob);
     }
-    builder.build()
+    builder.build().inspect_err(|source| {
+        tracing::error!(
+            glob.count = patterns.len(),
+            error.message = %source,
+            "failed to build glob set from {{glob.count}} patterns"
+        );
+    })
 }
 
 #[cfg(test)]

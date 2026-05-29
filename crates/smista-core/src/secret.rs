@@ -53,12 +53,21 @@ impl SecretRef {
     /// or when the referenced name is empty.
     #[must_use]
     pub fn parse(raw: &str) -> Option<Self> {
-        let inner = raw
-            .strip_prefix(PLACEHOLDER_PREFIX)?
-            .strip_suffix(PLACEHOLDER_SUFFIX)?;
+        // Never log `raw` or `inner`: they may carry a secret value when the
+        // string is an inline literal rather than a placeholder. Log structure
+        // only.
+        let Some(inner) = raw
+            .strip_prefix(PLACEHOLDER_PREFIX)
+            .and_then(|stripped| stripped.strip_suffix(PLACEHOLDER_SUFFIX))
+        else {
+            tracing::trace!("value is not a secret placeholder; treating as inline literal");
+            return None;
+        };
         if inner.is_empty() {
+            tracing::warn!("secret placeholder has an empty key name; ignoring");
             return None;
         }
+        tracing::trace!(secret.key = %inner, "parsed secret reference for key {{secret.key}}");
         Some(Self(inner.to_string()))
     }
 

@@ -29,6 +29,11 @@ fn check_fallbacks(
     for (f, fallback) in fallbacks.iter().enumerate() {
         let location = format!("{location_prefix}.fallbacks[{f}]");
         if fallback == model {
+            tracing::warn!(
+                routing.model = %model,
+                routing.location = %location,
+                "route lists its own model as a fallback at {{routing.location}}"
+            );
             report.push(ValidationError {
                 code: ValidationCode::InvalidFallback,
                 severity: Severity::Error,
@@ -37,6 +42,11 @@ fn check_fallbacks(
             });
         }
         if !seen.insert(fallback.to_string()) {
+            tracing::warn!(
+                routing.fallback = %fallback,
+                routing.location = %location,
+                "duplicate fallback {{routing.fallback}} at {{routing.location}}"
+            );
             report.push(ValidationError {
                 code: ValidationCode::InvalidFallback,
                 severity: Severity::Error,
@@ -53,6 +63,7 @@ fn check_fallbacks(
 /// a route — applies to both named rules and the default route).
 pub fn check_routing_structure(config: &Config, report: &mut ValidationReport) {
     if config.routing.default.is_none() {
+        tracing::warn!("no default route configured");
         report.push(ValidationError {
             code: ValidationCode::MissingDefaultRoute,
             severity: Severity::Error,
@@ -74,6 +85,11 @@ pub fn check_routing_structure(config: &Config, report: &mut ValidationReport) {
     let mut seen = BTreeSet::new();
     for (index, rule) in config.routing.rules.iter().enumerate() {
         if !seen.insert(rule.name.as_str()) {
+            tracing::warn!(
+                routing.rule = %rule.name,
+                routing.location = %format!("routing.rules[{index}].name"),
+                "duplicate routing rule name {{routing.rule}}"
+            );
             report.push(ValidationError {
                 code: ValidationCode::DuplicateRule,
                 severity: Severity::Error,
@@ -128,6 +144,12 @@ pub fn check_rule_ambiguity(config: &Config, report: &mut ValidationReport) {
                 && specificity(rule_i) == specificity(rule_j)
                 && rules_overlap(rule_i, rule_j)
             {
+                tracing::warn!(
+                    routing.rule_a = %rule_i.name,
+                    routing.rule_b = %rule_j.name,
+                    routing.priority = rule_i.priority,
+                    "ambiguous rule pair {{routing.rule_a}} and {{routing.rule_b}} share priority and specificity"
+                );
                 report.push(ValidationError {
                     code: ValidationCode::RuleAmbiguity,
                     severity: Severity::Error,

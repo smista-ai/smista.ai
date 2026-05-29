@@ -5,8 +5,13 @@ use crate::config::model::{RouterConfig, StorageMode};
 
 /// Embedded mode requires a `path`; remote mode requires a `url`.
 pub fn check_storage(config: &RouterConfig, report: &mut ValidationReport) {
+    tracing::trace!(
+        storage.mode = ?config.storage.mode,
+        "checking router storage in {{storage.mode}} mode"
+    );
     match config.storage.mode {
         StorageMode::Embedded if config.storage.path.is_none() => {
+            tracing::warn!("embedded storage is missing required `storage.path`");
             report.push(ValidationError {
                 code: ValidationCode::MissingStorageConfig,
                 severity: Severity::Error,
@@ -15,6 +20,7 @@ pub fn check_storage(config: &RouterConfig, report: &mut ValidationReport) {
             });
         }
         StorageMode::Remote if config.storage.url.is_none() => {
+            tracing::warn!("remote storage is missing required `storage.url`");
             report.push(ValidationError {
                 code: ValidationCode::MissingStorageConfig,
                 severity: Severity::Error,

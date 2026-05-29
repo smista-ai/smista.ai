@@ -33,9 +33,21 @@ pub enum ConfigError {
 ///
 /// Returns [`ConfigError::Parse`] if `contents` is not valid TOML. Never panics.
 pub fn parse(contents: &str, path: &str) -> Result<Config, ConfigError> {
-    toml::from_str(contents).map_err(|source| ConfigError::Parse {
-        path: path.to_string(),
-        source,
+    tracing::trace!(
+        config.path = %path,
+        config.bytes = contents.len(),
+        "parsing config TOML from {{config.path}}"
+    );
+    toml::from_str(contents).map_err(|source| {
+        tracing::error!(
+            config.path = %path,
+            error.message = %source,
+            "failed to parse config TOML from {{config.path}}"
+        );
+        ConfigError::Parse {
+            path: path.to_string(),
+            source,
+        }
     })
 }
 
@@ -46,13 +58,27 @@ pub fn parse(contents: &str, path: &str) -> Result<Config, ConfigError> {
 /// Returns [`ConfigError::Io`] if the file exists but cannot be read, or
 /// [`ConfigError::Parse`] if it is invalid TOML.
 fn read_layer(path: &Path) -> Result<Config, ConfigError> {
+    tracing::trace!(config.path = %path.display(), "reading config layer from {{config.path}}");
     match std::fs::read_to_string(path) {
         Ok(contents) => parse(&contents, &path.display().to_string()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
-        Err(source) => Err(ConfigError::Io {
-            path: path.display().to_string(),
-            source,
-        }),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            tracing::trace!(
+                config.path = %path.display(),
+                "config layer {{config.path}} is absent; treating as empty"
+            );
+            Ok(Config::default())
+        }
+        Err(source) => {
+            tracing::error!(
+                config.path = %path.display(),
+                error.message = %source,
+                "failed to read config layer from {{config.path}}"
+            );
+            Err(ConfigError::Io {
+                path: path.display().to_string(),
+                source,
+            })
+        }
     }
 }
 
@@ -66,6 +92,11 @@ fn read_layer(path: &Path) -> Result<Config, ConfigError> {
 /// Propagates [`ConfigError`] from any layer that exists but cannot be read or
 /// parsed.
 pub fn load(cwd: &Path, runtime: Option<Config>) -> Result<Config, ConfigError> {
+    tracing::debug!(
+        config.cwd = %cwd.display(),
+        config.has_runtime_override = runtime.is_some(),
+        "loading configuration for {{config.cwd}}"
+    );
     let mut layers = vec![(ConfigLayer::SystemDefaults, Config::default())];
 
     if let Some(global) = global_config_toml() {
@@ -77,7 +108,14 @@ pub fn load(cwd: &Path, runtime: Option<Config>) -> Result<Config, ConfigError> 
         layers.push((ConfigLayer::RuntimeOverride, runtime));
     }
 
-    Ok(merge(layers))
+    let merged = merge(layers);
+    tracing::debug!(
+        config.provider_count = merged.providers.len(),
+        config.model_count = merged.models.len(),
+        config.rule_count = merged.routing.rules.len(),
+        "configuration loaded: {{config.provider_count}} providers, {{config.rule_count}} rules"
+    );
+    Ok(merged)
 }
 
 #[cfg(test)]

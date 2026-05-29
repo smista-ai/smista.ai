@@ -9,6 +9,10 @@ use crate::config::layers::{ConfigLayer, merge};
 
 /// Runs all provenance checks over the ordered layer stack.
 pub fn check_provenance(layers: &[(ConfigLayer, Config)], report: &mut ValidationReport) {
+    tracing::trace!(
+        provenance.layer_count = layers.len(),
+        "checking layer provenance across {{provenance.layer_count}} layers"
+    );
     let safety_floor = merge(
         layers
             .iter()
@@ -20,10 +24,12 @@ pub fn check_provenance(layers: &[(ConfigLayer, Config)], report: &mut Validatio
         .iter()
         .any(|(layer, config)| !layer.is_preference() && config != &Config::default());
     if !has_config_layer {
+        tracing::trace!("no non-default config layer present; skipping provenance checks");
         return;
     }
 
     for (layer, config) in layers.iter().filter(|(layer, _)| layer.is_preference()) {
+        tracing::trace!(provenance.layer = ?layer, "checking preference layer {{provenance.layer}}");
         check_unsafe_override(&safety_floor, *layer, config, report);
         check_permission_widening(&safety_floor, *layer, config, report);
     }
@@ -40,6 +46,13 @@ fn check_unsafe_override(
         (safety_floor.privacy.remote.mode, config.privacy.remote.mode)
         && layer_mode < project_mode
     {
+        tracing::warn!(
+            provenance.layer = ?layer,
+            provenance.floor_mode = ?project_mode,
+            provenance.attempted_mode = ?layer_mode,
+            provenance.field = "privacy.remote.mode",
+            "preference layer {{provenance.layer}} weakens {{provenance.field}}"
+        );
         report.push(ValidationError {
             code: ValidationCode::UnsafeOverride,
             severity: Severity::Error,
@@ -63,6 +76,13 @@ fn check_permission_widening(
         if let Some(project_mode) = safety_floor.tools.mode_for(tool)
             && *layer_mode < project_mode
         {
+            tracing::warn!(
+                provenance.layer = ?layer,
+                provenance.tool = %tool,
+                provenance.floor_mode = ?project_mode,
+                provenance.attempted_mode = ?layer_mode,
+                "preference layer {{provenance.layer}} widens permission for tool {{provenance.tool}}"
+            );
             report.push(ValidationError {
                 code: ValidationCode::PermissionWidening,
                 severity: Severity::Error,

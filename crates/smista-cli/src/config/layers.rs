@@ -74,17 +74,30 @@ impl ConfigLayer {
 /// for doctests to run against.)
 #[must_use]
 pub fn merge(mut layers: Vec<(ConfigLayer, Config)>) -> Config {
+    tracing::trace!(
+        merge.layer_count = layers.len(),
+        "merging {{merge.layer_count}} config layers"
+    );
     layers.sort_by_key(|(layer, _)| *layer);
     let mut acc = Config::default();
     for (layer, config) in layers {
         acc = merge_two(acc, config, layer.is_preference());
     }
+    tracing::debug!(
+        merge.provider_count = acc.providers.len(),
+        merge.rule_count = acc.routing.rules.len(),
+        "config layer merge complete"
+    );
     acc
 }
 
 /// Merges `high` onto `low`. `high_is_preference` marks `high` as a preference
 /// layer, which may only tighten safety-critical fields.
 fn merge_two(low: Config, high: Config, high_is_preference: bool) -> Config {
+    tracing::trace!(
+        merge.high_is_preference = high_is_preference,
+        "merging one config layer onto the accumulator"
+    );
     Config {
         providers: replace_if_non_empty(low.providers, high.providers),
         models: replace_if_non_empty(low.models, high.models),
@@ -140,11 +153,26 @@ fn merge_local_prefs(low: LocalPreferences, high: LocalPreferences) -> LocalPref
 /// layer may only make a tool's mode stricter, so a lower-layer `deny` is never
 /// weakened.
 fn merge_tools(low: ToolsConfig, high: ToolsConfig, high_is_preference: bool) -> ToolsConfig {
+    tracing::trace!(
+        merge.tool_count = high.permissions.len(),
+        merge.high_is_preference = high_is_preference,
+        "merging {{merge.tool_count}} tool permission overrides"
+    );
     let mut merged = low;
     for (tool, mode) in high.permissions {
         match merged.permissions.get(&tool) {
             Some(existing) if high_is_preference => {
                 let stricter = (*existing).max(mode);
+                if mode < *existing {
+                    // A preference layer attempted to weaken a tighter tool mode;
+                    // the stricter value is kept (the value itself is not logged).
+                    tracing::warn!(
+                        merge.tool = %tool,
+                        merge.kept_mode = ?stricter,
+                        merge.attempted_mode = ?mode,
+                        "preference layer attempted to weaken tool {{merge.tool}}; keeping stricter mode"
+                    );
+                }
                 merged.permissions.insert(tool, stricter);
             }
             _ => {
@@ -162,24 +190,57 @@ fn merge_privacy(
     high: PrivacyPolicy,
     high_is_preference: bool,
 ) -> PrivacyPolicy {
+    tracing::trace!(
+        merge.high_is_preference = high_is_preference,
+        "merging privacy policy"
+    );
     let mut merged = low;
 
     merged.restricted_paths = union_paths(merged.restricted_paths, high.restricted_paths);
     merged.remote.blocked_paths =
         union_paths(merged.remote.blocked_paths, high.remote.blocked_paths);
 
+    let low_remote_mode = merged.remote.mode;
     merged.remote.mode = merge_mode(
         merged.remote.mode,
         high.remote.mode,
         PermissionMode::Ask,
         high_is_preference,
     );
+    if high_is_preference
+        && let (Some(low_mode), Some(high_mode)) = (low_remote_mode, high.remote.mode)
+        && high_mode < low_mode
+    {
+        // A preference layer attempted to weaken the remote privacy mode; the
+        // stricter config-layer value is kept.
+        tracing::warn!(
+            merge.field = "privacy.remote.mode",
+            merge.kept_mode = ?merged.remote.mode,
+            merge.attempted_mode = ?high_mode,
+            "preference layer attempted to weaken {{merge.field}}; keeping stricter mode"
+        );
+    }
+
+    let low_local_mode = merged.local.mode;
     merged.local.mode = merge_mode(
         merged.local.mode,
         high.local.mode,
         PermissionMode::Allow,
         high_is_preference,
     );
+    if high_is_preference
+        && let (Some(low_mode), Some(high_mode)) = (low_local_mode, high.local.mode)
+        && high_mode < low_mode
+    {
+        // A preference layer attempted to weaken the local privacy mode; the
+        // stricter config-layer value is kept.
+        tracing::warn!(
+            merge.field = "privacy.local.mode",
+            merge.kept_mode = ?merged.local.mode,
+            merge.attempted_mode = ?high_mode,
+            "preference layer attempted to weaken {{merge.field}}; keeping stricter mode"
+        );
+    }
     merged
 }
 

@@ -115,16 +115,34 @@ impl ModelDescriptor {
     /// capability the model lacks, or [`CapabilityError::ContextWindowExceeded`]
     /// if the estimated input does not fit the context window.
     pub fn can_handle(&self, requirements: &RoutingRequirements) -> Result<(), CapabilityError> {
+        tracing::debug!(
+            model.provider = %self.provider,
+            model.name = %self.model,
+            "checking whether {{model.provider}}/{{model.name}} can handle requirements"
+        );
         if let Some(missing) = requirements
             .required()
             .find(|capability| !self.capabilities.supports(*capability))
         {
+            tracing::warn!(
+                model.provider = %self.provider,
+                model.name = %self.model,
+                capability.missing = %missing,
+                "{{model.provider}}/{{model.name}} lacks required capability {{capability.missing}}"
+            );
             return Err(CapabilityError::MissingCapability(missing));
         }
 
         if let Some(estimated_tokens) = requirements.estimated_tokens
             && !self.fits_context(estimated_tokens)
         {
+            tracing::warn!(
+                model.provider = %self.provider,
+                model.name = %self.model,
+                model.estimated_tokens = estimated_tokens,
+                model.max_context_tokens = self.max_context_tokens,
+                "{{model.estimated_tokens}} tokens exceed context window of {{model.max_context_tokens}}"
+            );
             return Err(CapabilityError::ContextWindowExceeded {
                 estimated_tokens,
                 max_context_tokens: self.max_context_tokens,

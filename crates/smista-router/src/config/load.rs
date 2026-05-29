@@ -45,11 +45,19 @@ pub enum RouterConfigError {
 /// Returns [`RouterConfigError::Parse`] if `contents` is not valid TOML. Never
 /// panics.
 pub fn parse(contents: &str, path: &str) -> Result<RouterConfig, RouterConfigError> {
+    tracing::trace!(config.path = %path, "parsing router config {{config.path}}");
     toml::from_str::<RouterDocument>(contents)
         .map(|document| document.router)
-        .map_err(|source| RouterConfigError::Parse {
-            path: path.to_string(),
-            source,
+        .map_err(|source| {
+            tracing::error!(
+                config.path = %path,
+                error.message = %source,
+                "failed to parse router config {{config.path}}"
+            );
+            RouterConfigError::Parse {
+                path: path.to_string(),
+                source,
+            }
         })
 }
 
@@ -60,13 +68,31 @@ pub fn parse(contents: &str, path: &str) -> Result<RouterConfig, RouterConfigErr
 /// Returns [`RouterConfigError::Io`] if the file exists but cannot be read, or
 /// [`RouterConfigError::Parse`] if it is invalid TOML.
 pub fn load(path: &Path) -> Result<RouterConfig, RouterConfigError> {
+    tracing::debug!(config.path = %path.display(), "loading router config {{config.path}}");
     match std::fs::read_to_string(path) {
-        Ok(contents) => parse(&contents, &path.display().to_string()),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(RouterConfig::default()),
-        Err(source) => Err(RouterConfigError::Io {
-            path: path.display().to_string(),
-            source,
-        }),
+        Ok(contents) => {
+            let config = parse(&contents, &path.display().to_string())?;
+            tracing::debug!(config.path = %path.display(), "loaded router config {{config.path}}");
+            Ok(config)
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            tracing::debug!(
+                config.path = %path.display(),
+                "router config {{config.path}} not found; using defaults"
+            );
+            Ok(RouterConfig::default())
+        }
+        Err(source) => {
+            tracing::error!(
+                config.path = %path.display(),
+                error.message = %source,
+                "failed to read router config {{config.path}}"
+            );
+            Err(RouterConfigError::Io {
+                path: path.display().to_string(),
+                source,
+            })
+        }
     }
 }
 

@@ -8,11 +8,21 @@ use crate::config::Config;
 /// Flags any provider `api_key` that is an inline literal rather than a
 /// `${secret:NAME}` reference. The offending value is never echoed.
 pub fn check_inline_secrets(config: &Config, report: &mut ValidationReport) {
+    tracing::trace!(
+        secrets.provider_count = config.providers.len(),
+        "checking {{secrets.provider_count}} providers for inline secrets"
+    );
     for (provider, provider_config) in &config.providers {
         let Some(api_key) = &provider_config.api_key else {
             continue;
         };
         if SecretRef::parse(api_key).is_none() {
+            // Only the provider name is logged; the inline secret value is never
+            // echoed.
+            tracing::warn!(
+                secrets.provider = %provider,
+                "provider {{secrets.provider}} has an inline literal api_key"
+            );
             report.push(ValidationError {
                 code: ValidationCode::InlineSecret,
                 severity: Severity::Error,
