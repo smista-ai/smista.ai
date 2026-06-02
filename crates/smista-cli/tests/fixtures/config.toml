@@ -30,6 +30,7 @@ supports_streaming = true
 supports_tools = true
 supports_json_output = true
 supports_reasoning = true
+supports_memory = true
 max_context_tokens = 200000
 
 [models."ollama/qwen2.5-coder"]
@@ -50,6 +51,7 @@ supports_streaming = true
 supports_tools = true
 supports_json_output = true
 supports_reasoning = false
+supports_memory = true
 max_context_tokens = 128000
 
 [models."anthropic/claude-sonnet"]
@@ -61,6 +63,7 @@ supports_streaming = true
 supports_tools = true
 supports_json_output = true
 supports_reasoning = false
+supports_memory = true
 max_context_tokens = 200000
 
 # --- Routing ---------------------------------------------------------------

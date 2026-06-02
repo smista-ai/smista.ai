@@ -80,6 +80,9 @@ pub struct ModelConfig {
     /// Whether the model supports explicit reasoning.
     #[serde(default)]
     pub supports_reasoning: bool,
+    /// Whether the model can drive the memory tool to record and update memory.
+    #[serde(default)]
+    pub supports_memory: bool,
     /// Maximum number of context tokens the model accepts.
     pub max_context_tokens: u32,
 }
@@ -184,6 +187,7 @@ mod tests {
             supports_tools = true
             supports_json_output = true
             supports_reasoning = true
+            supports_memory = true
             max_context_tokens = 200000
         "#;
         let config: Config = toml::from_str(toml).unwrap();
@@ -192,6 +196,7 @@ mod tests {
         assert_eq!(model.name, "gpt-5.5-thinking");
         assert!(model.requires_api_key);
         assert!(model.supports_tools);
+        assert!(model.supports_memory);
         assert_eq!(model.max_context_tokens, 200_000);
     }
 
@@ -210,6 +215,7 @@ mod tests {
         assert!(!model.requires_api_key);
         assert!(!model.supports_tools);
         assert!(!model.supports_json_output);
+        assert!(!model.supports_memory);
     }
 
     #[test]
