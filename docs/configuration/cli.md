@@ -91,6 +91,7 @@ supports_streaming = true
 supports_tools = true
 supports_json_output = true
 supports_reasoning = true
+supports_memory = true
 max_context_tokens = 200000
 
 [models."ollama/qwen2.5-coder"]
@@ -115,6 +116,7 @@ Each `[models."provider/model"]` table accepts:
 | `supports_tools`       | bool    | `false`  | Whether the model can call tools.              |
 | `supports_json_output` | bool    | `false`  | Whether the model can emit structured JSON.    |
 | `supports_reasoning`   | bool    | `false`  | Whether the model performs explicit reasoning. |
+| `supports_memory`      | bool    | `false`  | Whether the model can drive the memory tool.   |
 | `max_context_tokens`   | integer | required | Maximum context tokens the model accepts.      |
 
 > [!NOTE]
@@ -218,7 +220,7 @@ rule with none matches every task.
 
 `requires_capabilities` gates a rule on what the model can do. Each flag defaults
 to `false`; set the ones a matched model must support: `streaming`, `tools`,
-`json_output`, `system_prompt`, `images`, `reasoning`.
+`json_output`, `system_prompt`, `images`, `reasoning`, `memory`.
 
 `required_permissions` declares the [tool permissions](#tool-permissions) the
 matched route needs. It is merged over the project defaults and may only *narrow*

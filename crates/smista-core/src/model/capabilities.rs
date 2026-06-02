@@ -54,6 +54,13 @@ pub struct ModelCapabilities {
     /// The model performs explicit reasoning.
     #[serde(default)]
     pub reasoning: bool,
+    /// The model can drive the memory tool to record and update memory.
+    ///
+    /// Satisfied by tool calling, or — on providers that offer it, such as
+    /// OpenAI structured outputs — by a constrained-output equivalent. The
+    /// router gates memory orchestration on this flag.
+    #[serde(default)]
+    pub memory: bool,
 }
 
 impl ModelCapabilities {
@@ -67,6 +74,7 @@ impl ModelCapabilities {
             Capability::SystemPrompt => self.system_prompt,
             Capability::Images => self.images,
             Capability::Reasoning => self.reasoning,
+            Capability::Memory => self.memory,
         }
     }
 }
@@ -89,6 +97,8 @@ pub enum Capability {
     Images,
     /// Explicit reasoning.
     Reasoning,
+    /// Memory recording and recall via the memory tool.
+    Memory,
 }
 
 impl Capability {
@@ -104,6 +114,7 @@ impl Capability {
             Self::SystemPrompt => "system_prompt",
             Self::Images => "images",
             Self::Reasoning => "reasoning",
+            Self::Memory => "memory",
         }
     }
 }
@@ -134,6 +145,8 @@ pub struct RoutingRequirements {
     pub images: bool,
     /// The task needs explicit reasoning.
     pub reasoning: bool,
+    /// The task records or recalls memory through the memory tool.
+    pub memory: bool,
     /// Estimated number of input tokens, checked against the context window.
     pub estimated_tokens: Option<u64>,
 }
@@ -148,6 +161,7 @@ impl RoutingRequirements {
             (self.system_prompt, Capability::SystemPrompt),
             (self.images, Capability::Images),
             (self.reasoning, Capability::Reasoning),
+            (self.memory, Capability::Memory),
         ]
         .into_iter()
         .filter_map(|(needed, capability)| needed.then_some(capability))
@@ -158,13 +172,14 @@ impl RoutingRequirements {
 mod tests {
     use super::*;
 
-    const ALL: [Capability; 6] = [
+    const ALL: [Capability; 7] = [
         Capability::Streaming,
         Capability::Tools,
         Capability::JsonOutput,
         Capability::SystemPrompt,
         Capability::Images,
         Capability::Reasoning,
+        Capability::Memory,
     ];
 
     #[test]
@@ -181,6 +196,17 @@ mod tests {
         };
         assert!(caps.supports(Capability::Tools));
         assert!(!caps.supports(Capability::Streaming));
+    }
+
+    #[test]
+    fn should_report_memory_capability() {
+        let caps = ModelCapabilities {
+            memory: true,
+            ..Default::default()
+        };
+        assert!(caps.supports(Capability::Memory));
+        assert!(!caps.supports(Capability::Tools));
+        assert_eq!(Capability::Memory.as_str(), "memory");
     }
 
     #[test]

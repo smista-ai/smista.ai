@@ -26,3 +26,4 @@
 # Technical
 
 - [Architecture](technical/architecture.md)
+- [Memory](technical/memory.md)
