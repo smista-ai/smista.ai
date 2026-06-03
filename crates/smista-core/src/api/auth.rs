@@ -18,21 +18,37 @@
 //! assert_eq!(json, r#"{"user_id":"user:abc123"}"#);
 //! ```
 
+use std::fmt;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::session::SessionSummary;
 
+/// Placeholder rendered in place of a secret field by `Debug`.
+const REDACTED: &str = "<redacted>";
+
 /// Response to `POST /auth/bootstrap`, returned once at user creation.
 ///
 /// `api_key` is a secret shown only here; the caller must store it securely.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+/// `Debug` is implemented by hand to redact `api_key`, so the credential is
+/// never leaked through `{:?}` formatting, logs, or traces.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct BootstrapResponse {
     /// Identifier of the created user, for example `user:abc123`.
     pub user_id: String,
     /// Long-lived smista API key. Secret; shown only in this response.
     pub api_key: String,
+}
+
+impl fmt::Debug for BootstrapResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BootstrapResponse")
+            .field("user_id", &self.user_id)
+            .field("api_key", &REDACTED)
+            .finish()
+    }
 }
 
 /// Body of `POST /auth/sign-in`, naming the user to authenticate.
@@ -46,14 +62,24 @@ pub struct SignInRequest {
 /// Response to `POST /auth/sign-in`, carrying the session token.
 ///
 /// `token` is a secret bearer credential; `expires_at` is when it stops being
-/// valid.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+/// valid. `Debug` is implemented by hand to redact `token`, so the credential
+/// is never leaked through `{:?}` formatting, logs, or traces.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct SignInResponse {
     /// Session bearer token. Secret; sent as `Authorization: Bearer`.
     pub token: String,
     /// Instant at which the token expires.
     pub expires_at: DateTime<Utc>,
+}
+
+impl fmt::Debug for SignInResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SignInResponse")
+            .field("token", &REDACTED)
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
 }
 
 /// Response to `POST /auth/sign-out`, confirming token revocation.
@@ -112,6 +138,29 @@ mod tests {
             serde_json::from_str::<SignInRequest>(&json).unwrap(),
             request
         );
+    }
+
+    #[test]
+    fn should_redact_api_key_in_debug() {
+        let response = BootstrapResponse {
+            user_id: "user:abc123".to_string(),
+            api_key: "sk-smista-api01-secret".to_string(),
+        };
+        let debug = format!("{response:?}");
+        assert!(!debug.contains("sk-smista-api01-secret"));
+        assert!(debug.contains("<redacted>"));
+        assert!(debug.contains("user:abc123"));
+    }
+
+    #[test]
+    fn should_redact_token_in_debug() {
+        let response = SignInResponse {
+            token: "st_secret_token".to_string(),
+            expires_at: "2026-05-25T12:00:00Z".parse::<DateTime<Utc>>().unwrap(),
+        };
+        let debug = format!("{response:?}");
+        assert!(!debug.contains("st_secret_token"));
+        assert!(debug.contains("<redacted>"));
     }
 
     #[test]

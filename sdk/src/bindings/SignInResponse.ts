@@ -4,7 +4,8 @@
  * Response to `POST /auth/sign-in`, carrying the session token.
  *
  * `token` is a secret bearer credential; `expires_at` is when it stops being
- * valid.
+ * valid. `Debug` is implemented by hand to redact `token`, so the credential
+ * is never leaked through `{:?}` formatting, logs, or traces.
  */
 export type SignInResponse = { 
 /**
