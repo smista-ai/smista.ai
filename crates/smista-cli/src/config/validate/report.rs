@@ -30,16 +30,12 @@ pub enum ValidationCode {
     PermissionWidening,
     /// Two rules share priority and specificity with no ordering allowance.
     RuleAmbiguity,
-    /// A model reference names a model absent from `[models]`.
-    UnknownModel,
     /// A reference names a provider absent from `[providers]`.
     UnknownProvider,
     /// A routing rule's `skill` does not resolve to a discovered skill.
     UnknownSkill,
     /// A preference layer weakens a non-overridable safety policy.
     UnsafeOverride,
-    /// A routing rule requires a capability its target model does not support.
-    UnsupportedCapability,
 }
 
 /// A single validation finding.
@@ -113,7 +109,7 @@ mod tests {
     fn should_route_findings_by_severity() {
         let mut report = ValidationReport::default();
         report.push(ValidationError {
-            code: ValidationCode::UnknownModel,
+            code: ValidationCode::UnknownProvider,
             severity: Severity::Error,
             message: "x".into(),
             location: None,

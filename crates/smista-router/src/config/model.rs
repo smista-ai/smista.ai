@@ -1,6 +1,9 @@
 //! Router runtime configuration types and their defaults.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
+use smista_core::model::Provider;
 
 /// Top-level router runtime configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,6 +27,8 @@ pub struct RouterConfig {
     pub retention: RetentionConfig,
     /// Ollama backend configuration.
     pub ollama: OllamaConfig,
+    /// Per-provider endpoint configuration (e.g. a custom OpenAI base URL).
+    pub providers: BTreeMap<Provider, RouterProviderConfig>,
 }
 
 impl Default for RouterConfig {
@@ -38,8 +43,21 @@ impl Default for RouterConfig {
             cors: CorsConfig::default(),
             retention: RetentionConfig::default(),
             ollama: OllamaConfig::default(),
+            providers: BTreeMap::new(),
         }
     }
+}
+
+/// Per-provider endpoint configuration on the router.
+///
+/// The router is what connects to providers, so endpoint details live here, not
+/// in the CLI. An absent `base_url` means the provider's fixed default endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RouterProviderConfig {
+    /// Base URL for the provider endpoint, if non-default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
 }
 
 /// Storage engine identity.
@@ -314,6 +332,24 @@ mod tests {
         let config = RouterConfig::default();
         let toml = toml::to_string(&config).unwrap();
         assert_eq!(toml::from_str::<RouterConfig>(&toml).unwrap(), config);
+    }
+
+    #[test]
+    fn should_default_to_empty_providers() {
+        assert!(RouterConfig::default().providers.is_empty());
+    }
+
+    #[test]
+    fn should_parse_provider_base_url_override() {
+        let toml = r#"
+            [providers.openai]
+            base_url = "https://proxy.internal/v1"
+        "#;
+        let config: RouterConfig = toml::from_str(toml).unwrap();
+        assert_eq!(
+            config.providers[&Provider::OpenAI].base_url.as_deref(),
+            Some("https://proxy.internal/v1")
+        );
     }
 
     #[test]

@@ -34,8 +34,9 @@ Local always overrides global; values the local layer does not set are kept.
 
 ## Providers and models
 
-Providers and models are configured separately from routing rules. Reference a
-model anywhere with `provider/model` syntax (e.g. `anthropic/claude-sonnet`).
+The CLI configuration holds your credentials, which providers are enabled, and
+the routing policy. It does **not** describe individual models. Reference a model
+anywhere with `provider/model` syntax (e.g. `anthropic/claude-sonnet`).
 
 The part before the first `/` is the provider identifier (case-insensitive);
 everything after it is the model name, which may itself contain `/` (e.g.
@@ -43,10 +44,12 @@ everything after it is the model name, which may itself contain `/` (e.g.
 one of the identifiers below — otherwise the reference is rejected during
 validation.
 
+Enable a provider by adding a `[providers.<id>]` table with its `type` and, for
+remote providers, an `api_key`:
+
 ```toml
 [providers.openai]
 type = "openai"
-base_url = "https://api.openai.com/v1"
 api_key = "${secret:OPENAI_API_KEY}"
 
 [providers.anthropic]
@@ -55,7 +58,6 @@ api_key = "${secret:ANTHROPIC_API_KEY}"
 
 [providers.ollama]
 type = "ollama"
-base_url = "http://localhost:11434"
 ```
 
 The `type` field selects the provider backend. It is case-insensitive and must
@@ -71,53 +73,18 @@ An unknown identifier is rejected during validation.
 
 Each `[providers.<id>]` table accepts:
 
-| Key        | Type   | Default  | Purpose                                              |
-| ---------- | ------ | -------- | ---------------------------------------------------- |
-| `type`     | string | required | Provider kind: `anthropic`, `openai`, or `ollama`.   |
-| `base_url` | string | provider | Endpoint base URL; omit to use the provider default. |
-| `api_key`  | string | none     | A `${secret:NAME}` reference resolving the API key.  |
+| Key       | Type   | Default  | Purpose                                             |
+| --------- | ------ | -------- | --------------------------------------------------- |
+| `type`    | string | required | Provider kind: `anthropic`, `openai`, or `ollama`.  |
+| `api_key` | string | none     | A `${secret:NAME}` reference resolving the API key. |
 
-Models declare their capabilities, which the router validates before execution
-(for example, a task needing tools is never routed to a model without tool
-support unless the policy allows degraded execution):
-
-```toml
-[models."openai/gpt-5.5-thinking"]
-provider = "openai"
-name = "gpt-5.5-thinking"
-requires_api_key = true
-local = false
-supports_streaming = true
-supports_tools = true
-supports_json_output = true
-supports_reasoning = true
-supports_memory = true
-max_context_tokens = 200000
-
-[models."ollama/qwen2.5-coder"]
-provider = "ollama"
-name = "qwen2.5-coder"
-requires_api_key = false
-local = true
-supports_streaming = true
-supports_tools = false
-max_context_tokens = 32768
-```
-
-Each `[models."provider/model"]` table accepts:
-
-| Key                    | Type    | Default  | Purpose                                        |
-| ---------------------- | ------- | -------- | ---------------------------------------------- |
-| `provider`             | string  | required | Provider that offers the model.                |
-| `name`                 | string  | required | Model name as defined by the provider.         |
-| `requires_api_key`     | bool    | `false`  | Whether the model needs an API key.            |
-| `local`                | bool    | `false`  | Whether the model runs locally.                |
-| `supports_streaming`   | bool    | `false`  | Whether the model can stream responses.        |
-| `supports_tools`       | bool    | `false`  | Whether the model can call tools.              |
-| `supports_json_output` | bool    | `false`  | Whether the model can emit structured JSON.    |
-| `supports_reasoning`   | bool    | `false`  | Whether the model performs explicit reasoning. |
-| `supports_memory`      | bool    | `false`  | Whether the model can drive the memory tool.   |
-| `max_context_tokens`   | integer | required | Maximum context tokens the model accepts.      |
+> [!NOTE]
+> A model's facts — its capabilities, context window, costs, whether it runs
+> locally, and whether it needs authentication — are **not** declared here. They
+> come from the provider at runtime. A rule's `requires_capabilities` is a
+> *requirement* you state; the router checks it against those facts when it
+> selects a model. Endpoint overrides (such as a custom OpenAI-compatible URL)
+> belong to the router — see [Running the Router](router.md).
 
 > [!NOTE]
 > For local models through Ollama, see
@@ -477,9 +444,12 @@ no_network = false
 
 ## Validation
 
-Configuration is validated before execution. Validation rejects unknown
-providers, models, intents or skills; invalid globs; duplicate rule names; a
-missing default route; invalid fallback references; ambiguous rules; invalid
-permission values; and secrets stored inline where forbidden. Invalid
-configuration produces an actionable error — run `smista config validate` to
-check it.
+Configuration is validated before execution. Validation rejects routing rules
+that reference a provider you have not enabled, unknown intents or skills,
+invalid globs, duplicate rule names, a missing default route, invalid fallback
+references, ambiguous rules, invalid permission values, and secrets stored
+inline where forbidden. Whether a model exists and whether it satisfies a rule's
+`requires_capabilities` is checked later, at model selection time, against the
+facts the provider exposes — not from this file. Invalid configuration produces
+an actionable error — run `smista config validate` to check it. See
+[Configuration validation](validation.md) for the full list.

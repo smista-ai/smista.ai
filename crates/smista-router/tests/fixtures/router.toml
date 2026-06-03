@@ -60,3 +60,6 @@ pull_timeout_ms = 600000
 preload = ["llama3.1:8b", "qwen2.5-coder:7b"]
 allow_pull = false
 allowed_models = ["llama3.1:8b", "qwen2.5-coder:7b", "mistral:7b"]
+
+[router.providers.openai]
+base_url = "https://api.openai.com/v1"
