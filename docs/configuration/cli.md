@@ -4,129 +4,6 @@ smista.ai reads TOML configuration to decide which model handles each task, what
 context may be sent where, and which tool calls require approval. Configuration
 is deterministic, versionable and inspectable — routing never depends on an LLM.
 
-## Where configuration lives
-
-| Layer            | Location                             | Scope                  |
-| ---------------- | ------------------------------------ | ---------------------- |
-| Global (POSIX)   | `~/.config/smista/config.toml`       | All projects           |
-| Global (Windows) | `C:\Users\$USER\.smista\config.toml` | All projects           |
-| Project          | `.smista/config.toml`                | The current repository |
-
-Run `smista init` to scaffold `.smista/config.toml` in a project. Project
-configuration is safe to commit when it contains no secrets, so a team shares
-one routing policy.
-
-## Precedence
-
-Layers merge from least to most specific. Highest precedence wins:
-
-1. Runtime command override (e.g. `/model`)
-2. Local uncommitted preferences
-3. Project configuration (`.smista/config.toml`)
-4. Global user configuration (`~/.config/smista/config.toml`)
-5. System defaults
-
-Local always overrides global; values the local layer does not set are kept.
-
-> [!IMPORTANT]
-> Safety policies may be non-overridable. If a project forbids sending
-> `secrets/**` to remote models, a local preference cannot silently bypass it.
-
-## Providers and models
-
-The CLI configuration holds your credentials, which providers are enabled, and
-the routing policy. It does **not** describe individual models. Reference a model
-anywhere with `provider/model` syntax (e.g. `anthropic/claude-sonnet`).
-
-The part before the first `/` is the provider identifier (case-insensitive);
-everything after it is the model name, which may itself contain `/` (e.g.
-`ollama/library/llama3`). Both parts must be non-empty, and the provider must be
-one of the identifiers below — otherwise the reference is rejected during
-validation.
-
-Enable a provider by adding a `[providers.<id>]` table with its `type` and, for
-remote providers, an `api_key`:
-
-```toml
-[providers.openai]
-type = "openai"
-api_key = "${secret:OPENAI_API_KEY}"
-
-[providers.anthropic]
-type = "anthropic"
-api_key = "${secret:ANTHROPIC_API_KEY}"
-
-[providers.ollama]
-type = "ollama"
-```
-
-The `type` field selects the provider backend. It is case-insensitive and must
-be one of the supported identifiers:
-
-| Identifier  | Backend                               |
-| ----------- | ------------------------------------- |
-| `anthropic` | Anthropic, serving the Claude models. |
-| `openai`    | OpenAI, serving the GPT models.       |
-| `ollama`    | Ollama, serving local models.         |
-
-An unknown identifier is rejected during validation.
-
-Each `[providers.<id>]` table accepts:
-
-| Key       | Type   | Default  | Purpose                                             |
-| --------- | ------ | -------- | --------------------------------------------------- |
-| `type`    | string | required | Provider kind: `anthropic`, `openai`, or `ollama`.  |
-| `api_key` | string | none     | A `${secret:NAME}` reference resolving the API key. |
-
-> [!NOTE]
-> A model's facts — its capabilities, context window, costs, whether it runs
-> locally, and whether it needs authentication — are **not** declared here. They
-> come from the provider at runtime. A rule's `requires_capabilities` is a
-> *requirement* you state; the router checks it against those facts when it
-> selects a model. Endpoint overrides (such as a custom OpenAI-compatible URL)
-> belong to the router — see [Running the Router](router.md).
-
-> [!NOTE]
-> For local models through Ollama, see
-> [Using Local Models with Ollama](ollama.md).
-
-## Provider credentials
-
-Never write an API key directly into `config.toml`. A provider reads its key
-from `api_key` using the `${secret:NAME}` reference form:
-
-```toml
-[providers.openai]
-type = "openai"
-api_key = "${secret:OPENAI_API_KEY}"
-
-[providers.anthropic]
-type = "anthropic"
-api_key = "${secret:ANTHROPIC_API_KEY}"
-```
-
-A `${secret:NAME}` reference is resolved against the following sources, from
-highest to lowest precedence:
-
-1. An environment variable named `NAME` (e.g. set `OPENAI_API_KEY` in your
-   shell).
-2. The `.smista/secrets` file. The project file (`.smista/secrets` in the
-   current directory) overrides the global file (`~/.smista/secrets`).
-
-The first source that provides the key wins. A reference that resolves nowhere
-is an error, and the message names the missing key and the field that referenced
-it — never a secret value.
-
-The `.smista/secrets` file uses a dotenv-style format: one `NAME=value` pair per
-line, without quotes. Lines starting with `#` are comments. Keep this file out
-of version control.
-
-```dotenv
-# .smista/secrets
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
 ## Routing rules
 
 A routing rule decides which model handles a task. Rules match on intent, skill,
@@ -390,6 +267,101 @@ The conventional tool keys are:
 | `network`    | Outbound network access.          |
 | `git`        | Git operations (commit, push, …). |
 
+## Providers and models
+
+The CLI configuration holds your credentials, which providers are enabled, and
+the routing policy. It does **not** describe individual models. Reference a model
+anywhere with `provider/model` syntax (e.g. `anthropic/claude-sonnet`).
+
+The part before the first `/` is the provider identifier (case-insensitive);
+everything after it is the model name, which may itself contain `/` (e.g.
+`ollama/library/llama3`). Both parts must be non-empty, and the provider must be
+one of the identifiers below — otherwise the reference is rejected during
+validation.
+
+Enable a provider by adding a `[providers.<id>]` table with its `type` and, for
+remote providers, an `api_key`:
+
+```toml
+[providers.openai]
+type = "openai"
+api_key = "${secret:OPENAI_API_KEY}"
+
+[providers.anthropic]
+type = "anthropic"
+api_key = "${secret:ANTHROPIC_API_KEY}"
+
+[providers.ollama]
+type = "ollama"
+```
+
+The `type` field selects the provider backend. It is case-insensitive and must
+be one of the supported identifiers:
+
+| Identifier  | Backend                               |
+| ----------- | ------------------------------------- |
+| `anthropic` | Anthropic, serving the Claude models. |
+| `openai`    | OpenAI, serving the GPT models.       |
+| `ollama`    | Ollama, serving local models.         |
+
+An unknown identifier is rejected during validation.
+
+Each `[providers.<id>]` table accepts:
+
+| Key       | Type   | Default  | Purpose                                             |
+| --------- | ------ | -------- | --------------------------------------------------- |
+| `type`    | string | required | Provider kind: `anthropic`, `openai`, or `ollama`.  |
+| `api_key` | string | none     | A `${secret:NAME}` reference resolving the API key. |
+
+> [!NOTE]
+> A model's facts — its capabilities, context window, costs, whether it runs
+> locally, and whether it needs authentication — are **not** declared here. They
+> come from the provider at runtime. A rule's `requires_capabilities` is a
+> *requirement* you state; the router checks it against those facts when it
+> selects a model. Endpoint overrides (such as a custom OpenAI-compatible URL)
+> belong to the router — see [Running the Router](router.md).
+
+> [!NOTE]
+> For local models through Ollama, see
+> [Using Local Models with Ollama](ollama.md).
+
+## Provider credentials
+
+Never write an API key directly into `config.toml`. A provider reads its key
+from `api_key` using the `${secret:NAME}` reference form:
+
+```toml
+[providers.openai]
+type = "openai"
+api_key = "${secret:OPENAI_API_KEY}"
+
+[providers.anthropic]
+type = "anthropic"
+api_key = "${secret:ANTHROPIC_API_KEY}"
+```
+
+A `${secret:NAME}` reference is resolved against the following sources, from
+highest to lowest precedence:
+
+1. An environment variable named `NAME` (e.g. set `OPENAI_API_KEY` in your
+   shell).
+2. The `.smista/secrets` file. The project file (`.smista/secrets` in the
+   current directory) overrides the global file (`~/.smista/secrets`).
+
+The first source that provides the key wins. A reference that resolves nowhere
+is an error, and the message names the missing key and the field that referenced
+it — never a secret value.
+
+The `.smista/secrets` file uses a dotenv-style format: one `NAME=value` pair per
+line, without quotes. Lines starting with `#` are comments. Keep this file out
+of version control.
+
+```dotenv
+# .smista/secrets
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
 ## Connecting to the router
 
 The CLI needs to know where the router is and how to authenticate to it. This is
@@ -441,6 +413,34 @@ no_network = false
 > Local preferences may tighten safety, never loosen it. Enabling `local_only`
 > or `no_network` here adds a restriction, but a preference can never weaken a
 > project's privacy modes or a tool set to `deny`.
+
+## Where configuration lives
+
+| Layer            | Location                             | Scope                  |
+| ---------------- | ------------------------------------ | ---------------------- |
+| Global (POSIX)   | `~/.config/smista/config.toml`       | All projects           |
+| Global (Windows) | `C:\Users\$USER\.smista\config.toml` | All projects           |
+| Project          | `.smista/config.toml`                | The current repository |
+
+Run `smista init` to scaffold `.smista/config.toml` in a project. Project
+configuration is safe to commit when it contains no secrets, so a team shares
+one routing policy.
+
+## Precedence
+
+Layers merge from least to most specific. Highest precedence wins:
+
+1. Runtime command override (e.g. `/model`)
+2. Local uncommitted preferences
+3. Project configuration (`.smista/config.toml`)
+4. Global user configuration (`~/.config/smista/config.toml`)
+5. System defaults
+
+Local always overrides global; values the local layer does not set are kept.
+
+> [!IMPORTANT]
+> Safety policies may be non-overridable. If a project forbids sending
+> `secrets/**` to remote models, a local preference cannot silently bypass it.
 
 ## Validation
 
