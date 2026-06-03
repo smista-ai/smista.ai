@@ -62,3 +62,10 @@ ts-rs = { version = "12", features = [
 ] }
 uuid = { version = "1", features = ["serde", "v7"] }
 yaml_serde = "0.10"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 3
+panic = 'abort'
+codegen-units = 1
