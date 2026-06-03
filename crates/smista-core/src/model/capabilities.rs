@@ -77,13 +77,37 @@ impl ModelCapabilities {
             Capability::Memory => self.memory,
         }
     }
+
+    /// Returns the capabilities the model supports, in declaration order.
+    ///
+    /// This is the list form used by the public catalog ([`ModelInfo`]), which
+    /// reports only the capabilities a model has rather than a flag per
+    /// capability.
+    ///
+    /// [`ModelInfo`]: crate::api::ModelInfo
+    #[must_use]
+    pub fn supported(&self) -> Vec<Capability> {
+        [
+            (self.streaming, Capability::Streaming),
+            (self.tools, Capability::Tools),
+            (self.json_output, Capability::JsonOutput),
+            (self.system_prompt, Capability::SystemPrompt),
+            (self.images, Capability::Images),
+            (self.reasoning, Capability::Reasoning),
+            (self.memory, Capability::Memory),
+        ]
+        .into_iter()
+        .filter_map(|(supported, capability)| supported.then_some(capability))
+        .collect()
+    }
 }
 
 /// A single model capability, used to report which one a task requires.
 ///
 /// Each variant serializes to its lowercase snake_case name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum Capability {
     /// Incremental streaming of the response.
     Streaming,
@@ -207,6 +231,29 @@ mod tests {
         assert!(caps.supports(Capability::Memory));
         assert!(!caps.supports(Capability::Tools));
         assert_eq!(Capability::Memory.as_str(), "memory");
+    }
+
+    #[test]
+    fn should_list_supported_capabilities_in_declaration_order() {
+        let caps = ModelCapabilities {
+            streaming: true,
+            tools: true,
+            reasoning: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            caps.supported(),
+            vec![
+                Capability::Streaming,
+                Capability::Tools,
+                Capability::Reasoning
+            ]
+        );
+    }
+
+    #[test]
+    fn should_list_no_supported_capabilities_when_default() {
+        assert!(ModelCapabilities::default().supported().is_empty());
     }
 
     #[test]

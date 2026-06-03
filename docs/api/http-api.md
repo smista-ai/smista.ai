@@ -267,8 +267,10 @@ one is configured with credentials:
 }
 ```
 
-`GET /llm/models` lists the available models and their capability flags.
-`supports_json_output` is omitted for models that do not report it:
+`GET /llm/models` lists the available models and their capabilities. Each
+model reports `capabilities` as a list; a capability absent from the list is
+not supported. Possible values are `streaming`, `tools`, `json_output`,
+`system_prompt`, `images`, `reasoning` and `memory`:
 
 ```json
 {
@@ -278,9 +280,7 @@ one is configured with credentials:
       "model": "claude-sonnet",
       "local": false,
       "requires_api_key": true,
-      "supports_streaming": true,
-      "supports_tools": true,
-      "supports_json_output": true,
+      "capabilities": ["streaming", "tools", "json_output"],
       "max_context_tokens": 200000
     },
     {
@@ -288,8 +288,7 @@ one is configured with credentials:
       "model": "qwen2.5-coder",
       "local": true,
       "requires_api_key": false,
-      "supports_streaming": true,
-      "supports_tools": false,
+      "capabilities": ["streaming"],
       "max_context_tokens": 32768
     }
   ]

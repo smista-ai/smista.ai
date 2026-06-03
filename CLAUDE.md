@@ -41,6 +41,9 @@ lives in `docs/`.
 - **Rust**: follow the project rustfmt config; `clippy` must pass with
   `-D warnings`. Use `module_name.rs`, not `mod.rs`.
 - **TypeScript**: Biome for lint + format; strict `tsconfig`. No `any`.
+- **TS bindings**: the types under `sdk/src/bindings/` are generated from the
+  Rust `ts-rs` types — never edit them by hand. After changing any
+  `#[ts(export)]` type, regenerate them with `just build_sdk`.
 - **Markdown**: keep tables aligned; end files with a single newline.
 - **Docs**: any change to the codebase that affects user-facing behaviour
   (config, CLI commands, API, providers) must come with a user-friendly update
