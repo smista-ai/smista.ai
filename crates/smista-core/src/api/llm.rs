@@ -11,16 +11,14 @@
 //!
 //! ```
 //! use smista_core::api::ModelInfo;
-//! use smista_core::model::Provider;
+//! use smista_core::model::{Capability, Provider};
 //!
 //! let info = ModelInfo {
 //!     provider: Provider::Ollama,
 //!     model: "qwen2.5-coder".to_string(),
 //!     local: true,
 //!     requires_api_key: false,
-//!     supports_streaming: true,
-//!     supports_tools: false,
-//!     supports_json_output: None,
+//!     capabilities: vec![Capability::Streaming],
 //!     max_context_tokens: 32_768,
 //! };
 //! let json = serde_json::to_string(&info).unwrap();
@@ -29,7 +27,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Provider, ProviderDescriptor};
+use crate::model::{Capability, Provider, ProviderDescriptor};
 
 /// Response to `GET /llm/providers`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
@@ -49,8 +47,8 @@ pub struct ListModelsResponse {
 
 /// Flat description of a model in the public catalog.
 ///
-/// Capability flags are reported as flat `supports_*` booleans.
-/// `supports_json_output` is omitted for models that do not report it.
+/// The capabilities a model supports are reported as a list of
+/// [`Capability`] values; a capability absent from the list is not supported.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ModelInfo {
@@ -62,14 +60,8 @@ pub struct ModelInfo {
     pub local: bool,
     /// Whether the model requires an API key.
     pub requires_api_key: bool,
-    /// Whether the model can stream its response.
-    pub supports_streaming: bool,
-    /// Whether the model can call tools.
-    pub supports_tools: bool,
-    /// Whether the model can be constrained to emit JSON, when reported.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub supports_json_output: Option<bool>,
+    /// The capabilities the model supports.
+    pub capabilities: Vec<Capability>,
     /// Maximum number of context tokens the model accepts.
     pub max_context_tokens: u32,
 }
@@ -87,9 +79,7 @@ mod tests {
                     "model": "gpt-5.5-thinking",
                     "local": false,
                     "requires_api_key": true,
-                    "supports_streaming": true,
-                    "supports_tools": true,
-                    "supports_json_output": true,
+                    "capabilities": ["streaming", "tools", "json_output"],
                     "max_context_tokens": 200000
                 },
                 {
@@ -97,8 +87,7 @@ mod tests {
                     "model": "qwen2.5-coder",
                     "local": true,
                     "requires_api_key": false,
-                    "supports_streaming": true,
-                    "supports_tools": false,
+                    "capabilities": ["streaming"],
                     "max_context_tokens": 32768
                 }
             ]
@@ -106,25 +95,30 @@ mod tests {
         let response: ListModelsResponse = serde_json::from_str(json).unwrap();
 
         assert_eq!(response.models.len(), 2);
-        assert_eq!(response.models[0].supports_json_output, Some(true));
-        assert_eq!(response.models[1].supports_json_output, None);
+        assert_eq!(
+            response.models[0].capabilities,
+            vec![
+                Capability::Streaming,
+                Capability::Tools,
+                Capability::JsonOutput
+            ]
+        );
+        assert_eq!(response.models[1].capabilities, vec![Capability::Streaming]);
         assert_eq!(response.models[1].max_context_tokens, 32_768);
     }
 
     #[test]
-    fn should_omit_absent_json_output_support() {
+    fn should_serialize_capabilities_as_list() {
         let info = ModelInfo {
             provider: Provider::Ollama,
             model: "qwen2.5-coder".to_string(),
             local: true,
             requires_api_key: false,
-            supports_streaming: true,
-            supports_tools: false,
-            supports_json_output: None,
+            capabilities: vec![Capability::Streaming],
             max_context_tokens: 32_768,
         };
         let value = serde_json::to_value(&info).unwrap();
-        assert!(value.get("supports_json_output").is_none());
+        assert_eq!(value["capabilities"], serde_json::json!(["streaming"]));
     }
 
     #[test]
