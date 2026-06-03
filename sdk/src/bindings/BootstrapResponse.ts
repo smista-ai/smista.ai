@@ -4,6 +4,8 @@
  * Response to `POST /auth/bootstrap`, returned once at user creation.
  *
  * `api_key` is a secret shown only here; the caller must store it securely.
+ * `Debug` is implemented by hand to redact `api_key`, so the credential is
+ * never leaked through `{:?}` formatting, logs, or traces.
  */
 export type BootstrapResponse = { 
 /**
