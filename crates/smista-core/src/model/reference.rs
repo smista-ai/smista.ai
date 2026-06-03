@@ -33,7 +33,7 @@ use crate::error::{CoreError, ParseError};
 /// A reference to a specific model offered by a provider.
 ///
 /// The textual form is `provider/model`, e.g. `anthropic/claude-sonnet`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
 #[ts(export)]
 #[ts(type = "string")]
 pub struct ModelReference {
@@ -218,5 +218,20 @@ mod tests {
             err,
             CoreError::Parse(ParseError::UnknownProvider(_))
         ));
+    }
+
+    #[test]
+    fn should_order_by_provider_then_model() {
+        let mut refs = [
+            ModelReference::from_str("openai/b").unwrap(),
+            ModelReference::from_str("anthropic/z").unwrap(),
+            ModelReference::from_str("anthropic/a").unwrap(),
+        ]
+        .to_vec();
+        refs.sort();
+        assert_eq!(
+            refs.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            ["anthropic/a", "anthropic/z", "openai/b"]
+        );
     }
 }

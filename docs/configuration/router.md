@@ -57,6 +57,9 @@ allowed_origins = []
 trace_retention_days = 90
 session_retention_days = 365
 deleted_session_retention_days = 30
+
+[router.providers.openai]
+base_url = "https://api.openai.com/v1"
 ```
 
 ## Server
@@ -208,6 +211,34 @@ The `[router.retention]` table accepts:
 | `trace_retention_days`           | integer | `90`    | Days to retain traces.                        |
 | `session_retention_days`         | integer | `365`   | Days to retain sessions.                      |
 | `deleted_session_retention_days` | integer | `30`    | Days to retain deleted sessions before purge. |
+
+## Providers
+
+Each provider the CLI enables can have an optional connection override on the
+router. This is where you point a provider at a custom endpoint — for example an
+OpenAI-compatible proxy or a self-hosted gateway. Omit the section to use the
+provider's default endpoint.
+
+```toml
+[router.providers.openai]
+base_url = "https://api.openai.com/v1"
+```
+
+Each `[router.providers.<id>]` table accepts:
+
+| Key        | Type   | Default  | Purpose                                                |
+| ---------- | ------ | -------- | ------------------------------------------------------ |
+| `base_url` | string | provider | Endpoint base URL; omit to use the provider's default. |
+
+> [!NOTE]
+> Model facts — capabilities, context window, costs, whether a model is local,
+> and whether it requires authentication — are **not** configured here. The
+> router obtains them from the provider at runtime and uses them when it selects
+> a model. There is no model catalog in `router.toml`.
+
+> [!NOTE]
+> Ollama's endpoint and model discovery are configured separately, under
+> `[router.ollama]` — see the next section.
 
 ## Local models with Ollama
 

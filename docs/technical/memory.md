@@ -46,23 +46,10 @@ explainable through the trace.
 
 ## Enabling memory on a model
 
-Memory only runs on models that can drive the memory tool. Mark such a model
-with `supports_memory` in your configuration (see
-[Configuring the CLI](../configuration/cli.md)):
-
-```toml
-[models."openai/gpt-5.5-mini"]
-provider = "openai"
-name = "gpt-5.5-mini"
-requires_api_key = true
-supports_streaming = true
-supports_tools = true
-supports_memory = true
-max_context_tokens = 128000
-```
-
-To require memory for a particular kind of task, gate a routing rule on the
-capability:
+Memory only runs on models that can drive the memory tool. Whether a model has
+the `memory` capability is a fact the provider reports — you do not declare it
+in your configuration. To require memory for a particular kind of task, gate a
+routing rule on the capability:
 
 ```toml
 [[routing.rules]]

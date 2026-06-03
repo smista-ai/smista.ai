@@ -66,10 +66,20 @@ pub struct ModelDescriptor {
     pub max_context_tokens: u32,
     /// Maximum number of tokens the model emits, if bounded.
     pub max_output_tokens: Option<u32>,
-    /// Input price per million tokens, in `default_parameters`' currency.
-    pub input_cost_per_million_tokens: Option<f64>,
-    /// Output price per million tokens.
-    pub output_cost_per_million_tokens: Option<f64>,
+    /// Input price per million tokens, serialized as a string for exact precision.
+    #[serde(
+        default,
+        with = "rust_decimal::serde::str_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub input_cost_per_million_tokens: Option<rust_decimal::Decimal>,
+    /// Output price per million tokens, serialized as a string for exact precision.
+    #[serde(
+        default,
+        with = "rust_decimal::serde::str_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub output_cost_per_million_tokens: Option<rust_decimal::Decimal>,
     /// Default generation parameters applied when none are supplied.
     pub default_parameters: ModelParameters,
     /// Provider-specific options, preserved verbatim.
@@ -155,6 +165,10 @@ impl ModelDescriptor {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use rust_decimal::Decimal;
+
     use super::*;
     use crate::model::Capability;
 
@@ -172,8 +186,8 @@ mod tests {
             },
             max_context_tokens: 200_000,
             max_output_tokens: Some(8_192),
-            input_cost_per_million_tokens: Some(3.0),
-            output_cost_per_million_tokens: Some(15.0),
+            input_cost_per_million_tokens: Some(Decimal::from_str("3").unwrap()),
+            output_cost_per_million_tokens: Some(Decimal::from_str("15").unwrap()),
             default_parameters: ModelParameters::default(),
             provider_options: None,
         }
@@ -234,6 +248,15 @@ mod tests {
         let descriptor = descriptor();
         assert!(descriptor.fits_context(200_000));
         assert!(!descriptor.fits_context(200_001));
+    }
+
+    #[test]
+    fn should_serialize_cost_as_string() {
+        let json = serde_json::to_value(descriptor()).unwrap();
+        assert_eq!(json["input_cost_per_million_tokens"], "3");
+        assert_eq!(json["output_cost_per_million_tokens"], "15");
+        let back: ModelDescriptor = serde_json::from_value(json).unwrap();
+        assert_eq!(back, descriptor());
     }
 
     #[test]

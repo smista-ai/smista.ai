@@ -1,25 +1,25 @@
-//! Provider and model reference resolution checks.
-
-use smista_sdk::core::model::ModelReference;
+//! Provider reference resolution checks.
 
 use super::report::{Severity, ValidationCode, ValidationError, ValidationReport};
 use crate::config::Config;
 
-/// Checks every model reference resolves to a configured provider and model.
+/// Checks every model reference names a configured provider.
 ///
-/// Covers each routing rule `model`/`fallbacks`, the default route
-/// `model`/`fallbacks`. Pushes one finding per unresolved reference.
+/// Model facts (and thus whether a `provider/model` exists) come from the
+/// provider at runtime, not from config; that resolution happens at model
+/// selection. The CLI can still verify the provider half, since `[providers]` is
+/// user-authored. Covers each routing rule `model`/`fallbacks` and the default
+/// route `model`/`fallbacks`. Pushes one finding per unresolved provider.
 pub fn check_references(config: &Config, report: &mut ValidationReport) {
     tracing::trace!(
         references.rule_count = config.routing.rules.len(),
         references.provider_count = config.providers.len(),
-        references.model_count = config.models.len(),
-        "checking model references across {{references.rule_count}} rules"
+        "checking provider references across {{references.rule_count}} rules"
     );
-    let mut visit = |reference: &ModelReference, location: String| {
-        if !config.providers.contains_key(&reference.provider) {
+    let mut visit = |provider, location: String| {
+        if !config.providers.contains_key(&provider) {
             tracing::warn!(
-                references.provider = %reference.provider,
+                references.provider = %provider,
                 references.location = %location,
                 "unresolved provider reference at {{references.location}}"
             );
@@ -27,23 +27,7 @@ pub fn check_references(config: &Config, report: &mut ValidationReport) {
                 code: ValidationCode::UnknownProvider,
                 severity: Severity::Error,
                 message: format!(
-                    "provider `{}` is not configured; add a [providers.{}] table",
-                    reference.provider, reference.provider
-                ),
-                location: Some(location.clone()),
-            });
-        }
-        if !config.models.contains_key(&reference.to_string()) {
-            tracing::warn!(
-                references.model = %reference,
-                references.location = %location,
-                "unresolved model reference at {{references.location}}"
-            );
-            report.push(ValidationError {
-                code: ValidationCode::UnknownModel,
-                severity: Severity::Error,
-                message: format!(
-                    "model `{reference}` is not declared; add a [models.\"{reference}\"] table"
+                    "provider `{provider}` is not configured; add a [providers.{provider}] table"
                 ),
                 location: Some(location),
             });
@@ -51,15 +35,18 @@ pub fn check_references(config: &Config, report: &mut ValidationReport) {
     };
 
     for (index, rule) in config.routing.rules.iter().enumerate() {
-        visit(&rule.model, format!("routing.rules[{index}].model"));
+        visit(rule.model.provider, format!("routing.rules[{index}].model"));
         for (f, fallback) in rule.fallbacks.iter().enumerate() {
-            visit(fallback, format!("routing.rules[{index}].fallbacks[{f}]"));
+            visit(
+                fallback.provider,
+                format!("routing.rules[{index}].fallbacks[{f}]"),
+            );
         }
     }
     if let Some(default) = &config.routing.default {
-        visit(&default.model, "routing.default.model".to_string());
+        visit(default.model.provider, "routing.default.model".to_string());
         for (f, fallback) in default.fallbacks.iter().enumerate() {
-            visit(fallback, format!("routing.default.fallbacks[{f}]"));
+            visit(fallback.provider, format!("routing.default.fallbacks[{f}]"));
         }
     }
 }
@@ -70,7 +57,7 @@ mod tests {
     use crate::config::parse;
 
     #[test]
-    fn should_flag_unknown_provider_and_model() {
+    fn should_flag_unknown_provider() {
         let config = parse(
             r#"
             [routing.default]
@@ -87,25 +74,14 @@ mod tests {
                 .iter()
                 .any(|e| e.code == ValidationCode::UnknownProvider)
         );
-        assert!(
-            report
-                .errors()
-                .iter()
-                .any(|e| e.code == ValidationCode::UnknownModel)
-        );
     }
 
     #[test]
-    fn should_pass_when_provider_and_model_declared() {
+    fn should_pass_when_provider_declared() {
         let config = parse(
             r#"
             [providers.openai]
             type = "openai"
-
-            [models."openai/gpt-5.5-mini"]
-            provider = "openai"
-            name = "gpt-5.5-mini"
-            max_context_tokens = 128000
 
             [routing.default]
             model = "openai/gpt-5.5-mini"

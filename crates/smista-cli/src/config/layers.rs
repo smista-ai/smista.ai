@@ -9,8 +9,8 @@
 //! field set by a config layer (spec: "a local user preference must not silently
 //! bypass this restriction").
 //!
-//! - **`providers` / `models` maps**: replaced wholesale when the higher layer
-//!   is non-empty, otherwise the lower map is kept.
+//! - **`providers` map**: replaced wholesale when the higher layer is non-empty,
+//!   otherwise the lower map is kept.
 //! - **`routing` / `classification`**: replaced wholesale when the higher layer
 //!   defines a non-default value. Each is a cohesive unit, never partially
 //!   merged.
@@ -100,7 +100,6 @@ fn merge_two(low: Config, high: Config, high_is_preference: bool) -> Config {
     );
     Config {
         providers: replace_if_non_empty(low.providers, high.providers),
-        models: replace_if_non_empty(low.models, high.models),
         routing: if high.routing == Default::default() {
             low.routing
         } else {

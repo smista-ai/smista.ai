@@ -111,7 +111,6 @@ pub fn load(cwd: &Path, runtime: Option<Config>) -> Result<Config, ConfigError> 
     let merged = merge(layers);
     tracing::debug!(
         config.provider_count = merged.providers.len(),
-        config.model_count = merged.models.len(),
         config.rule_count = merged.routing.rules.len(),
         "configuration loaded: {{config.provider_count}} providers, {{config.rule_count}} rules"
     );
@@ -168,7 +167,7 @@ mod tests {
         )
         .unwrap();
 
-        // Providers and models.
+        // Providers.
         assert_eq!(config.providers.len(), 3);
         // Each authenticated provider references its key with the ${secret:NAME}
         // form; the OpenAI reference resolves the OPENAI_API_KEY env var first.
@@ -189,10 +188,6 @@ mod tests {
                     .unwrap()
             ),
             Some(SecretRef::new("anthropic"))
-        );
-        assert_eq!(
-            config.models["openai/gpt-5.5-thinking"].max_context_tokens,
-            200_000
         );
 
         // Routing: 4 rules plus a default route.

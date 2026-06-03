@@ -15,8 +15,6 @@ use smista_sdk::core::policy::{ClassificationConfig, PrivacyPolicy, RoutingPolic
 pub struct Config {
     /// Configured providers, keyed by provider identity.
     pub providers: BTreeMap<Provider, ProviderConfig>,
-    /// Known models, keyed by their `provider/model` reference string.
-    pub models: BTreeMap<String, ModelConfig>,
     /// Routing policy.
     pub routing: RoutingPolicy,
     /// Task-classification configuration.
@@ -44,47 +42,9 @@ pub struct ProviderConfig {
     /// Provider kind (serialized as `type`).
     #[serde(rename = "type")]
     pub kind: Provider,
-    /// Base URL for the provider endpoint, if non-default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base_url: Option<String>,
     /// API key value: a `${secret:NAME}` reference or, where allowed, a literal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
-}
-
-/// A model and its capabilities, as declared in `config.toml`.
-///
-/// Mirrors a `[models."provider/model"]` table. This is the user-authored
-/// configuration shape; the router expands it into a runtime descriptor.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ModelConfig {
-    /// Provider that offers the model.
-    pub provider: Provider,
-    /// Model name, as defined by the provider.
-    pub name: String,
-    /// Whether the model requires an API key.
-    #[serde(default)]
-    pub requires_api_key: bool,
-    /// Whether the model runs locally.
-    #[serde(default)]
-    pub local: bool,
-    /// Whether the model supports streaming responses.
-    #[serde(default)]
-    pub supports_streaming: bool,
-    /// Whether the model supports tool calls.
-    #[serde(default)]
-    pub supports_tools: bool,
-    /// Whether the model supports structured JSON output.
-    #[serde(default)]
-    pub supports_json_output: bool,
-    /// Whether the model supports explicit reasoning.
-    #[serde(default)]
-    pub supports_reasoning: bool,
-    /// Whether the model can drive the memory tool to record and update memory.
-    #[serde(default)]
-    pub supports_memory: bool,
-    /// Maximum number of context tokens the model accepts.
-    pub max_context_tokens: u32,
 }
 
 /// Source from which the router auth credential is read.
@@ -159,63 +119,15 @@ mod tests {
         let toml = r#"
             [providers.openai]
             type = "openai"
-            base_url = "https://api.openai.com/v1"
             api_key = "${secret:openai_api_key}"
         "#;
         let config: Config = toml::from_str(toml).unwrap();
         let openai = config.providers.get(&Provider::OpenAI).unwrap();
         assert_eq!(openai.kind, Provider::OpenAI);
         assert_eq!(
-            openai.base_url.as_deref(),
-            Some("https://api.openai.com/v1")
-        );
-        assert_eq!(
             SecretRef::parse(openai.api_key.as_deref().unwrap()),
             Some(SecretRef::new("openai_api_key"))
         );
-    }
-
-    #[test]
-    fn should_parse_model_capabilities() {
-        let toml = r#"
-            [models."openai/gpt-5.5-thinking"]
-            provider = "openai"
-            name = "gpt-5.5-thinking"
-            requires_api_key = true
-            local = false
-            supports_streaming = true
-            supports_tools = true
-            supports_json_output = true
-            supports_reasoning = true
-            supports_memory = true
-            max_context_tokens = 200000
-        "#;
-        let config: Config = toml::from_str(toml).unwrap();
-        let model = config.models.get("openai/gpt-5.5-thinking").unwrap();
-        assert_eq!(model.provider, Provider::OpenAI);
-        assert_eq!(model.name, "gpt-5.5-thinking");
-        assert!(model.requires_api_key);
-        assert!(model.supports_tools);
-        assert!(model.supports_memory);
-        assert_eq!(model.max_context_tokens, 200_000);
-    }
-
-    #[test]
-    fn should_default_model_capability_flags_to_false() {
-        let toml = r#"
-            [models."ollama/qwen2.5-coder"]
-            provider = "ollama"
-            name = "qwen2.5-coder"
-            local = true
-            max_context_tokens = 32768
-        "#;
-        let config: Config = toml::from_str(toml).unwrap();
-        let model = config.models.get("ollama/qwen2.5-coder").unwrap();
-        assert!(model.local);
-        assert!(!model.requires_api_key);
-        assert!(!model.supports_tools);
-        assert!(!model.supports_json_output);
-        assert!(!model.supports_memory);
     }
 
     #[test]

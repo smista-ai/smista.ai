@@ -8,8 +8,8 @@ Setting up a local model touches two places that must agree:
 
 1. **The router** connects to Ollama and discovers models — `[router.ollama]`
    in [`router.toml`](router.md).
-2. **Your routing policy** declares the Ollama provider, its models, and the
-   rules that send tasks to them — in [`config.toml`](cli.md).
+2. **Your routing policy** enables the Ollama provider and the rules that send
+   tasks to it — in [`config.toml`](cli.md).
 
 > [!NOTE]
 > Ollama is a local model backend, not the router. smista-router stays the
@@ -56,31 +56,24 @@ Set `startup_required = true` if the router should refuse to start when Ollama i
 unreachable. Leave `allow_pull = false` to prevent the router from downloading
 models on demand.
 
-## 3. Declare the provider and models in your policy
+## 3. Enable the provider in your policy
 
-In `config.toml`, register Ollama as a provider and describe each model's
-capabilities. The `base_url` here must match the one the router uses.
+In `config.toml`, enable Ollama as a provider. That is all the CLI needs — you
+do **not** declare Ollama models or their facts. The router discovers the
+installed models and obtains each one's facts (capabilities, context window,
+whether it runs locally) through the provider layer.
 
 ```toml
 [providers.ollama]
 type = "ollama"
-base_url = "http://localhost:11434"
-
-[models."ollama/qwen2.5-coder"]
-provider = "ollama"
-name = "qwen2.5-coder"
-requires_api_key = false
-local = true
-supports_streaming = true
-supports_tools = false
-max_context_tokens = 32768
 ```
 
 > [!IMPORTANT]
-> Keep the model names consistent across both files and Ollama itself. A model
-> referenced as `ollama/qwen2.5-coder` in a routing rule must exist in
-> `[models.*]`, be allowed by `[router.ollama.models]`, and be a model Ollama
-> can serve.
+> Keep model names consistent across your routing rules and Ollama itself. A
+> model referenced as `ollama/qwen2.5-coder` in a routing rule must be allowed by
+> `[router.ollama.models]` and be a model Ollama can serve. The endpoint and
+> discovery behaviour are controlled by `[router.ollama]` — `base_url`,
+> `auto_discover_models`, and `allowed_models`.
 
 ## 4. Route tasks to the local model
 
@@ -115,7 +108,8 @@ fallbacks = ["ollama/qwen2.5-coder"]
 
 ## Capability checks
 
-The router validates capabilities before running a task. Local models often lack
-tool support (`supports_tools = false`), so a task that needs tools won't be
-routed to one unless the policy explicitly allows degraded execution. Declare
-capabilities honestly so routing stays predictable.
+The router checks capabilities before running a task, using the facts the
+provider reports for each model. Local models often lack tool support, so a task
+that needs tools won't be routed to one unless the policy explicitly allows
+degraded execution. You don't declare these facts yourself — the provider
+supplies them — so routing stays predictable without any per-model config.

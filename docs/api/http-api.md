@@ -67,7 +67,21 @@ GET /api/v1/auth/me
 Authorization: Bearer <session-token>
 ```
 
-Returns the authenticated user.
+Returns the authenticated user's sessions:
+
+```json
+{
+  "sessions": [
+    {
+      "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
+      "title": "Refactor auth middleware",
+      "created_at": "2026-05-25T09:00:00Z",
+      "updated_at": "2026-05-25T09:30:00Z",
+      "archived": false
+    }
+  ]
+}
+```
 
 ## Sessions
 
@@ -85,6 +99,48 @@ only access their own sessions; others return `403`.
 // POST /api/v1/sessions
 { "title": "Refactor auth middleware" }
 ```
+
+Creating a session returns the new session summary:
+
+```json
+{
+  "session": {
+    "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
+    "title": "Refactor auth middleware",
+    "created_at": "2026-05-25T09:00:00Z",
+    "updated_at": "2026-05-25T09:00:00Z",
+    "archived": false
+  }
+}
+```
+
+Fetching a session returns the full detail, including its messages and
+free-form metadata (archived sessions are not returned):
+
+```json
+{
+  "session": {
+    "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
+    "title": "Refactor auth middleware",
+    "created_at": "2026-05-25T09:00:00Z",
+    "updated_at": "2026-05-25T09:30:00Z",
+    "messages": [
+      { "role": "user", "content": "Refactor the auth middleware." },
+      { "role": "assistant", "content": "Here is the plan..." }
+    ],
+    "metadata": {}
+  }
+}
+```
+
+Updating a session takes a partial body; omit a field to leave it unchanged:
+
+```json
+// PUT /api/v1/sessions/{session_id}
+{ "title": "Refactor auth and sessions", "archived": false }
+```
+
+Deleting a session returns `{ "deleted": true }`.
 
 ## Executing a task
 
@@ -197,6 +253,87 @@ overrides, context, tool calls, approvals and cost.
 GET /api/v1/llm/providers              # configured providers
 GET /api/v1/llm/models                 # models with capabilities
 GET /api/v1/sessions/{session_id}/usage  # token and cost breakdown
+```
+
+`GET /llm/providers` lists the providers the router knows about and whether each
+one is configured with credentials:
+
+```json
+{
+  "providers": [
+    { "id": "anthropic", "display_name": "Anthropic", "configured": true },
+    { "id": "ollama", "display_name": "Ollama", "configured": true }
+  ]
+}
+```
+
+`GET /llm/models` lists the available models and their capability flags.
+`supports_json_output` is omitted for models that do not report it:
+
+```json
+{
+  "models": [
+    {
+      "provider": "anthropic",
+      "model": "claude-sonnet",
+      "local": false,
+      "requires_api_key": true,
+      "supports_streaming": true,
+      "supports_tools": true,
+      "supports_json_output": true,
+      "max_context_tokens": 200000
+    },
+    {
+      "provider": "ollama",
+      "model": "qwen2.5-coder",
+      "local": true,
+      "requires_api_key": false,
+      "supports_streaming": true,
+      "supports_tools": false,
+      "max_context_tokens": 32768
+    }
+  ]
+}
+```
+
+`GET /sessions/{session_id}/usage` reports the session total plus per-model and
+per-task-type breakdowns. Cost fields are decimal strings; tokens absent from a
+provider's report are omitted:
+
+```json
+{
+  "session_id": "00000000-0000-0000-0000-000000000000",
+  "usage": {
+    "total": {
+      "input_tokens": 12000,
+      "output_tokens": 4200,
+      "total_tokens": 16200,
+      "estimated_cost": "0.42",
+      "currency": "USD"
+    },
+    "by_model": [
+      {
+        "provider": "openai",
+        "model": "gpt-5.5-thinking",
+        "input_tokens": 8000,
+        "output_tokens": 2200,
+        "total_tokens": 10200,
+        "estimated_cost": "0.31",
+        "currency": "USD",
+        "request_count": 3
+      }
+    ],
+    "by_task_type": [
+      {
+        "task_type": "plan",
+        "input_tokens": 4000,
+        "output_tokens": 1200,
+        "estimated_cost": "0.18",
+        "request_count": 1
+      }
+    ]
+  }
+}
 ```
 
 ## Errors

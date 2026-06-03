@@ -1,6 +1,5 @@
 //! Validation of merged CLI/policy configuration.
 
-mod capabilities;
 mod globs;
 mod provenance;
 mod references;
@@ -32,7 +31,7 @@ pub fn validate(
     );
     let mut report = ValidationReport::default();
 
-    tracing::trace!("checking model and provider references");
+    tracing::trace!("checking provider references");
     references::check_references(merged, &mut report);
     tracing::trace!("checking routing structure");
     routing::check_routing_structure(merged, &mut report);
@@ -40,8 +39,6 @@ pub fn validate(
     routing::check_rule_ambiguity(merged, &mut report);
     tracing::trace!("checking skill references");
     skills::check_skills(merged, skills, &mut report);
-    tracing::trace!("checking capability requirements");
-    capabilities::check_capabilities(merged, &mut report);
     tracing::trace!("checking glob patterns");
     globs::check_globs(merged, &mut report);
     tracing::trace!("checking inline secrets");

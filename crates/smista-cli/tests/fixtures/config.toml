@@ -8,7 +8,6 @@
 
 [providers.openai]
 type = "openai"
-base_url = "https://api.openai.com/v1"
 api_key = "${secret:OPENAI_API_KEY}"
 
 [providers.anthropic]
@@ -17,54 +16,6 @@ api_key = "${secret:anthropic}"
 
 [providers.ollama]
 type = "ollama"
-base_url = "http://localhost:11434"
-
-# --- Models ----------------------------------------------------------------
-
-[models."openai/gpt-5.5-thinking"]
-provider = "openai"
-name = "gpt-5.5-thinking"
-requires_api_key = true
-local = false
-supports_streaming = true
-supports_tools = true
-supports_json_output = true
-supports_reasoning = true
-supports_memory = true
-max_context_tokens = 200000
-
-[models."ollama/qwen2.5-coder"]
-provider = "ollama"
-name = "qwen2.5-coder"
-requires_api_key = false
-local = true
-supports_streaming = true
-supports_tools = false
-max_context_tokens = 32768
-
-[models."openai/gpt-5.5-mini"]
-provider = "openai"
-name = "gpt-5.5-mini"
-requires_api_key = true
-local = false
-supports_streaming = true
-supports_tools = true
-supports_json_output = true
-supports_reasoning = false
-supports_memory = true
-max_context_tokens = 128000
-
-[models."anthropic/claude-sonnet"]
-provider = "anthropic"
-name = "claude-sonnet"
-requires_api_key = true
-local = false
-supports_streaming = true
-supports_tools = true
-supports_json_output = true
-supports_reasoning = false
-supports_memory = true
-max_context_tokens = 200000
 
 # --- Routing ---------------------------------------------------------------
 
