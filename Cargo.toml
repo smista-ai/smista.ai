@@ -14,7 +14,7 @@ resolver = "3"
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.92.0"
 authors = ["Christian Visintin <christian.visintin@veeso.dev>"]
 description = "Local-first agent and CLI that deterministically routes each phase of an AI workflow to the most suitable model."
 license = "MIT"
