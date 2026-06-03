@@ -19,11 +19,18 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "surrealdb")]
+use surrealdb_types::SurrealValue;
 
 /// The decision made on a pending approval.
 ///
 /// Each variant serializes to its lowercase name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
+#[cfg_attr(
+    feature = "surrealdb",
+    surreal(crate = "::surrealdb_types", rename_all = "lowercase")
+)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum ApprovalDecision {

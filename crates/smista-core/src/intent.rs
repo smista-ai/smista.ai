@@ -26,6 +26,8 @@ use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "surrealdb")]
+use surrealdb_types::SurrealValue;
 
 use crate::error::{CoreError, ParseError};
 
@@ -34,6 +36,11 @@ use crate::error::{CoreError, ParseError};
 /// Used by smista-router to match a prompt against the user's routing policy.
 /// Each variant serializes to its lowercase name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
+#[cfg_attr(
+    feature = "surrealdb",
+    surreal(crate = "::surrealdb_types", rename_all = "lowercase")
+)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum TaskIntent {
