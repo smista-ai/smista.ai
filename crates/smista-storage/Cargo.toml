@@ -13,13 +13,20 @@ rust-version = { workspace = true }
 
 [dependencies]
 chrono = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true }
 smista-core = { workspace = true, features = ["surrealdb"] }
-surrealdb = { workspace = true }
+surrealdb = { workspace = true, features = [
+  "kv-surrealkv",
+  "protocol-http",
+  "protocol-ws",
+] }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }
 tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
 surrealdb = { workspace = true, features = ["kv-mem"] }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

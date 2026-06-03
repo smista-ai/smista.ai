@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/integration-tests",
   "crates/smista-cli",
   "crates/smista-core",
   "crates/smista-providers",
@@ -50,6 +51,8 @@ smista-storage = { version = "0.0", path = "crates/smista-storage" }
 smista-web = { version = "0.0", path = "crates/smista-web" }
 surrealdb = "3"
 surrealdb-types = "3"
+tempfile = "3"
+testcontainers = "0.27"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 toml = "1"

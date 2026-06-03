@@ -20,11 +20,11 @@ pub enum StorageError {
     #[error("storage backend error: {0}")]
     Backend(#[from] surrealdb::Error),
 
+    /// An I/O error occurred.
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
     /// The requested record does not exist.
     #[error("record not found")]
     NotFound,
-
-    /// The authenticated user may not access the requested record.
-    #[error("operation not permitted for this user")]
-    Unauthorized,
 }

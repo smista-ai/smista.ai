@@ -49,6 +49,10 @@ lives in `docs/`.
   to [docs/](docs/). Write for the user performing a task, not as a spec dump:
   task-oriented section names, runnable examples, no internal jargon. Whenever a
   new page is added under [docs/](docs/), register it in `docs/SUMMARY.md`.
+- **Database schema**: any change to the database schema (tables, fields or
+  indexes) must be reflected in both the migration at
+  `crates/smista-storage/src/database/surreal/schema.rs` and the authoritative
+  reference at `docs/technical/schema.md`; keep the two in sync.
 - **GitHub Actions**: must pass `zizmor`; pin actions by commit SHA and set
   `persist-credentials: false` on checkout.
 - **Tasks**: drive builds, checks, tests and publishing through the `just`

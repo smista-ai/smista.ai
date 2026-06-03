@@ -1,0 +1,13 @@
+[package]
+name = "integration-tests"
+version = { workspace = true }
+edition = { workspace = true }
+description = "Container-backed integration tests for the smista.ai workspace."
+publish = false
+
+[dev-dependencies]
+secrecy = { workspace = true }
+smista-storage = { workspace = true }
+surrealdb = { workspace = true, features = ["protocol-http", "protocol-ws"] }
+testcontainers = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
