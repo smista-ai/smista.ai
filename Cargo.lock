@@ -762,6 +762,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc32fast"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "critical-section"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1296,6 +1305,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "fs_extra"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1559,6 +1578,12 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle",
 ]
+
+[[package]]
+name = "guardian"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17e2ac29387b1aa07a1e448f7bb4f35b500787971e965b02842b900afa5c8f6f"
 
 [[package]]
 name = "h2"
@@ -2096,6 +2121,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "integer-encoding"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14c00403deb17c3221a1fe4fb571b9ed0370b3dcd116553c77fa294a3d918699"
+
+[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2335,6 +2366,15 @@ checksum = "6bd8c0d6c6ed0cd30b3652886bb8711dc4bb01d637a68105a3d5158039b418e6"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "lz4_flex"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90071f8077f8e40adfc4b7fe9cd495ce316263f19e75c2211eeff3fdf475a3d9"
+dependencies = [
+ "twox-hash",
 ]
 
 [[package]]
@@ -3792,6 +3832,7 @@ version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e891af845473308773346dc847b2c23ee78fe442e0472ac50e22a18a93d3ae5a"
 dependencies = [
+ "serde",
  "zeroize",
 ]
 
@@ -4047,9 +4088,11 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "secrecy",
  "serde",
  "smista-core",
  "thiserror",
+ "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",
@@ -4071,6 +4114,7 @@ name = "smista-storage"
 version = "0.0.0"
 dependencies = [
  "chrono",
+ "secrecy",
  "serde",
  "smista-core",
  "surrealdb",
@@ -4083,6 +4127,12 @@ dependencies = [
 [[package]]
 name = "smista-web"
 version = "0.0.0"
+
+[[package]]
+name = "snap"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b6b67fb9a61334225b5b790716f609cd58395f895b3fe8b328786812a40bc3b"
 
 [[package]]
 name = "socket2"
@@ -4318,6 +4368,7 @@ dependencies = [
  "surrealdb-protocol",
  "surrealdb-strand",
  "surrealdb-types",
+ "surrealkv",
  "surrealmx",
  "sysinfo",
  "tempfile",
@@ -4388,6 +4439,7 @@ dependencies = [
  "papaya",
  "rand 0.9.4",
  "regex",
+ "reqwest",
  "rust_decimal",
  "semver",
  "serde",
@@ -4410,6 +4462,35 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "surrealkv"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0672cbbe282723a62ccee14b95232ca0b4c9bf44ea22fb520c43e7c517fb8ec"
+dependencies = [
+ "arc-swap",
+ "async-trait",
+ "byteorder",
+ "bytes",
+ "chrono",
+ "crc32fast",
+ "crossbeam-skiplist",
+ "fs2",
+ "getrandom 0.3.4",
+ "guardian",
+ "integer-encoding",
+ "log",
+ "lz4_flex",
+ "parking_lot",
+ "quick_cache",
+ "rand 0.9.4",
+ "scopeguard",
+ "sha2",
+ "snap",
+ "tokio",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -4975,6 +5056,12 @@ dependencies = [
  "url",
  "utf-8",
 ]
+
+[[package]]
+name = "twox-hash"
+version = "2.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ea3136b675547379c4bd395ca6b938e5ad3c3d20fad76e7fe85f9e0d011419c"
 
 [[package]]
 name = "typenum"
@@ -5775,6 +5862,12 @@ checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
 ]
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
 
 [[package]]
 name = "yaml_serde"

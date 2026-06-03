@@ -14,9 +14,18 @@ rust-version = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true }
 smista-core = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+  "fs",
+  "macros",
+  "process",
+  "rt",
+  "sync",
+  "time",
+] }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
