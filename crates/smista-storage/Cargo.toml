@@ -10,3 +10,16 @@ categories = { workspace = true }
 keywords = { workspace = true }
 readme = "README.md"
 rust-version = { workspace = true }
+
+[dependencies]
+chrono = { workspace = true }
+serde = { workspace = true }
+smista-core = { workspace = true, features = ["surrealdb"] }
+surrealdb = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+surrealdb = { workspace = true, features = ["kv-mem"] }
+tokio = { workspace = true, features = ["full"] }

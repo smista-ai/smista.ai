@@ -13,8 +13,7 @@ its backend.
 | `smista-router-client` | Library        | Async Rust client for the router HTTP API; used by the CLI and Rust frontends. |
 | `smista-core`          | Library        | Shared domain types, config, policy, trace structures, validation, errors.     |
 | `smista-providers`     | Library        | Model abstraction and provider adapters (OpenAI, Anthropic, Ollama, …).        |
-| `smista-storage`       | Library        | Storage traits and the SurrealDB-backed persistence layer.                     |
-| `smista-trace`         | Library        | Execution trace types and append-only recording logic.                         |
+| `smista-storage`       | Library        | Storage traits, entities (incl. trace events) and the SurrealDB layer.         |
 | `smista-web`           | Library        | `axum` HTTP JSON API server for the router.                                    |
 | `@smista-ai/sdk`       | TypeScript SDK | Typed client over the router HTTP API.                                         |
 

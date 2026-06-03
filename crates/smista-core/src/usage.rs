@@ -3,7 +3,7 @@
 //! [`Usage`] records how many tokens an invocation consumed and what it cost.
 //! Every field is optional: providers report different subsets, and costs may
 //! be estimated up front, reconciled afterwards, or absent for local models.
-//! The type is shared with smista-providers, smista-trace and the web API.
+//! The type is shared with smista-providers, smista-storage and the web API.
 //!
 //! # Examples
 //!

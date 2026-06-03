@@ -11,6 +11,9 @@ keywords = { workspace = true }
 readme = "README.md"
 rust-version = { workspace = true }
 
+[features]
+surrealdb = ["dep:surrealdb-types"]
+
 [dependencies]
 chrono = { workspace = true }
 dirs = { workspace = true }
@@ -19,6 +22,7 @@ http = { workspace = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+surrealdb-types = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 ts-rs = { workspace = true }

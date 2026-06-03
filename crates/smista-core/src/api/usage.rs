@@ -94,7 +94,7 @@ mod tests {
                     "input_tokens": 12000,
                     "output_tokens": 4200,
                     "total_tokens": 16200,
-                    "estimated_cost": 0.42,
+                    "estimated_cost": "0.42",
                     "currency": "USD"
                 },
                 "by_model": [
@@ -104,7 +104,7 @@ mod tests {
                         "input_tokens": 8000,
                         "output_tokens": 2200,
                         "total_tokens": 10200,
-                        "estimated_cost": 0.31,
+                        "estimated_cost": "0.31",
                         "currency": "USD",
                         "request_count": 3
                     }
@@ -114,7 +114,7 @@ mod tests {
                         "task_type": "plan",
                         "input_tokens": 4000,
                         "output_tokens": 1200,
-                        "estimated_cost": 0.18,
+                        "estimated_cost": "0.18",
                         "request_count": 1
                     }
                 ]

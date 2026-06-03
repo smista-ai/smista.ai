@@ -243,7 +243,7 @@ fn default_priority() -> u32 {
 ///
 /// Rules are evaluated in ascending priority order; the first match wins. When
 /// no rule matches, the [`default`](Self::default) route is used. A complete
-/// policy must define a default route; its absence is a validation error (#4),
+/// policy must define a default route; its absence is a validation error,
 /// so it is modelled as optional here.
 ///
 /// # Examples

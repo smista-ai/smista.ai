@@ -4,7 +4,7 @@
 //! was detected, which provider and model served it, the routing rule that
 //! matched, and the ordered events that followed. The router produces it, the
 //! HTTP API ([`crate::api`]) returns it for the `/trace` and `/why` views, and
-//! smista-trace persists it.
+//! smista-storage persists its events and assembles this view.
 //!
 //! Event payloads are kept as opaque [`serde_json::Value`]s for now: the trace
 //! event vocabulary is still being designed, and storing them untyped lets the

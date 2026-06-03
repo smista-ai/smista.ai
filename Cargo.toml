@@ -7,7 +7,6 @@ members = [
   "crates/smista-router-client",
   "crates/smista-sdk",
   "crates/smista-storage",
-  "crates/smista-trace",
   "crates/smista-web",
 ]
 resolver = "3"
@@ -34,7 +33,7 @@ globset = "0.4"
 http = "1"
 ratatui = "0.30"
 reqwest = { version = "0.13", features = ["json", "stream"] }
-rig-core = "0.37"
+rig-core = "0.38"
 rust_decimal = { version = "1", default-features = false, features = [
   "serde-with-str",
   "std",
@@ -48,9 +47,9 @@ smista-router = { version = "0.0", path = "crates/smista-router" }
 smista-router-client = { version = "0.0", path = "crates/smista-router-client" }
 smista-sdk = { version = "0.0", path = "crates/smista-sdk" }
 smista-storage = { version = "0.0", path = "crates/smista-storage" }
-smista-trace = { version = "0.0", path = "crates/smista-trace" }
 smista-web = { version = "0.0", path = "crates/smista-web" }
 surrealdb = "3"
+surrealdb-types = "3"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 toml = "1"

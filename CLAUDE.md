@@ -18,17 +18,16 @@ Routing, policy evaluation, context selection and tool mediation belong to
 
 This is a Cargo workspace. All crates live under `crates/`:
 
-| Crate                  | Kind | Responsibility                                       |
-| ---------------------- | ---- | ---------------------------------------------------- |
-| `smista-core`          | lib  | Shared domain types, config, policy, errors.         |
-| `smista-storage`       | lib  | Storage traits and SurrealDB implementation.         |
-| `smista-providers`     | lib  | Model abstraction and provider adapters (via `rig`). |
-| `smista-trace`         | lib  | Execution trace types and recording.                 |
-| `smista-router`        | bin  | Routing/orchestration service.                       |
-| `smista-web`           | lib  | `axum` HTTP JSON API for the router.                 |
-| `smista-router-client` | lib  | Async Rust client for the router HTTP API.           |
-| `smista-sdk`           | lib  | Rust SDK facade re-exporting core types (+ client).  |
-| `smista-cli`           | bin  | The `smista` CLI (`ratatui` + `clap`).               |
+| Crate                  | Kind | Responsibility                                         |
+| ---------------------- | ---- | ------------------------------------------------------ |
+| `smista-core`          | lib  | Shared domain types, config, policy, errors.           |
+| `smista-storage`       | lib  | Storage traits, entities and SurrealDB implementation. |
+| `smista-providers`     | lib  | Model abstraction and provider adapters (via `rig`).   |
+| `smista-router`        | bin  | Routing/orchestration service.                         |
+| `smista-web`           | lib  | `axum` HTTP JSON API for the router.                   |
+| `smista-router-client` | lib  | Async Rust client for the router HTTP API.             |
+| `smista-sdk`           | lib  | Rust SDK facade re-exporting core types (+ client).    |
+| `smista-cli`           | bin  | The `smista` CLI (`ratatui` + `clap`).                 |
 
 The TypeScript SDK lives in `sdk/` (`@smista-ai/sdk`). Documentation (mdBook)
 lives in `docs/`.
@@ -48,7 +47,8 @@ lives in `docs/`.
 - **Docs**: any change to the codebase that affects user-facing behaviour
   (config, CLI commands, API, providers) must come with a user-friendly update
   to [docs/](docs/). Write for the user performing a task, not as a spec dump:
-  task-oriented section names, runnable examples, no internal jargon.
+  task-oriented section names, runnable examples, no internal jargon. Whenever a
+  new page is added under [docs/](docs/), register it in `docs/SUMMARY.md`.
 - **GitHub Actions**: must pass `zizmor`; pin actions by commit SHA and set
   `persist-credentials: false` on checkout.
 - **Tasks**: drive builds, checks, tests and publishing through the `just`

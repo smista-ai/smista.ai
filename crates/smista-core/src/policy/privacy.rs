@@ -15,7 +15,7 @@ use super::glob::compile_globs;
 /// them, so the CLI merge unions path lists and only lets preference layers
 /// tighten the modes (see `smista-cli`'s `config::layers`).
 ///
-/// Paths are glob patterns kept verbatim; the matcher (#4) owns interpretation.
+/// Paths are glob patterns kept verbatim; the matcher owns interpretation.
 ///
 /// # Examples
 ///

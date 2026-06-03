@@ -1,0 +1,327 @@
+//! The storage [`Database`] interface.
+//!
+//! Application code depends on this trait, never on SurrealDB directly; the
+//! SurrealDB-backed implementation lands behind this boundary (see the crate
+//! root for the schema invariants). Every method is asynchronous and its
+//! returned future is `Send`, so the trait composes with `axum` and other
+//! Tokio-based services.
+//!
+//! The trait is intentionally a single interface rather than one trait per
+//! entity: some operations span several tables in one transaction (for example
+//! [`Database::delete_session`] removes a session together with its messages,
+//! tool calls and per-session memory), so they cannot be expressed as
+//! independent per-table traits.
+//!
+//! ## Identity and ownership
+//!
+//! Records are addressed by their [`Uuid`] key — the router owns id generation
+//! (`Uuid::now_v7`), so ids are portable and time-sortable. Every user-scoped
+//! operation takes the authenticated `user_id`; the implementation rejects
+//! cross-user access with [`StorageError::Unauthorized`].
+//!
+//! ## Trace events
+//!
+//! Trace events are persisted like any other entity:
+//! [`Database::append_trace_event`] records a [`TraceEvent`] with its paired
+//! content, and [`Database::get_latest_trace`] returns the assembled [`Trace`]
+//! read view defined in `smista-core`.
+
+use std::future::Future;
+
+use smista_core::trace::Trace;
+use uuid::Uuid;
+
+use crate::StorageResult;
+use crate::api::{MemoryRef, SessionState};
+use crate::entity::{
+    AuthToken, ContextMemory, ContextMemoryContent, Session, SessionApproval,
+    SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
+    SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
+    SessionToolCall, SessionToolCallContent, TraceEvent, TraceEventContent, User, UserMemory,
+    UserMemoryContent,
+};
+
+/// The storage interface for smista.ai.
+///
+/// Implementors persist the domain entities defined in [`crate::entity`] and
+/// enforce the schema invariants documented at the crate root. All methods are
+/// asynchronous; their futures are `Send` so they can be awaited from any
+/// Tokio task.
+///
+/// See the [crate documentation](crate) for the identity, ownership and trace
+/// conventions that apply to every method.
+pub trait Database: Send + Sync {
+    // -- Users ---------------------------------------------------------------
+
+    /// Persists a new user and returns the stored row.
+    fn create_user(&self, user: User) -> impl Future<Output = StorageResult<User>> + Send;
+
+    /// Loads a user by id, or `None` if no such user exists.
+    fn get_user(&self, id: Uuid) -> impl Future<Output = StorageResult<Option<User>>> + Send;
+
+    /// Loads the user holding the given API-key hash, or `None` if unknown.
+    ///
+    /// The raw key is never stored; callers pass the hash computed by the
+    /// router's authentication layer.
+    fn get_user_by_api_key_hash(
+        &self,
+        api_key_hash: &str,
+    ) -> impl Future<Output = StorageResult<Option<User>>> + Send;
+
+    // -- Tokens --------------------------------------------------------------
+
+    /// Persists a new authentication token and returns the stored row.
+    fn create_token(
+        &self,
+        token: AuthToken,
+    ) -> impl Future<Output = StorageResult<AuthToken>> + Send;
+
+    /// Returns the token matching the given hash if it is currently valid.
+    ///
+    /// A token is valid when it exists, has not expired and has not been
+    /// revoked; otherwise `None` is returned.
+    fn validate_token(
+        &self,
+        token_hash: &str,
+    ) -> impl Future<Output = StorageResult<Option<AuthToken>>> + Send;
+
+    /// Revokes the token with the given id.
+    fn revoke_token(&self, id: Uuid) -> impl Future<Output = StorageResult<()>> + Send;
+
+    // -- Sessions ------------------------------------------------------------
+
+    /// Persists a new session and returns the stored row.
+    fn create_session(
+        &self,
+        session: Session,
+    ) -> impl Future<Output = StorageResult<Session>> + Send;
+
+    /// Loads a session owned by `user_id`, or `None` if absent.
+    ///
+    /// A session owned by a different user is treated as absent rather than
+    /// disclosed.
+    fn get_session(
+        &self,
+        user_id: Uuid,
+        id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<Session>>> + Send;
+
+    /// Lists the sessions owned by `user_id`, most recently updated first.
+    fn list_sessions(
+        &self,
+        user_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Vec<Session>>> + Send;
+
+    /// Updates a session owned by `user_id` and returns the stored row.
+    fn update_session(
+        &self,
+        user_id: Uuid,
+        session: Session,
+    ) -> impl Future<Output = StorageResult<Session>> + Send;
+
+    /// Marks a session owned by `user_id` as archived.
+    fn archive_session(
+        &self,
+        user_id: Uuid,
+        id: Uuid,
+    ) -> impl Future<Output = StorageResult<()>> + Send;
+
+    /// Deletes a session owned by `user_id` and all of its child rows.
+    ///
+    /// The cascade is explicit: messages, routing decisions, context
+    /// references, tool calls, plans, diffs and per-session [`ContextMemory`]
+    /// (each with its paired `_content` row) are removed in the same
+    /// transaction. SurrealDB does not enforce foreign keys, so nothing
+    /// cascades automatically.
+    fn delete_session(
+        &self,
+        user_id: Uuid,
+        id: Uuid,
+    ) -> impl Future<Output = StorageResult<()>> + Send;
+
+    // -- Append --------------------------------------------------------------
+
+    /// Appends a message together with its paired content body.
+    ///
+    /// The `content` row shares the message's record id; both are written in
+    /// the same transaction.
+    fn append_message(
+        &self,
+        user_id: Uuid,
+        message: SessionMessage,
+        content: SessionMessageContent,
+    ) -> impl Future<Output = StorageResult<SessionMessage>> + Send;
+
+    /// Appends a routing decision to its session.
+    fn append_routing_decision(
+        &self,
+        user_id: Uuid,
+        decision: SessionRoutingDecision,
+    ) -> impl Future<Output = StorageResult<SessionRoutingDecision>> + Send;
+
+    /// Appends a context reference to its session.
+    fn append_context_reference(
+        &self,
+        user_id: Uuid,
+        reference: SessionContextReference,
+    ) -> impl Future<Output = StorageResult<SessionContextReference>> + Send;
+
+    /// Appends a tool call together with its paired, sanitised content.
+    ///
+    /// The `content` row shares the tool call's record id; both are written in
+    /// the same transaction.
+    fn append_tool_call(
+        &self,
+        user_id: Uuid,
+        tool_call: SessionToolCall,
+        content: SessionToolCallContent,
+    ) -> impl Future<Output = StorageResult<SessionToolCall>> + Send;
+
+    /// Appends a plan together with its paired snapshot content.
+    fn append_plan(
+        &self,
+        user_id: Uuid,
+        plan: SessionPlan,
+        content: SessionPlanContent,
+    ) -> impl Future<Output = StorageResult<SessionPlan>> + Send;
+
+    /// Appends a diff together with its paired, secret-filtered body.
+    fn append_diff(
+        &self,
+        user_id: Uuid,
+        diff: SessionDiff,
+        content: SessionDiffContent,
+    ) -> impl Future<Output = StorageResult<SessionDiff>> + Send;
+
+    /// Appends an approval decision to its session.
+    fn append_approval(
+        &self,
+        user_id: Uuid,
+        approval: SessionApproval,
+    ) -> impl Future<Output = StorageResult<SessionApproval>> + Send;
+
+    /// Appends a trace event together with its paired payload.
+    ///
+    /// The `content` row shares the event's record id; both are written in the
+    /// same transaction.
+    fn append_trace_event(
+        &self,
+        user_id: Uuid,
+        event: TraceEvent,
+        content: TraceEventContent,
+    ) -> impl Future<Output = StorageResult<TraceEvent>> + Send;
+
+    // -- Reads ---------------------------------------------------------------
+
+    /// Loads the full state of a session owned by `user_id`, or `None`.
+    ///
+    /// Returns the session metadata together with every child row; see
+    /// [`SessionState`]. Content payloads are not included.
+    fn get_session_state(
+        &self,
+        user_id: Uuid,
+        id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<SessionState>>> + Send;
+
+    /// Loads the most recent assembled trace for a session owned by `user_id`.
+    ///
+    /// Returns the [`Trace`] read view assembled from the session's trace
+    /// events, or `None` if the session has no events or is not owned by
+    /// `user_id`.
+    fn get_latest_trace(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<Trace>>> + Send;
+
+    // -- User memory ---------------------------------------------------------
+
+    /// Records a user memory together with its paired content.
+    ///
+    /// A keyed memory upserts on `(user, key)`: an existing fact with the same
+    /// key is replaced. A keyless memory is always inserted as a new row.
+    fn record_user_memory(
+        &self,
+        user_id: Uuid,
+        memory: UserMemory,
+        content: UserMemoryContent,
+    ) -> impl Future<Output = StorageResult<UserMemory>> + Send;
+
+    /// Updates the content of a user memory owned by `user_id`.
+    ///
+    /// The target row is selected by id or by key (see [`MemoryRef`]); the
+    /// `content` payload replaces the existing fact.
+    fn update_user_memory(
+        &self,
+        user_id: Uuid,
+        target: MemoryRef,
+        content: UserMemoryContent,
+    ) -> impl Future<Output = StorageResult<UserMemory>> + Send;
+
+    /// Loads a user memory owned by `user_id`, or `None` if absent.
+    fn get_user_memory(
+        &self,
+        user_id: Uuid,
+        id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<UserMemory>>> + Send;
+
+    /// Lists the memories owned by `user_id`.
+    fn list_user_memory(
+        &self,
+        user_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Vec<UserMemory>>> + Send;
+
+    /// Forgets a user memory owned by `user_id`, with its paired content.
+    fn forget_user_memory(
+        &self,
+        user_id: Uuid,
+        id: Uuid,
+    ) -> impl Future<Output = StorageResult<()>> + Send;
+
+    // -- Context memory ------------------------------------------------------
+
+    /// Records a per-session context memory together with its paired content.
+    ///
+    /// A keyed memory upserts on `(session, key)`; a keyless memory is always
+    /// inserted as a new row.
+    fn record_context_memory(
+        &self,
+        user_id: Uuid,
+        memory: ContextMemory,
+        content: ContextMemoryContent,
+    ) -> impl Future<Output = StorageResult<ContextMemory>> + Send;
+
+    /// Updates the content of a context memory owned by `user_id` in `session_id`.
+    ///
+    /// The target row is selected by id or by key (see [`MemoryRef`]).
+    fn update_context_memory(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+        target: MemoryRef,
+        content: ContextMemoryContent,
+    ) -> impl Future<Output = StorageResult<ContextMemory>> + Send;
+
+    /// Loads a context memory owned by `user_id` in `session_id`, or `None`.
+    fn get_context_memory(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+        id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<ContextMemory>>> + Send;
+
+    /// Lists the context memories owned by `user_id` in `session_id`.
+    fn list_context_memory(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Vec<ContextMemory>>> + Send;
+
+    /// Forgets a context memory owned by `user_id`, with its paired content.
+    fn forget_context_memory(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+        id: Uuid,
+    ) -> impl Future<Output = StorageResult<()>> + Send;
+}
