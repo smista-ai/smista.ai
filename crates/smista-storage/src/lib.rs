@@ -37,11 +37,10 @@
 //! the storage operations, not in the database.
 
 pub mod api;
-mod database;
+pub mod database;
 pub mod entity;
 mod error;
 #[cfg(test)]
 mod tests;
 
-pub use self::database::Database;
 pub use self::error::{StorageError, StorageResult};

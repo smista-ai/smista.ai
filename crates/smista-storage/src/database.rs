@@ -17,7 +17,9 @@
 //! Records are addressed by their [`Uuid`] key — the router owns id generation
 //! (`Uuid::now_v7`), so ids are portable and time-sortable. Every user-scoped
 //! operation takes the authenticated `user_id`; the implementation rejects
-//! cross-user access with [`StorageError::Unauthorized`].
+//! cross-user access by treating a record owned by another user as absent —
+//! a read returns `None` and a write returns [`StorageError::NotFound`],
+//! never disclosing that the record exists.
 //!
 //! ## Trace events
 //!
@@ -25,6 +27,8 @@
 //! [`Database::append_trace_event`] records a [`TraceEvent`] with its paired
 //! content, and [`Database::get_latest_trace`] returns the assembled [`Trace`]
 //! read view defined in `smista-core`.
+
+pub mod surreal;
 
 use std::future::Future;
 
