@@ -22,6 +22,8 @@ from your global, project, and local preference layers.
 | **Missing default route** — no `[routing.default]` table is present                                                                                                          | Error    | Add `[routing.default]` with a `model` field                                                                                           |
 | **Invalid fallback** — a rule lists its own `model` as a fallback, or lists the same fallback model more than once                                                           | Error    | Remove the self-reference or duplicate from `fallbacks`                                                                                |
 | **Ambiguous rules** — two overlapping rules share the same `priority` value and the same specificity score, making their relative order undefined                            | Error    | Give them distinct `priority` values or make their match conditions mutually exclusive                                                 |
+| **Unknown skill** — a routing rule's `skill` does not match any discovered skill                                                                                             | Error    | Create a skill with that name, or correct the rule's `skill`                                                                           |
+| **Unsupported capability** — a rule's `requires_capabilities` demands a capability that its `model` or one of its `fallbacks` does not declare                               | Error    | Set the matching `supports_*` flag on the model, or route the rule to a model that supports the capability                             |
 | **Unsafe override** — a local or runtime preference layer sets `privacy.remote.mode` to a value less strict than the merged config-layer floor                               | Error    | Do not weaken the configured privacy mode in a preference layer                                                                        |
 | **Permission widening** — a local or runtime preference layer sets a tool permission (`file_read`, `file_write`, `shell`, etc.) to a less strict value than the config floor | Error    | Keep the configured stricter permission; preference layers may only tighten, never loosen                                              |
 | **Inline secret** — a provider `api_key` is a literal string instead of a `${secret:NAME}` reference                                                                         | Error    | Replace the literal with `api_key = "${secret:NAME}"` and store the value in your `.smista/secrets` file or as an environment variable |
@@ -73,6 +75,34 @@ mode = "allow"           # error: unsafe override
 [tools.permissions]
 shell = "allow"          # error: permission widening
 ```
+
+### Skill references and capability requirements
+
+A rule's `skill` must name a skill smista has discovered. The check resolves the
+name against your discovered skills (project skills first, then global), so a
+typo or a skill you have not created yet is reported as an error.
+
+When a rule sets `requires_capabilities`, every model it can route to — its
+`model` and each entry in `fallbacks` — must declare the required capability.
+This catches, for example, a rule that needs tool calls but falls back to a
+local model with `supports_tools = false`.
+
+```toml
+[models."ollama/qwen2.5-coder"]
+provider = "ollama"
+name = "qwen2.5-coder"
+supports_tools = false       # this model cannot call tools
+max_context_tokens = 32768
+
+[[routing.rules]]
+name = "tool-using edits"
+requires_capabilities = { tools = true }
+model = "ollama/qwen2.5-coder"   # error: model does not support tools
+```
+
+The checked capabilities are those a model declares in `[models]`:
+`supports_streaming`, `supports_tools`, `supports_json_output`,
+`supports_reasoning`, and `supports_memory`.
 
 ## Router configuration (`router.toml`)
 
