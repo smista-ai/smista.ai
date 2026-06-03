@@ -97,14 +97,21 @@ database = "local"
 
 The `[router.storage]` table accepts:
 
-| Key         | Type   | Default     | Purpose                                        |
-| ----------- | ------ | ----------- | ---------------------------------------------- |
-| `engine`    | string | `surrealdb` | Storage engine; only `surrealdb` is supported. |
-| `mode`      | string | `embedded`  | `embedded` (on-disk) or `remote` (server).     |
-| `path`      | string | none        | Database file path, used in `embedded` mode.   |
-| `url`       | string | none        | Database server URL, used in `remote` mode.    |
-| `namespace` | string | `smista`    | SurrealDB namespace.                           |
-| `database`  | string | `local`     | SurrealDB database name.                       |
+| Key         | Type   | Default     | Purpose                                         |
+| ----------- | ------ | ----------- | ----------------------------------------------- |
+| `engine`    | string | `surrealdb` | Storage engine; only `surrealdb` is supported.  |
+| `mode`      | string | `embedded`  | `embedded` (on-disk) or `remote` (server).      |
+| `path`      | string | none        | Database file path, used in `embedded` mode.    |
+| `url`       | string | none        | Database server URL, used in `remote` mode.     |
+| `username`  | string | none        | Authentication username, used in `remote` mode. |
+| `password`  | string | none        | Authentication password, used in `remote` mode. |
+| `namespace` | string | `smista`    | SurrealDB namespace.                            |
+| `database`  | string | `local`     | SurrealDB database name.                        |
+
+> [!NOTE]
+> `username` and `password` authenticate against a remote SurrealDB server and
+> are only used in `remote` mode. The password is treated as a secret: it is
+> never logged and is never written back out when configuration is serialized.
 
 ## Authentication
 

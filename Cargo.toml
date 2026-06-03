@@ -38,7 +38,7 @@ rust_decimal = { version = "1", default-features = false, features = [
   "serde-with-str",
   "std",
 ] }
-secrecy = "0.10"
+secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 smista-core = { version = "0.0", path = "crates/smista-core" }

@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use smista_core::model::Provider;
 
@@ -81,7 +82,11 @@ pub enum StorageMode {
 }
 
 /// Storage backend configuration.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `PartialEq`/`Eq` are implemented by hand because [`SecretString`] does not
+/// expose a comparison, and `password` is `#[serde(skip_serializing)]` so the
+/// credential is never written back out to a config file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StorageConfig {
     /// Storage engine.
@@ -92,6 +97,11 @@ pub struct StorageConfig {
     pub path: Option<String>,
     /// Database URL (remote mode).
     pub url: Option<String>,
+    /// Authentication username (remote mode).
+    pub username: Option<String>,
+    /// Authentication password (remote mode); never serialized.
+    #[serde(skip_serializing)]
+    pub password: Option<SecretString>,
     /// Namespace.
     pub namespace: String,
     /// Database name.
@@ -105,11 +115,29 @@ impl Default for StorageConfig {
             mode: StorageMode::default(),
             path: None,
             url: None,
+            username: None,
+            password: None,
             namespace: "smista".to_string(),
             database: "local".to_string(),
         }
     }
 }
+
+impl PartialEq for StorageConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.engine == other.engine
+            && self.mode == other.mode
+            && self.path == other.path
+            && self.url == other.url
+            && self.username == other.username
+            && self.namespace == other.namespace
+            && self.database == other.database
+            && self.password.as_ref().map(ExposeSecret::expose_secret)
+                == other.password.as_ref().map(ExposeSecret::expose_secret)
+    }
+}
+
+impl Eq for StorageConfig {}
 
 /// Authentication configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -332,6 +360,34 @@ mod tests {
         let config = RouterConfig::default();
         let toml = toml::to_string(&config).unwrap();
         assert_eq!(toml::from_str::<RouterConfig>(&toml).unwrap(), config);
+    }
+
+    #[test]
+    fn should_parse_remote_storage_credentials() {
+        let toml = r#"
+            [storage]
+            mode = "remote"
+            url = "ws://db.internal:8000"
+            username = "root"
+            password = "s3cret"
+        "#;
+        let config: RouterConfig = toml::from_str(toml).unwrap();
+        assert_eq!(config.storage.username.as_deref(), Some("root"));
+        assert_eq!(
+            config.storage.password.as_ref().map(ExposeSecret::expose_secret),
+            Some("s3cret")
+        );
+    }
+
+    #[test]
+    fn should_never_serialize_storage_password() {
+        let config = StorageConfig {
+            password: Some(SecretString::from("s3cret")),
+            ..StorageConfig::default()
+        };
+        let toml = toml::to_string(&config).unwrap();
+        assert!(!toml.contains("password"));
+        assert!(!toml.contains("s3cret"));
     }
 
     #[test]
