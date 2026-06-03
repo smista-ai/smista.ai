@@ -13,7 +13,17 @@ pub mod config;
 
 use tracing_subscriber::EnvFilter;
 
+const STACK_SIZE: usize = 10 * 1024 * 1024; // 10MiB
+
 fn main() -> anyhow::Result<()> {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(STACK_SIZE)
+        .build()?
+        .block_on(async { tokio_main().await })
+}
+
+async fn tokio_main() -> anyhow::Result<()> {
     // TODO: change, use different and adeguate config
     tracing_subscriber::fmt()
         .with_env_filter(
