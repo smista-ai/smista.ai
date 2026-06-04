@@ -25,8 +25,8 @@
 //!
 //! Trace events are persisted like any other entity:
 //! [`Database::append_trace_event`] records a [`TraceEvent`] with its paired
-//! content, and [`Database::get_latest_trace`] returns the assembled [`Trace`]
-//! read view defined in `smista-core`.
+//! content, and [`Database::get_session_trace_events`] returns the assembled
+//! [`Trace`] read view defined in `smista-core`.
 
 pub mod surreal;
 
@@ -227,12 +227,13 @@ pub trait Database: Send + Sync {
         id: Uuid,
     ) -> impl Future<Output = StorageResult<Option<SessionState>>> + Send;
 
-    /// Loads the most recent assembled trace for a session owned by `user_id`.
+    /// Loads every trace event for a session owned by `user_id`, assembled into
+    /// a [`Trace`].
     ///
-    /// Returns the [`Trace`] read view assembled from the session's trace
-    /// events, or `None` if the session has no events or is not owned by
-    /// `user_id`.
-    fn get_latest_trace(
+    /// Returns the [`Trace`] read view built from all of the session's trace
+    /// events, oldest first, or `None` if the session has no events or is not
+    /// owned by `user_id`.
+    fn get_session_trace_events(
         &self,
         user_id: Uuid,
         session_id: Uuid,

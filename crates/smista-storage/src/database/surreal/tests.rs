@@ -944,7 +944,7 @@ async fn should_not_get_session_state_of_other_user() {
 }
 
 #[tokio::test]
-async fn should_assemble_latest_trace_from_events() {
+async fn should_assemble_trace_from_session_events() {
     let db = memory_db().await;
     let (user_id, session_id) = user_with_session(&db).await;
 
@@ -975,7 +975,7 @@ async fn should_assemble_latest_trace_from_events() {
         .expect("failed to append second event");
 
     let trace = db
-        .get_latest_trace(user_id, session_id)
+        .get_session_trace_events(user_id, session_id)
         .await
         .expect("failed to load trace")
         .expect("trace not found");
@@ -997,7 +997,7 @@ async fn should_return_no_trace_without_events() {
     let (user_id, session_id) = user_with_session(&db).await;
 
     assert!(
-        db.get_latest_trace(user_id, session_id)
+        db.get_session_trace_events(user_id, session_id)
             .await
             .expect("failed to load trace")
             .is_none(),
