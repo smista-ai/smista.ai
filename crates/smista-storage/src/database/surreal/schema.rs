@@ -67,7 +67,6 @@ DEFINE FIELD IF NOT EXISTS title ON TABLE session TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE session TYPE datetime;
 DEFINE FIELD IF NOT EXISTS updated_at ON TABLE session TYPE datetime;
 DEFINE FIELD IF NOT EXISTS archived_at ON TABLE session TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS deleted_at ON TABLE session TYPE option<datetime>;
 
 -- session_message
 DEFINE FIELD IF NOT EXISTS session ON TABLE session_message TYPE record<session> ASSERT record::exists($value);

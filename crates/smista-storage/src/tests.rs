@@ -88,6 +88,5 @@ pub fn session(id: RecordId, user: RecordId) -> Session {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         archived_at: None,
-        deleted_at: None,
     }
 }

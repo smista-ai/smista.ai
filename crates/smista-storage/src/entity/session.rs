@@ -23,8 +23,6 @@ pub struct Session {
     pub updated_at: DateTime<Utc>,
     /// When the session was archived, if applicable.
     pub archived_at: Option<DateTime<Utc>>,
-    /// When the session was soft-deleted, if applicable.
-    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 impl Table for Session {
@@ -49,7 +47,6 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             archived_at: None,
-            deleted_at: None,
         };
 
         crate::tests::fk_roundtrip(crate::tests::user(user), session).await;
