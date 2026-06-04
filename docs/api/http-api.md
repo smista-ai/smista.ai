@@ -244,8 +244,43 @@ GET /api/v1/sessions/{session_id}/traces/latest
 GET /api/v1/sessions/{session_id}/traces/{trace_id}
 ```
 
-Returns the execution trace: selected model, matched rule, task type, fallbacks,
-overrides, context, tool calls, approvals and cost.
+Returns the execution trace for the session: the ordered events that were
+emitted while routing and running its tasks. The trace is wrapped under a
+`trace` key:
+
+```json
+{
+  "trace": {
+    "session_id": "0194f1e2-...",
+    "events": [
+      {
+        "event_type": "routing_decision",
+        "task_type": "review",
+        "provider": "openai",
+        "model": "gpt-5.5-thinking",
+        "matched_rule": "task.review -> openai/gpt-5.5-thinking",
+        "created_at": "2026-06-04T10:15:00Z",
+        "payload": { "provider": "openai", "model": "gpt-5.5-thinking", "reason": "best for review" }
+      },
+      {
+        "event_type": "tool_call",
+        "task_type": "review",
+        "provider": "openai",
+        "model": "gpt-5.5-thinking",
+        "created_at": "2026-06-04T10:15:02Z",
+        "payload": { "tool_name": "read_file", "status": "completed" }
+      }
+    ]
+  }
+}
+```
+
+`events` is ordered oldest first. Each event carries its own routing context
+(`task_type`, `provider`, `model`, optional `matched_rule`) and a `payload`
+whose shape depends on `event_type`. `event_type` is one of `message`,
+`routing_decision`, `context_selection`, `tool_call`, `approval` or `cost`; the
+per-type `payload` shapes are listed under `trace_event_content` in the
+[storage schema reference](../technical/schema.md).
 
 ## Providers, models and usage
 

@@ -1,9 +1,9 @@
 //! Storage error types.
 
-/// A result returned by the [`Database`](crate::Database) API.
+/// A result returned by the [`Database`](crate::database::Database) API.
 pub type StorageResult<T> = std::result::Result<T, StorageError>;
 
-/// An error raised by a [`Database`](crate::Database) operation.
+/// An error raised by a [`Database`](crate::database::Database) operation.
 ///
 /// Variants are kept deliberately coarse: callers act on the failure category,
 /// not on the underlying SurrealDB detail, which is wrapped in

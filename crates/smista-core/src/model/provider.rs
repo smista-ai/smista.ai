@@ -38,10 +38,8 @@ use crate::error::{CoreError, ParseError};
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ts_rs::TS,
 )]
 #[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
-#[cfg_attr(
-    feature = "surrealdb",
-    surreal(crate = "::surrealdb_types", rename_all = "lowercase")
-)]
+#[cfg_attr(feature = "surrealdb", surreal(crate = "::surrealdb_types"))]
+#[cfg_attr(feature = "surrealdb", surreal(rename_all = "lowercase", untagged))]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Provider {

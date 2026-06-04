@@ -21,7 +21,7 @@ pub enum MemoryRef {
 
 /// The full persisted state of a session.
 ///
-/// Returned by [`Database::get_session_state`](crate::Database::get_session_state);
+/// Returned by [`Database::get_session_state`](crate::database::Database::get_session_state);
 /// aggregates the session row with
 /// every child row that belongs to it. Content payloads stored in the paired
 /// `_content` tables are not included — this is the queryable metadata view.

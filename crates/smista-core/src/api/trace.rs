@@ -8,23 +8,16 @@
 //!
 //! ```
 //! use smista_core::api::TraceResponse;
-//! use smista_core::intent::TaskIntent;
-//! use smista_core::model::Provider;
 //! use smista_core::trace::Trace;
 //! use uuid::Uuid;
 //!
 //! let response = TraceResponse {
 //!     trace: Trace {
-//!         id: "trace:xyz".to_string(),
 //!         session_id: Uuid::nil(),
-//!         task_type: TaskIntent::Edit,
-//!         provider: Provider::Anthropic,
-//!         model: "claude-sonnet".to_string(),
-//!         matched_rule: None,
 //!         events: Vec::new(),
 //!     },
 //! };
-//! assert_eq!(response.trace.id, "trace:xyz");
+//! assert!(response.trace.events.is_empty());
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -41,25 +34,32 @@ pub struct TraceResponse {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use uuid::Uuid;
 
     use super::*;
     use crate::intent::TaskIntent;
     use crate::model::Provider;
+    use crate::trace::{TraceEvent, TraceEventType};
 
-    #[test]
-    fn should_roundtrip_trace_response() {
-        let response = TraceResponse {
-            trace: Trace {
-                id: "trace:xyz".to_string(),
-                session_id: Uuid::nil(),
+    fn trace() -> Trace {
+        Trace {
+            session_id: Uuid::nil(),
+            events: vec![TraceEvent {
+                event_type: TraceEventType::RoutingDecision,
                 task_type: TaskIntent::Edit,
                 provider: Provider::Anthropic,
                 model: "claude-sonnet".to_string(),
                 matched_rule: Some("rule".to_string()),
-                events: Vec::new(),
-            },
-        };
+                created_at: Utc::now(),
+                payload: serde_json::json!({ "step": 1 }),
+            }],
+        }
+    }
+
+    #[test]
+    fn should_roundtrip_trace_response() {
+        let response = TraceResponse { trace: trace() };
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(
             serde_json::from_str::<TraceResponse>(&json).unwrap(),
@@ -69,19 +69,9 @@ mod tests {
 
     #[test]
     fn should_nest_trace_under_trace_key() {
-        let response = TraceResponse {
-            trace: Trace {
-                id: "trace:xyz".to_string(),
-                session_id: Uuid::nil(),
-                task_type: TaskIntent::Edit,
-                provider: Provider::Anthropic,
-                model: "claude-sonnet".to_string(),
-                matched_rule: None,
-                events: Vec::new(),
-            },
-        };
+        let response = TraceResponse { trace: trace() };
         let value = serde_json::to_value(&response).unwrap();
-        assert_eq!(value["trace"]["id"], "trace:xyz");
-        assert_eq!(value["trace"]["task_type"], "edit");
+        assert_eq!(value["trace"]["session_id"], Uuid::nil().to_string());
+        assert_eq!(value["trace"]["events"][0]["task_type"], "edit");
     }
 }

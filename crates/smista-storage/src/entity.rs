@@ -49,4 +49,12 @@ pub use self::user_memory::{UserMemory, UserMemoryContent};
 pub trait Table {
     /// Returns the name of the table backing this entity.
     fn name() -> &'static str;
+
+    /// Returns the SurrealDB [`Table`] corresponding to this entity.
+    ///
+    /// This function must be used when binding the table name in a query.
+    #[inline(always)]
+    fn table() -> surrealdb::types::Table {
+        surrealdb::types::Table::from(Self::name())
+    }
 }

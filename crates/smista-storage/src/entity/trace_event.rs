@@ -11,36 +11,22 @@
 //! per-event source it is built from.
 
 use chrono::{DateTime, Utc};
+use smista_core::intent::TaskIntent;
+use smista_core::model::Provider;
+#[doc(inline)]
+pub use smista_core::trace::TraceEventType;
 use surrealdb::types::{RecordId, SurrealValue};
 
 use super::Table;
-
-/// The kind of a trace event.
-///
-/// **Provisional**: these variants are a placeholder until the private spec
-/// pins the trace taxonomy. Serialized as `snake_case`.
-#[derive(Debug, Clone, Copy, SurrealValue, PartialEq, Eq)]
-#[surreal(rename_all = "snake_case")]
-pub enum TraceEventType {
-    /// A message was recorded.
-    Message,
-    /// The router selected a provider/model for a task.
-    RoutingDecision,
-    /// Context was selected or excluded for a task.
-    ContextSelection,
-    /// A tool was requested or executed.
-    ToolCall,
-    /// A confirmation decision was recorded.
-    Approval,
-    /// Token usage or cost was recorded.
-    Cost,
-}
 
 /// A structured, append-only event recorded during task execution.
 ///
 /// The free-form payload lives in [`TraceEventContent`]; only queryable
 /// metadata stays here. `user` is stored redundantly so ownership checks never
-/// need a join.
+/// need a join. The routing fields (`task_type`, `provider`, `model`,
+/// `matched_rule`) carry the routing context of the task that emitted the
+/// event, so the assembled [`smista_core::trace::Trace`] read view can be built
+/// from trace events alone.
 #[derive(Debug, Clone, SurrealValue, PartialEq, Eq)]
 pub struct TraceEvent {
     /// Unique identifier for the event.
@@ -51,6 +37,14 @@ pub struct TraceEvent {
     pub user: RecordId,
     /// Kind of trace event.
     pub event_type: TraceEventType,
+    /// Task that the emitting routing context served.
+    pub task_type: TaskIntent,
+    /// Provider that served the task.
+    pub provider: Provider,
+    /// Model that served the task.
+    pub model: String,
+    /// Routing rule that matched, if any.
+    pub matched_rule: Option<String>,
     /// When the event occurred.
     pub created_at: DateTime<Utc>,
 }
@@ -97,6 +91,10 @@ mod tests {
             session: session.clone(),
             user: user.clone(),
             event_type: TraceEventType::RoutingDecision,
+            task_type: TaskIntent::Edit,
+            provider: Provider::Anthropic,
+            model: "claude".to_string(),
+            matched_rule: Some("edit -> claude".to_string()),
             created_at: Utc::now(),
         };
 
