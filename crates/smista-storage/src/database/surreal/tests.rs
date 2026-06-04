@@ -849,6 +849,83 @@ async fn should_not_append_message_to_unowned_session() {
 }
 
 #[tokio::test]
+async fn should_not_append_message_with_forged_user() {
+    let db = memory_db().await;
+    let (owner, session_id) = user_with_session(&db).await;
+    let other = Uuid::now_v7();
+    db.create_user(user(other))
+        .await
+        .expect("failed to create other user");
+
+    // The session belongs to `owner`, but the row claims `other` as its user.
+    let (message, content) = message_for(Uuid::now_v7(), session_id, other);
+    let err = db
+        .append_message(owner, message, content)
+        .await
+        .expect_err("appended a row whose user was forged");
+    assert!(matches!(err, StorageError::NotFound));
+}
+
+#[tokio::test]
+async fn should_not_append_routing_decision_with_forged_user() {
+    let db = memory_db().await;
+    let (owner, session_id) = user_with_session(&db).await;
+    let other = Uuid::now_v7();
+    db.create_user(user(other))
+        .await
+        .expect("failed to create other user");
+
+    let decision = routing_decision_for(Uuid::now_v7(), session_id, other);
+    let err = db
+        .append_routing_decision(owner, decision)
+        .await
+        .expect_err("appended a row whose user was forged");
+    assert!(matches!(err, StorageError::NotFound));
+}
+
+#[tokio::test]
+async fn should_not_append_trace_event_with_forged_user() {
+    let db = memory_db().await;
+    let (owner, session_id) = user_with_session(&db).await;
+    let other = Uuid::now_v7();
+    db.create_user(user(other))
+        .await
+        .expect("failed to create other user");
+
+    let (event, content) = trace_event_for(
+        Uuid::now_v7(),
+        session_id,
+        other,
+        Provider::OpenAI,
+        "gpt",
+        Utc::now(),
+        "{}",
+    );
+    let err = db
+        .append_trace_event(owner, event, content)
+        .await
+        .expect_err("appended a row whose user was forged");
+    assert!(matches!(err, StorageError::NotFound));
+}
+
+#[tokio::test]
+async fn should_not_record_context_memory_with_forged_user() {
+    let db = memory_db().await;
+    let (owner, session_id) = user_with_session(&db).await;
+    let other = Uuid::now_v7();
+    db.create_user(user(other))
+        .await
+        .expect("failed to create other user");
+
+    let (memory, content) = context_memory_for(Uuid::now_v7(), session_id, other, None, "fact");
+    let err = db
+        .record_context_memory(owner, memory, content)
+        .await
+        .expect_err("recorded a row whose user was forged");
+    assert!(matches!(err, StorageError::NotFound));
+}
+
+#[tokio::test]
 async fn should_not_get_session_state_of_other_user() {
     let db = memory_db().await;
     let (_owner, session_id) = user_with_session(&db).await;
