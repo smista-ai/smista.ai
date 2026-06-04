@@ -1222,3 +1222,272 @@ async fn should_not_record_context_memory_for_unowned_session() {
         .expect_err("recorded context memory for an unowned session");
     assert!(matches!(err, StorageError::NotFound));
 }
+
+// -- Retention / cleanup ----------------------------------------------------
+
+/// Builds a session with explicit `updated_at` and `archived_at`, so retention
+/// windows can be exercised deterministically.
+fn session_with(
+    id: Uuid,
+    user_id: Uuid,
+    updated_at: chrono::DateTime<Utc>,
+    archived_at: Option<chrono::DateTime<Utc>>,
+) -> Session {
+    Session {
+        id: record_id::<Session, _>(id),
+        user: record_id::<User, _>(user_id),
+        title: Some("session".to_string()),
+        created_at: Utc::now(),
+        updated_at,
+        archived_at,
+    }
+}
+
+#[tokio::test]
+async fn should_delete_expired_and_revoked_tokens() {
+    let db = memory_db().await;
+    let user_id = Uuid::now_v7();
+    db.create_user(user(user_id))
+        .await
+        .expect("failed to create user");
+
+    db.create_token(token_for(
+        Uuid::now_v7(),
+        user_id,
+        "live",
+        Utc::now() + Duration::hours(1),
+        None,
+    ))
+    .await
+    .expect("failed to create live token");
+    db.create_token(token_for(
+        Uuid::now_v7(),
+        user_id,
+        "expired",
+        Utc::now() - Duration::hours(1),
+        None,
+    ))
+    .await
+    .expect("failed to create expired token");
+    db.create_token(token_for(
+        Uuid::now_v7(),
+        user_id,
+        "revoked",
+        Utc::now() + Duration::hours(1),
+        Some(Utc::now()),
+    ))
+    .await
+    .expect("failed to create revoked token");
+
+    db.delete_expired_tokens()
+        .await
+        .expect("failed to delete expired tokens");
+
+    // Only the live token survives.
+    assert_eq!(
+        count::<AuthToken>(&db).await,
+        1,
+        "expired or revoked tokens remain"
+    );
+    assert!(
+        db.validate_token("live")
+            .await
+            .expect("failed to validate")
+            .is_some(),
+        "live token was deleted"
+    );
+}
+
+#[tokio::test]
+async fn should_purge_old_sessions_and_children() {
+    let db = memory_db().await;
+    let user_id = Uuid::now_v7();
+    db.create_user(user(user_id))
+        .await
+        .expect("failed to create user");
+
+    // An old, untouched session past the retention window, with a child row.
+    let old_id = Uuid::now_v7();
+    db.create_session(session_with(
+        old_id,
+        user_id,
+        Utc::now() - Duration::days(40),
+        None,
+    ))
+    .await
+    .expect("failed to create old session");
+    let (message, content) = message_for(Uuid::now_v7(), old_id, user_id);
+    db.append_message(user_id, message, content)
+        .await
+        .expect("failed to append message");
+
+    // A recent session inside the window.
+    let recent_id = Uuid::now_v7();
+    db.create_session(session_with(recent_id, user_id, Utc::now(), None))
+        .await
+        .expect("failed to create recent session");
+
+    db.purge_old_sessions(30)
+        .await
+        .expect("failed to purge old sessions");
+
+    assert!(
+        db.get_session(user_id, old_id)
+            .await
+            .expect("failed to get session")
+            .is_none(),
+        "old session not purged"
+    );
+    assert!(
+        db.get_session(user_id, recent_id)
+            .await
+            .expect("failed to get session")
+            .is_some(),
+        "recent session was purged"
+    );
+    assert_eq!(
+        count::<SessionMessage>(&db).await,
+        0,
+        "child rows of old session remain"
+    );
+    assert_eq!(
+        count::<SessionMessageContent>(&db).await,
+        0,
+        "child content of old session remains"
+    );
+}
+
+#[tokio::test]
+async fn should_not_purge_archived_session_as_old() {
+    let db = memory_db().await;
+    let user_id = Uuid::now_v7();
+    db.create_user(user(user_id))
+        .await
+        .expect("failed to create user");
+
+    // Old, but archived: it is the archived purge's responsibility, not this one.
+    let id = Uuid::now_v7();
+    db.create_session(session_with(
+        id,
+        user_id,
+        Utc::now() - Duration::days(40),
+        Some(Utc::now()),
+    ))
+    .await
+    .expect("failed to create archived session");
+
+    db.purge_old_sessions(30)
+        .await
+        .expect("failed to purge old sessions");
+
+    assert!(
+        db.get_session(user_id, id)
+            .await
+            .expect("failed to get session")
+            .is_some(),
+        "archived session was purged as old"
+    );
+}
+
+#[tokio::test]
+async fn should_purge_old_archived_sessions() {
+    let db = memory_db().await;
+    let user_id = Uuid::now_v7();
+    db.create_user(user(user_id))
+        .await
+        .expect("failed to create user");
+
+    // Archived long ago, past the window.
+    let old_id = Uuid::now_v7();
+    db.create_session(session_with(
+        old_id,
+        user_id,
+        Utc::now(),
+        Some(Utc::now() - Duration::days(40)),
+    ))
+    .await
+    .expect("failed to create old archived session");
+
+    // Archived recently, inside the window.
+    let recent_id = Uuid::now_v7();
+    db.create_session(session_with(
+        recent_id,
+        user_id,
+        Utc::now(),
+        Some(Utc::now()),
+    ))
+    .await
+    .expect("failed to create recent archived session");
+
+    db.purge_archived_sessions(30)
+        .await
+        .expect("failed to purge archived sessions");
+
+    assert!(
+        db.get_session(user_id, old_id)
+            .await
+            .expect("failed to get session")
+            .is_none(),
+        "old archived session not purged"
+    );
+    assert!(
+        db.get_session(user_id, recent_id)
+            .await
+            .expect("failed to get session")
+            .is_some(),
+        "recently archived session was purged"
+    );
+}
+
+#[tokio::test]
+async fn should_purge_old_traces() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let (old, old_content) = trace_event_for(
+        Uuid::now_v7(),
+        session_id,
+        user_id,
+        Provider::OpenAI,
+        "gpt",
+        Utc::now() - Duration::days(40),
+        "{}",
+    );
+    db.append_trace_event(user_id, old, old_content)
+        .await
+        .expect("failed to append old trace event");
+
+    let (recent, recent_content) = trace_event_for(
+        Uuid::now_v7(),
+        session_id,
+        user_id,
+        Provider::Anthropic,
+        "claude",
+        Utc::now(),
+        "{}",
+    );
+    db.append_trace_event(user_id, recent, recent_content)
+        .await
+        .expect("failed to append recent trace event");
+
+    db.purge_traces(30).await.expect("failed to purge traces");
+
+    assert_eq!(
+        count::<TraceEvent>(&db).await,
+        1,
+        "old trace event not purged"
+    );
+    assert_eq!(
+        count::<TraceEventContent>(&db).await,
+        1,
+        "old trace content not purged"
+    );
+    // The session itself outlives a trace purge.
+    assert!(
+        db.get_session(user_id, session_id)
+            .await
+            .expect("failed to get session")
+            .is_some(),
+        "session was purged by trace cleanup"
+    );
+}

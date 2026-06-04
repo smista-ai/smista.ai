@@ -329,4 +329,29 @@ pub trait Database: Send + Sync {
         session_id: Uuid,
         id: Uuid,
     ) -> impl Future<Output = StorageResult<()>> + Send;
+
+    // -- Cleanup ------------------------------------------------------------
+
+    /// Deletes all expired or revoked auth tokens.
+    fn delete_expired_tokens(&self) -> impl Future<Output = StorageResult<()>> + Send;
+
+    /// Purge all sessions older than `session_retention_days` and their child rows.
+    ///
+    /// Skips archived sessions, which are purged separately by [`Database::purge_archived_sessions`].
+    fn purge_old_sessions(
+        &self,
+        session_retention_days: u32,
+    ) -> impl Future<Output = StorageResult<()>> + Send;
+
+    /// Purge all the archived sessions older than `archived_session_retention_days` and their child rows.
+    fn purge_archived_sessions(
+        &self,
+        archived_session_retention_days: u32,
+    ) -> impl Future<Output = StorageResult<()>> + Send;
+
+    /// Purge all the deleted sessions older than `deleted_session_retention_days` and their child rows.
+    fn purge_traces(
+        &self,
+        trace_retention_days: u32,
+    ) -> impl Future<Output = StorageResult<()>> + Send;
 }

@@ -1,10 +1,66 @@
 //! Router runtime configuration types and their defaults.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use smista_core::model::Provider;
+use url::Url;
+
+/// The default [`RouterConfig::host`] value: the IPv4 loopback address.
+const DEFAULT_HOST: &str = "127.0.0.1";
+/// The default [`RouterConfig::port`] value.
+const DEFAULT_PORT: u16 = 7331;
+
+/// The default [`RouterAuthConfig::token_ttl_seconds`] value: 1 day.
+const DEFAULT_TOKEN_TTL_SECONDS: u64 = 86_400;
+/// The default [`RouterAuthConfig::api_key_version`] value.
+const DEFAULT_API_KEY_VERSION: &str = "01";
+
+/// The default [`StorageConfig::namespace`] value.
+const DEFAULT_STORAGE_NAMESPACE: &str = "smista";
+/// The default [`StorageConfig::database`] value.
+const DEFAULT_STORAGE_DATABASE: &str = "local";
+
+/// The default [`RouterLimits::max_request_body_bytes`] value: 10 MiB.
+const DEFAULT_MAX_REQUEST_BODY_BYTES: u64 = 10_485_760;
+/// The default [`RouterLimits::max_context_bytes`] value: 5 MiB.
+const DEFAULT_MAX_CONTEXT_BYTES: u64 = 5_242_880;
+/// The default [`RouterLimits::max_concurrent_requests`] value.
+const DEFAULT_MAX_CONCURRENT_REQUESTS: u32 = 8;
+/// The default [`RouterLimits::request_timeout_ms`] value: 2 minutes.
+const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 120_000;
+/// The default [`RouterLimits::provider_timeout_ms`] value: 3 minutes.
+const DEFAULT_PROVIDER_TIMEOUT_MS: u64 = 180_000;
+/// The default [`RouterLimits::tool_timeout_ms`] value: 1 minute.
+const DEFAULT_TOOL_TIMEOUT_MS: u64 = 60_000;
+
+/// The default [`LoggingConfig::level`] value.
+const DEFAULT_LOG_LEVEL: &str = "info";
+/// The default [`LoggingConfig::format`] value.
+const DEFAULT_LOG_FORMAT: &str = "compact";
+
+/// The default [`RetentionConfig::trace_retention_days`] value: 90 days.
+const DEFAULT_TRACE_RETENTION_DAYS: u32 = 90;
+/// The default [`RetentionConfig::session_retention_days`] value: 1 year.
+const DEFAULT_SESSION_RETENTION_DAYS: u32 = 365;
+/// The default [`RetentionConfig::archived_session_retention_days`] value: 30 days.
+const DEFAULT_ARCHIVED_SESSION_RETENTION_DAYS: u32 = 30;
+/// The default [`RetentionConfig::cleanup_interval_seconds`] value: 1 hour.
+const DEFAULT_CLEANUP_INTERVAL_SECONDS: u64 = 3_600;
+
+/// The default [`OllamaConfig::base_url`] value: the local Ollama endpoint.
+const DEFAULT_OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434";
+/// The default [`OllamaConfig::model_refresh_interval_seconds`] value: 5 minutes.
+const DEFAULT_OLLAMA_MODEL_REFRESH_INTERVAL_SECONDS: u64 = 300;
+
+/// The default [`OllamaLimits::max_concurrent_requests`] value.
+const DEFAULT_OLLAMA_MAX_CONCURRENT_REQUESTS: u32 = 4;
+/// The default [`OllamaLimits::request_timeout_ms`] value: 3 minutes.
+const DEFAULT_OLLAMA_REQUEST_TIMEOUT_MS: u64 = 180_000;
+/// The default [`OllamaLimits::pull_timeout_ms`] value: 10 minutes.
+const DEFAULT_OLLAMA_PULL_TIMEOUT_MS: u64 = 600_000;
 
 /// Top-level router runtime configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,8 +91,8 @@ pub struct RouterConfig {
 impl Default for RouterConfig {
     fn default() -> Self {
         Self {
-            host: "127.0.0.1".to_string(),
-            port: 7331,
+            host: DEFAULT_HOST.to_string(),
+            port: DEFAULT_PORT,
             storage: StorageConfig::default(),
             auth: RouterAuthConfig::default(),
             limits: RouterLimits::default(),
@@ -94,9 +150,9 @@ pub struct StorageConfig {
     /// Deployment mode.
     pub mode: StorageMode,
     /// Database file path (embedded mode).
-    pub path: Option<String>,
+    pub path: Option<PathBuf>,
     /// Database URL (remote mode).
-    pub url: Option<String>,
+    pub url: Option<Url>,
     /// Authentication username (remote mode).
     pub username: Option<String>,
     /// Authentication password (remote mode); never serialized.
@@ -117,8 +173,8 @@ impl Default for StorageConfig {
             url: None,
             username: None,
             password: None,
-            namespace: "smista".to_string(),
-            database: "local".to_string(),
+            namespace: DEFAULT_STORAGE_NAMESPACE.to_string(),
+            database: DEFAULT_STORAGE_DATABASE.to_string(),
         }
     }
 }
@@ -154,8 +210,8 @@ pub struct RouterAuthConfig {
 impl Default for RouterAuthConfig {
     fn default() -> Self {
         Self {
-            token_ttl_seconds: 86_400,
-            api_key_version: "01".to_string(),
+            token_ttl_seconds: DEFAULT_TOKEN_TTL_SECONDS,
+            api_key_version: DEFAULT_API_KEY_VERSION.to_string(),
             local_bootstrap_enabled: true,
         }
     }
@@ -182,12 +238,12 @@ pub struct RouterLimits {
 impl Default for RouterLimits {
     fn default() -> Self {
         Self {
-            max_request_body_bytes: 10_485_760,
-            max_context_bytes: 5_242_880,
-            max_concurrent_requests: 8,
-            request_timeout_ms: 120_000,
-            provider_timeout_ms: 180_000,
-            tool_timeout_ms: 60_000,
+            max_request_body_bytes: DEFAULT_MAX_REQUEST_BODY_BYTES,
+            max_context_bytes: DEFAULT_MAX_CONTEXT_BYTES,
+            max_concurrent_requests: DEFAULT_MAX_CONCURRENT_REQUESTS,
+            request_timeout_ms: DEFAULT_REQUEST_TIMEOUT_MS,
+            provider_timeout_ms: DEFAULT_PROVIDER_TIMEOUT_MS,
+            tool_timeout_ms: DEFAULT_TOOL_TIMEOUT_MS,
         }
     }
 }
@@ -207,8 +263,8 @@ pub struct LoggingConfig {
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
-            level: "info".to_string(),
-            format: "compact".to_string(),
+            level: DEFAULT_LOG_LEVEL.to_string(),
+            format: DEFAULT_LOG_FORMAT.to_string(),
             redact_secrets: true,
         }
     }
@@ -232,16 +288,19 @@ pub struct RetentionConfig {
     pub trace_retention_days: u32,
     /// Days to retain sessions.
     pub session_retention_days: u32,
-    /// Days to retain deleted sessions before purge.
-    pub deleted_session_retention_days: u32,
+    /// Days to retain archived sessions before purge.
+    pub archived_session_retention_days: u32,
+    /// Cleanup interval, in seconds.
+    pub cleanup_interval_seconds: u64,
 }
 
 impl Default for RetentionConfig {
     fn default() -> Self {
         Self {
-            trace_retention_days: 90,
-            session_retention_days: 365,
-            deleted_session_retention_days: 30,
+            trace_retention_days: DEFAULT_TRACE_RETENTION_DAYS,
+            session_retention_days: DEFAULT_SESSION_RETENTION_DAYS,
+            archived_session_retention_days: DEFAULT_ARCHIVED_SESSION_RETENTION_DAYS,
+            cleanup_interval_seconds: DEFAULT_CLEANUP_INTERVAL_SECONDS,
         }
     }
 }
@@ -253,7 +312,7 @@ pub struct OllamaConfig {
     /// Whether the Ollama backend is enabled.
     pub enabled: bool,
     /// Ollama base URL.
-    pub base_url: String,
+    pub base_url: Url,
     /// Whether to auto-discover installed models.
     pub auto_discover_models: bool,
     /// Whether to health-check Ollama at startup.
@@ -272,11 +331,14 @@ impl Default for OllamaConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            base_url: "http://127.0.0.1:11434".to_string(),
+            base_url: DEFAULT_OLLAMA_BASE_URL
+                .to_string()
+                .parse()
+                .expect("invalid default URL"),
             auto_discover_models: true,
             startup_healthcheck: true,
             startup_required: false,
-            model_refresh_interval_seconds: 300,
+            model_refresh_interval_seconds: DEFAULT_OLLAMA_MODEL_REFRESH_INTERVAL_SECONDS,
             limits: OllamaLimits::default(),
             models: OllamaModels::default(),
         }
@@ -298,9 +360,9 @@ pub struct OllamaLimits {
 impl Default for OllamaLimits {
     fn default() -> Self {
         Self {
-            max_concurrent_requests: 4,
-            request_timeout_ms: 180_000,
-            pull_timeout_ms: 600_000,
+            max_concurrent_requests: DEFAULT_OLLAMA_MAX_CONCURRENT_REQUESTS,
+            request_timeout_ms: DEFAULT_OLLAMA_REQUEST_TIMEOUT_MS,
+            pull_timeout_ms: DEFAULT_OLLAMA_PULL_TIMEOUT_MS,
         }
     }
 }
@@ -336,6 +398,15 @@ mod tests {
     #[test]
     fn should_redact_secrets_by_default() {
         assert!(LoggingConfig::default().redact_secrets);
+    }
+
+    #[test]
+    fn should_set_retention_defaults() {
+        let retention = RetentionConfig::default();
+        assert_eq!(retention.trace_retention_days, 90);
+        assert_eq!(retention.session_retention_days, 365);
+        assert_eq!(retention.archived_session_retention_days, 30);
+        assert_eq!(retention.cleanup_interval_seconds, 3_600);
     }
 
     #[test]
@@ -423,7 +494,11 @@ mod tests {
         let config: RouterConfig = toml::from_str(toml).unwrap();
         assert!(config.ollama.enabled);
         assert!(config.ollama.models.allow_pull);
-        // Untouched nested defaults remain.
-        assert_eq!(config.ollama.base_url, "http://127.0.0.1:11434");
+        // Untouched nested defaults remain. `Url` normalizes an authority-only
+        // URL with a trailing slash, so the rendered default carries one.
+        assert_eq!(
+            config.ollama.base_url.to_string(),
+            "http://127.0.0.1:11434/"
+        );
     }
 }

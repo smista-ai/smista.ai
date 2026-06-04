@@ -57,6 +57,7 @@ allowed_origins = []
 trace_retention_days = 90
 session_retention_days = 365
 deleted_session_retention_days = 30
+cleanup_interval_seconds = 3600
 
 [router.providers.openai]
 base_url = "https://api.openai.com/v1"
@@ -208,16 +209,18 @@ The `[router.cors]` table accepts:
 [router.retention]
 trace_retention_days = 90
 session_retention_days = 365
-deleted_session_retention_days = 30
+archived_session_retention_days = 30
+cleanup_interval_seconds = 3600
 ```
 
 The `[router.retention]` table accepts:
 
-| Key                              | Type    | Default | Purpose                                       |
-| -------------------------------- | ------- | ------- | --------------------------------------------- |
-| `trace_retention_days`           | integer | `90`    | Days to retain traces.                        |
-| `session_retention_days`         | integer | `365`   | Days to retain sessions.                      |
-| `deleted_session_retention_days` | integer | `30`    | Days to retain deleted sessions before purge. |
+| Key                               | Type    | Default | Purpose                                        |
+| --------------------------------- | ------- | ------- | ---------------------------------------------- |
+| `trace_retention_days`            | integer | `90`    | Days to retain traces.                         |
+| `session_retention_days`          | integer | `365`   | Days to retain sessions.                       |
+| `archived_session_retention_days` | integer | `30`    | Days to retain archived sessions before purge. |
+| `cleanup_interval_seconds`        | integer | `3600`  | Interval between cleanup runs, in seconds.     |
 
 ## Providers
 

@@ -28,7 +28,7 @@ categories = ["command-line-utilities", "development-tools"]
 anyhow = "1"
 axum = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 dirs = "6"
 globset = "0.4"
 http = "1"
@@ -55,6 +55,7 @@ tempfile = "3"
 testcontainers = "0.27"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
 toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -63,6 +64,7 @@ ts-rs = { version = "12", features = [
   "serde-json-impl",
   "uuid-impl",
 ] }
+url = { version = "2", features = ["serde"] }
 uuid = { version = "1", features = ["serde", "v7"] }
 yaml_serde = "0.10"
 
