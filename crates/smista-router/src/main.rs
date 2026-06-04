@@ -9,9 +9,17 @@
 //! source of truth for routing decisions and hosts the HTTP JSON API.
 //!
 
-pub mod config;
+mod args;
+mod config;
+mod log;
+mod retention;
+mod signal;
+mod storage;
 
-use tracing_subscriber::EnvFilter;
+use std::time::Duration;
+
+use clap::Parser as _;
+use tokio_util::sync::CancellationToken;
 
 const STACK_SIZE: usize = 10 * 1024 * 1024; // 10MiB
 
@@ -20,19 +28,60 @@ fn main() -> anyhow::Result<()> {
         .enable_all()
         .thread_stack_size(STACK_SIZE)
         .build()?
-        .block_on(async { tokio_main().await })
+        .block_on(tokio_main())
 }
 
 async fn tokio_main() -> anyhow::Result<()> {
-    // TODO: change, use different and adeguate config
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
-    tracing::debug!("smista-router starting");
+    // parse CLI args and env vars
+    let args = args::Args::parse();
+    // init logging
+    log::init(&args.log_filter, args.log_file.as_deref())?;
+    tracing::info!("smista-router starting");
 
-    println!("smista-router: not yet implemented");
+    // parse configuration file
+    let config_path = args
+        .config
+        .or(config::paths::router_toml())
+        .ok_or_else(|| anyhow::anyhow!("no available configuration file. Specify a configuration file with `-c` or `--config`"))?;
+    tracing::debug!("using configuration file: {}", config_path.display());
+    let config = config::load(&config_path)?;
+    tracing::debug!("configuration loaded successfully");
+
+    // validate configuration
+    let validate_report = config::validate::validate(&config);
+    if !validate_report.is_ok() {
+        anyhow::bail!("configuration is invalid:\n{}", validate_report.to_human());
+    }
+    for warning in validate_report.warnings() {
+        tracing::warn!("configuration warning: {}", warning.to_human());
+    }
+    tracing::info!("configuration loaded and validated successfully");
+
+    // run services
+    let exit = CancellationToken::new();
+
+    // init storage
+    tracing::debug!("initializing storage");
+    let database = storage::build_storage(&config.storage).await?;
+    tracing::debug!("storage initialized successfully");
+
+    // start storage retention task
+    let retention_service = retention::RetentionService::new(retention::RetentionServiceConfig {
+        database,
+        exit: exit.clone(),
+        trace_retention_days: config.retention.trace_retention_days,
+        session_retention_days: config.retention.session_retention_days,
+        archived_session_retention_days: config.retention.archived_session_retention_days,
+        cleanup_interval: Duration::from_secs(config.retention.cleanup_interval_seconds),
+    })
+    .run();
+
+    // cancel the exit token on SIGINT/SIGTERM so services wind down
+    let shutdown_listener = tokio::spawn(signal::wait_for_shutdown(exit));
+
+    // wait for all services to complete
+    let _ = tokio::join!(retention_service, shutdown_listener);
+    tracing::info!("smista-router stopped");
 
     Ok(())
 }

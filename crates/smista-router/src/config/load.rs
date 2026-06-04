@@ -98,6 +98,7 @@ pub fn load(path: &Path) -> Result<RouterConfig, RouterConfigError> {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
@@ -135,7 +136,10 @@ mod tests {
         assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.port, 7331);
         assert_eq!(config.storage.database, "local");
-        assert_eq!(config.storage.path.as_deref(), Some(".smista/db"));
+        assert_eq!(
+            config.storage.path.as_deref(),
+            Some(Path::new(".smista/db"))
+        );
         assert_eq!(config.auth.token_ttl_seconds, 86_400);
         assert_eq!(config.limits.max_request_body_bytes, 10_485_760);
         assert_eq!(config.limits.provider_timeout_ms, 180_000);

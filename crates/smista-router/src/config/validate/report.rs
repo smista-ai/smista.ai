@@ -49,6 +49,19 @@ pub struct ValidationError {
     pub location: Option<String>,
 }
 
+impl ValidationError {
+    /// Renders the finding as a human-readable line, e.g. `error [server.port]: port 0 is not a valid bind port`.
+    #[must_use]
+    pub fn to_human(&self) -> String {
+        let severity = match self.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        let location = self.location.as_deref().unwrap_or("-");
+        format!("{severity} [{location}]: {}", self.message)
+    }
+}
+
 /// The outcome of validating a router configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct ValidationReport {
@@ -88,12 +101,8 @@ impl ValidationReport {
     pub fn to_human(&self) -> String {
         let mut out = String::new();
         for finding in self.errors.iter().chain(self.warnings.iter()) {
-            let severity = match finding.severity {
-                Severity::Error => "error",
-                Severity::Warning => "warning",
-            };
-            let location = finding.location.as_deref().unwrap_or("-");
-            out.push_str(&format!("{severity} [{location}]: {}\n", finding.message));
+            out.push_str(&finding.to_human());
+            out.push('\n');
         }
         out
     }
@@ -102,6 +111,33 @@ impl ValidationReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn should_render_finding_with_location() {
+        let finding = ValidationError {
+            code: ValidationCode::InvalidPort,
+            severity: Severity::Error,
+            message: "port 0 is not a valid bind port".into(),
+            location: Some("router.port".into()),
+        };
+
+        assert_eq!(
+            finding.to_human(),
+            "error [router.port]: port 0 is not a valid bind port"
+        );
+    }
+
+    #[test]
+    fn should_render_finding_without_location_as_dash() {
+        let finding = ValidationError {
+            code: ValidationCode::UnsafeCors,
+            severity: Severity::Warning,
+            message: "CORS allows any origin".into(),
+            location: None,
+        };
+
+        assert_eq!(finding.to_human(), "warning [-]: CORS allows any origin");
+    }
 
     #[test]
     fn should_render_human_lines() {

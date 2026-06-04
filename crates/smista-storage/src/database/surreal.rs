@@ -6,7 +6,7 @@ mod schema;
 #[cfg(test)]
 mod tests;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use smista_core::trace::{Trace, TraceEvent as CoreTraceEvent};
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
@@ -30,6 +30,7 @@ use crate::entity::{
 use crate::{StorageError, StorageResult};
 
 /// [`Database`] implementation backed by SurrealDB.
+#[derive(Debug, Clone)]
 pub struct SurrealDatabase(Surreal<Any>);
 
 impl SurrealDatabase {
@@ -105,6 +106,41 @@ DELETE session_routing_decision WHERE session = $sess;
 DELETE session_context_reference WHERE session = $sess;
 DELETE session_approval WHERE session = $sess;
 DELETE $sess;
+"#;
+
+/// Bulk ownership cascade for the retention purges.
+///
+/// Mirrors [`DELETE_SESSION_CASCADE`] but clears every session whose id is in
+/// the bound `$targets` list rather than a single session, so a cleanup pass
+/// removes many sessions and all of their child rows in one transaction. The
+/// `_content` tables share their base row's record key and are matched with
+/// `record::id`.
+const PURGE_SESSIONS_CASCADE: &str = r#"
+DELETE session_message_content WHERE record::id(id) IN (SELECT VALUE record::id(id) FROM session_message WHERE session IN $targets);
+DELETE session_message WHERE session IN $targets;
+DELETE session_tool_call_content WHERE record::id(id) IN (SELECT VALUE record::id(id) FROM session_tool_call WHERE session IN $targets);
+DELETE session_tool_call WHERE session IN $targets;
+DELETE session_plan_content WHERE record::id(id) IN (SELECT VALUE record::id(id) FROM session_plan WHERE session IN $targets);
+DELETE session_plan WHERE session IN $targets;
+DELETE session_diff_content WHERE record::id(id) IN (SELECT VALUE record::id(id) FROM session_diff WHERE session IN $targets);
+DELETE session_diff WHERE session IN $targets;
+DELETE trace_event_content WHERE record::id(id) IN (SELECT VALUE record::id(id) FROM trace_event WHERE session IN $targets);
+DELETE trace_event WHERE session IN $targets;
+DELETE context_memory_content WHERE record::id(id) IN (SELECT VALUE record::id(id) FROM context_memory WHERE session IN $targets);
+DELETE context_memory WHERE session IN $targets;
+DELETE session_routing_decision WHERE session IN $targets;
+DELETE session_context_reference WHERE session IN $targets;
+DELETE session_approval WHERE session IN $targets;
+DELETE session WHERE id IN $targets;
+"#;
+
+/// Bulk cleanup for trace events past their retention window.
+///
+/// Removes every [`TraceEvent`] created before the bound `$cutoff` together
+/// with its paired `_content` row, leaving the owning sessions intact.
+const PURGE_TRACES: &str = r#"
+DELETE trace_event_content WHERE record::id(id) IN (SELECT VALUE record::id(id) FROM trace_event WHERE created_at < $cutoff);
+DELETE trace_event WHERE created_at < $cutoff;
 "#;
 
 impl SurrealDatabase {
@@ -248,6 +284,40 @@ impl SurrealDatabase {
 
         tx.commit().await?;
         updated.ok_or(StorageError::NotFound)
+    }
+
+    /// Purges every session selected by `select_targets` together with its
+    /// child rows, via [`PURGE_SESSIONS_CASCADE`].
+    ///
+    /// `select_targets` is a `SELECT VALUE id FROM session WHERE …` expression
+    /// that may reference the bound `$cutoff`; it is evaluated into `$targets`
+    /// inside the same transaction as the cascade, so selection and deletion
+    /// are atomic with no read-modify-write window. An empty selection deletes
+    /// nothing.
+    async fn purge_sessions(
+        &self,
+        select_targets: &str,
+        cutoff: DateTime<Utc>,
+    ) -> StorageResult<()> {
+        let query = format!("LET $targets = ({select_targets});{PURGE_SESSIONS_CASCADE}");
+
+        let tx = self.0.clone().begin().await?;
+        let outcome = tx
+            .query(query)
+            .bind(("cutoff", cutoff))
+            .await
+            .and_then(|response| response.check());
+
+        match outcome {
+            Ok(_) => {
+                tx.commit().await?;
+                Ok(())
+            }
+            Err(err) => {
+                let _ = tx.cancel().await;
+                Err(err.into())
+            }
+        }
     }
 
     /// Deletes a base row and its paired `_content` row in one transaction.
@@ -873,5 +943,68 @@ impl Database for SurrealDatabase {
             ContextMemoryContent::name(),
         )
         .await
+    }
+
+    async fn delete_expired_tokens(&self) -> StorageResult<()> {
+        tracing::debug!("deleting expired and revoked auth tokens");
+
+        self.0
+            .query("DELETE auth_token WHERE expires_at <= time::now() OR revoked_at IS NOT NONE")
+            .await?
+            .check()?;
+
+        Ok(())
+    }
+
+    async fn purge_old_sessions(&self, session_retention_days: u32) -> StorageResult<()> {
+        tracing::debug!("purging sessions older than {session_retention_days} days");
+        let cutoff = Utc::now() - Duration::days(i64::from(session_retention_days));
+
+        // Archived sessions are governed by their own retention window, so the
+        // age-based purge skips them.
+        self.purge_sessions(
+            "SELECT VALUE id FROM session WHERE archived_at IS NONE AND updated_at < $cutoff",
+            cutoff,
+        )
+        .await
+    }
+
+    async fn purge_archived_sessions(
+        &self,
+        archived_session_retention_days: u32,
+    ) -> StorageResult<()> {
+        tracing::debug!(
+            "purging sessions archived more than {archived_session_retention_days} days ago"
+        );
+        let cutoff = Utc::now() - Duration::days(i64::from(archived_session_retention_days));
+
+        self.purge_sessions(
+            "SELECT VALUE id FROM session WHERE archived_at IS NOT NONE AND archived_at < $cutoff",
+            cutoff,
+        )
+        .await
+    }
+
+    async fn purge_traces(&self, trace_retention_days: u32) -> StorageResult<()> {
+        tracing::debug!("purging trace events older than {trace_retention_days} days");
+        let cutoff = Utc::now() - Duration::days(i64::from(trace_retention_days));
+
+        let tx = self.0.clone().begin().await?;
+        let outcome = tx
+            .query(PURGE_TRACES)
+            .bind(("cutoff", cutoff))
+            .await
+            .and_then(|response| response.check());
+
+        match outcome {
+            Ok(_) => {
+                tx.commit().await?;
+                Ok(())
+            }
+            Err(err) => {
+                let _ = tx.cancel().await;
+                Err(err.into())
+            }
+        }
     }
 }

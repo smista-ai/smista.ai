@@ -5,6 +5,11 @@
 //! the API, so they live here rather than in `smista-core`. Path resolution lives
 //! in [`paths`].
 
+#![expect(
+    unused_imports,
+    reason = "Wait for full implementation for full type usage."
+)]
+
 pub mod paths;
 pub mod validate;
 
