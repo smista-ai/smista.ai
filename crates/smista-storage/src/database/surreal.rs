@@ -578,12 +578,12 @@ impl Database for SurrealDatabase {
         }))
     }
 
-    async fn get_latest_trace(
+    async fn get_session_trace_events(
         &self,
         user_id: Uuid,
         session_id: Uuid,
     ) -> StorageResult<Option<Trace>> {
-        tracing::debug!("loading latest trace for session {session_id} and user {user_id}");
+        tracing::debug!("loading trace events for session {session_id} and user {user_id}");
 
         let Some(session) = self.get_session(user_id, session_id).await? else {
             return Ok(None);
