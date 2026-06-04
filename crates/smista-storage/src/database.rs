@@ -18,7 +18,7 @@
 //! (`Uuid::now_v7`), so ids are portable and time-sortable. Every user-scoped
 //! operation takes the authenticated `user_id`; the implementation rejects
 //! cross-user access by treating a record owned by another user as absent —
-//! a read returns `None` and a write returns [`StorageError::NotFound`],
+//! a read returns `None` and a write returns [`StorageError::NotFound`](crate::StorageError::NotFound),
 //! never disclosing that the record exists.
 //!
 //! ## Trace events

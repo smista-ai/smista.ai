@@ -4532,6 +4532,7 @@ dependencies = [
  "chrono",
  "secrecy",
  "serde",
+ "serde_json",
  "smista-core",
  "surrealdb",
  "tempfile",

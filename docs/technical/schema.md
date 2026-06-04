@@ -109,6 +109,10 @@ erDiagram
         uuid session FK
         uuid user FK
         enum event_type
+        enum task_type
+        enum provider
+        string model
+        string matched_rule "optional"
     }
     user_memory {
         uuid id PK
@@ -366,16 +370,22 @@ Paired 1:1 with `session_diff` (same record id).
 
 A structured, append-only event recorded during task execution; the detailed
 history surfaced by `/trace`. The append/get ops live on the storage `Database`;
-the assembled read view is `smista-core`'s `Trace`. The free-form payload lives
-in `trace_event_content`.
+the assembled read view is `smista-core`'s `Trace`. The routing fields
+(`task_type`, `provider`, `model`, `matched_rule`) carry the routing context of
+the task that emitted the event, so `get_latest_trace` assembles the `Trace`
+from trace events alone. The free-form payload lives in `trace_event_content`.
 
-| Field        | Type              | Description                     |
-| ------------ | ----------------- | ------------------------------- |
-| `id`         | UUIDv7            | Unique event id (record id).    |
-| `session`    | session reference | Session the event belongs to.   |
-| `user`       | user reference    | Owner, enforced on every query. |
-| `event_type` | enum              | Kind of trace event.            |
-| `created_at` | datetime          | When the event occurred.        |
+| Field          | Type              | Description                        |
+| -------------- | ----------------- | ---------------------------------- |
+| `id`           | UUIDv7            | Unique event id (record id).       |
+| `session`      | session reference | Session the event belongs to.      |
+| `user`         | user reference    | Owner, enforced on every query.    |
+| `event_type`   | enum              | Kind of trace event.               |
+| `task_type`    | `TaskIntent` enum | Task the emitting context served.  |
+| `provider`     | `Provider` enum   | Provider that served the task.     |
+| `model`        | string            | Model that served the task.        |
+| `matched_rule` | string, option    | Routing rule that matched, if any. |
+| `created_at`   | datetime          | When the event occurred.           |
 
 ### trace_event_content
 
@@ -384,6 +394,24 @@ Paired 1:1 with `trace_event` (same record id).
 | Field     | Type   | Description               |
 | --------- | ------ | ------------------------- |
 | `payload` | string | Structured event payload. |
+
+The `payload` is a JSON object, serialized to a string. Its shape is determined
+by the owning event's `event_type` and mirrors the fields of the matching
+metadata entity. `?` marks an optional field; `int` is a JSON number and a
+monetary `cost` is a decimal string (never a float).
+
+| `event_type`        | `payload` shape                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `message`           | `{ "role": string, "provider": string, "model": string }`                                                                            |
+| `routing_decision`  | `{ "provider": string, "model": string, "matched_rule"?: string, "fallback_used"?: bool, "override_used"?: bool, "reason": string }` |
+| `context_selection` | `{ "path"?: string, "kind": string, "included": bool, "reason": string }`                                                            |
+| `tool_call`         | `{ "tool_name": string, "status": string, "arguments"?: string, "result"?: string, "error"?: string }`                               |
+| `approval`          | `{ "target_type": string, "target_id": string, "decision": string, "reason"?: string }`                                              |
+| `cost`              | `{ "provider": string, "model": string, "input_tokens": int, "output_tokens": int, "cost"?: string }`                                |
+
+On read, each event row (metadata + this payload) is mapped to one `TraceEvent`
+in the assembled `smista-core` `Trace`, where this payload becomes the event's
+`payload` field.
 
 ### user_memory
 

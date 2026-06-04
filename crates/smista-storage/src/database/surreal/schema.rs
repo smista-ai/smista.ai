@@ -151,6 +151,10 @@ DEFINE FIELD IF NOT EXISTS diff ON TABLE session_diff_content TYPE string;
 DEFINE FIELD IF NOT EXISTS session ON TABLE trace_event TYPE record<session> ASSERT record::exists($value);
 DEFINE FIELD IF NOT EXISTS user ON TABLE trace_event TYPE record<user> ASSERT record::exists($value);
 DEFINE FIELD IF NOT EXISTS event_type ON TABLE trace_event TYPE string;
+DEFINE FIELD IF NOT EXISTS task_type ON TABLE trace_event TYPE string;
+DEFINE FIELD IF NOT EXISTS provider ON TABLE trace_event TYPE string;
+DEFINE FIELD IF NOT EXISTS model ON TABLE trace_event TYPE string;
+DEFINE FIELD IF NOT EXISTS matched_rule ON TABLE trace_event TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE trace_event TYPE datetime;
 
 -- trace_event_content

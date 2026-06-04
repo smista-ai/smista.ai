@@ -14,7 +14,7 @@ use super::Table;
 /// **Provisional**: these variants are a placeholder until the private spec
 /// pins the plan lifecycle. Serialized as `snake_case`.
 #[derive(Debug, Clone, Copy, SurrealValue, PartialEq, Eq)]
-#[surreal(rename_all = "snake_case")]
+#[surreal(rename_all = "snake_case", untagged)]
 pub enum PlanStatus {
     /// Generated, not yet approved.
     Draft,

@@ -374,7 +374,11 @@ mod tests {
         let config: RouterConfig = toml::from_str(toml).unwrap();
         assert_eq!(config.storage.username.as_deref(), Some("root"));
         assert_eq!(
-            config.storage.password.as_ref().map(ExposeSecret::expose_secret),
+            config
+                .storage
+                .password
+                .as_ref()
+                .map(ExposeSecret::expose_secret),
             Some("s3cret")
         );
     }
