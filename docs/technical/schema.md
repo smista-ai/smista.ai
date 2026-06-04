@@ -60,7 +60,6 @@ erDiagram
         datetime created_at
         datetime updated_at
         datetime archived_at "optional"
-        datetime deleted_at "optional"
     }
     session_message {
         uuid id PK
@@ -214,7 +213,6 @@ user, who is the only identity allowed to access it.
 | `created_at`  | datetime         | When the session was created.           |
 | `updated_at`  | datetime         | When the session was last updated.      |
 | `archived_at` | datetime, option | When the session was archived.          |
-| `deleted_at`  | datetime, option | When the session was soft-deleted.      |
 
 ### session_message
 

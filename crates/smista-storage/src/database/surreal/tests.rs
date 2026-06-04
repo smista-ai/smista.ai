@@ -309,7 +309,6 @@ fn session_for(id: Uuid, user_id: Uuid) -> Session {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         archived_at: None,
-        deleted_at: None,
     }
 }
 
