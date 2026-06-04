@@ -3,10 +3,13 @@
 //! [`apply`] runs once on connect, after namespace/database selection and any
 //! sign-in. Every statement uses `IF NOT EXISTS`, so re-running it on an
 //! already-initialized database (including a pre-provisioned remote) is a
-//! no-op. Tables are declared `SCHEMALESS`: field typing is enforced in Rust
-//! and deferred here, while the indexes below enforce the invariants that the
-//! storage layer relies on — uniqueness of secret hashes and fast,
-//! ownership-scoped lookups (there are no foreign keys to lean on).
+//! no-op. Tables are declared `SCHEMAFULL`: every field is typed here, so the
+//! database rejects unknown or mistyped fields. Reference fields are typed as
+//! `record<…>` and carry an `ASSERT record::exists($value)` guard, giving a
+//! foreign-key-like existence check on write. SurrealDB still performs no
+//! cascade or restrict on delete, so ownership cascade and cleanup stay the
+//! storage layer's responsibility. The indexes below enforce the remaining
+//! invariants: uniqueness of secret hashes and fast, ownership-scoped lookups.
 //!
 //! [`SurrealDatabase`]: super::SurrealDatabase
 
@@ -15,28 +18,162 @@ use surrealdb::engine::any::Any;
 
 /// The schema migration, run verbatim on every connect.
 const MIGRATION: &str = r#"
--- Tables. SCHEMALESS: field shapes are validated in Rust; SCHEMAFULL typing is
--- deferred until the CRUD layer can verify each field mapping.
-DEFINE TABLE IF NOT EXISTS user SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS auth_token SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_message SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_message_content SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_routing_decision SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_context_reference SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_tool_call SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_tool_call_content SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_plan SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_plan_content SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_diff SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_diff_content SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS session_approval SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS trace_event SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS trace_event_content SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS user_memory SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS user_memory_content SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS context_memory SCHEMALESS;
-DEFINE TABLE IF NOT EXISTS context_memory_content SCHEMALESS;
+-- Tables. SCHEMAFULL: every field is typed below, so the database rejects
+-- unknown or mistyped fields. The record id (`id`) is implicit and never
+-- declared as a field.
+DEFINE TABLE IF NOT EXISTS user SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS auth_token SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_message SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_message_content SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_routing_decision SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_context_reference SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_tool_call SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_tool_call_content SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_plan SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_plan_content SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_diff SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_diff_content SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_approval SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS trace_event SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS trace_event_content SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS user_memory SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS user_memory_content SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS context_memory SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS context_memory_content SCHEMAFULL;
+
+-- Fields. Reference fields are typed `record<…>` and assert the referenced
+-- row exists at write time — a foreign-key-like guard. SurrealDB does not
+-- cascade or restrict on delete, so cascade and cleanup stay in Rust. The
+-- core enums (role, provider, task_type, decision, status, event_type)
+-- serialize to plain strings, so they are typed `string`.
+
+-- user
+DEFINE FIELD IF NOT EXISTS api_key_hash ON TABLE user TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE user TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at ON TABLE user TYPE datetime;
+DEFINE FIELD IF NOT EXISTS disabled_at ON TABLE user TYPE option<datetime>;
+
+-- auth_token
+DEFINE FIELD IF NOT EXISTS user ON TABLE auth_token TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS token_hash ON TABLE auth_token TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE auth_token TYPE datetime;
+DEFINE FIELD IF NOT EXISTS expires_at ON TABLE auth_token TYPE datetime;
+DEFINE FIELD IF NOT EXISTS revoked_at ON TABLE auth_token TYPE option<datetime>;
+
+-- session
+DEFINE FIELD IF NOT EXISTS user ON TABLE session TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS title ON TABLE session TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE session TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at ON TABLE session TYPE datetime;
+DEFINE FIELD IF NOT EXISTS archived_at ON TABLE session TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS deleted_at ON TABLE session TYPE option<datetime>;
+
+-- session_message
+DEFINE FIELD IF NOT EXISTS session ON TABLE session_message TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE session_message TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS role ON TABLE session_message TYPE string;
+DEFINE FIELD IF NOT EXISTS provider ON TABLE session_message TYPE string;
+DEFINE FIELD IF NOT EXISTS model ON TABLE session_message TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_message TYPE datetime;
+
+-- session_message_content
+DEFINE FIELD IF NOT EXISTS content ON TABLE session_message_content TYPE string;
+
+-- session_routing_decision
+DEFINE FIELD IF NOT EXISTS session ON TABLE session_routing_decision TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE session_routing_decision TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS task_type ON TABLE session_routing_decision TYPE string;
+DEFINE FIELD IF NOT EXISTS provider ON TABLE session_routing_decision TYPE string;
+DEFINE FIELD IF NOT EXISTS model ON TABLE session_routing_decision TYPE string;
+DEFINE FIELD IF NOT EXISTS matched_rule ON TABLE session_routing_decision TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS fallback_used ON TABLE session_routing_decision TYPE option<bool>;
+DEFINE FIELD IF NOT EXISTS override_used ON TABLE session_routing_decision TYPE option<bool>;
+DEFINE FIELD IF NOT EXISTS reason ON TABLE session_routing_decision TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_routing_decision TYPE datetime;
+
+-- session_context_reference
+DEFINE FIELD IF NOT EXISTS session ON TABLE session_context_reference TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE session_context_reference TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS path ON TABLE session_context_reference TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS kind ON TABLE session_context_reference TYPE string;
+DEFINE FIELD IF NOT EXISTS included ON TABLE session_context_reference TYPE bool;
+DEFINE FIELD IF NOT EXISTS reason ON TABLE session_context_reference TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_context_reference TYPE datetime;
+
+-- session_tool_call
+DEFINE FIELD IF NOT EXISTS session ON TABLE session_tool_call TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE session_tool_call TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS tool_name ON TABLE session_tool_call TYPE string;
+DEFINE FIELD IF NOT EXISTS status ON TABLE session_tool_call TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_tool_call TYPE datetime;
+DEFINE FIELD IF NOT EXISTS completed_at ON TABLE session_tool_call TYPE option<datetime>;
+
+-- session_tool_call_content
+DEFINE FIELD IF NOT EXISTS arguments ON TABLE session_tool_call_content TYPE string;
+DEFINE FIELD IF NOT EXISTS result ON TABLE session_tool_call_content TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS error ON TABLE session_tool_call_content TYPE option<string>;
+
+-- session_approval
+DEFINE FIELD IF NOT EXISTS session ON TABLE session_approval TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE session_approval TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS target_type ON TABLE session_approval TYPE string;
+DEFINE FIELD IF NOT EXISTS target_id ON TABLE session_approval TYPE string;
+DEFINE FIELD IF NOT EXISTS decision ON TABLE session_approval TYPE string;
+DEFINE FIELD IF NOT EXISTS reason ON TABLE session_approval TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_approval TYPE datetime;
+
+-- session_plan
+DEFINE FIELD IF NOT EXISTS session ON TABLE session_plan TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE session_plan TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS path ON TABLE session_plan TYPE string;
+DEFINE FIELD IF NOT EXISTS status ON TABLE session_plan TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_plan TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at ON TABLE session_plan TYPE datetime;
+DEFINE FIELD IF NOT EXISTS approved_at ON TABLE session_plan TYPE option<datetime>;
+DEFINE FIELD IF NOT EXISTS content_hash ON TABLE session_plan TYPE option<string>;
+
+-- session_plan_content
+DEFINE FIELD IF NOT EXISTS content_snapshot ON TABLE session_plan_content TYPE option<string>;
+
+-- session_diff
+DEFINE FIELD IF NOT EXISTS session ON TABLE session_diff TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE session_diff TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS path ON TABLE session_diff TYPE string;
+DEFINE FIELD IF NOT EXISTS status ON TABLE session_diff TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_diff TYPE datetime;
+DEFINE FIELD IF NOT EXISTS applied_at ON TABLE session_diff TYPE option<datetime>;
+
+-- session_diff_content
+DEFINE FIELD IF NOT EXISTS diff ON TABLE session_diff_content TYPE string;
+
+-- trace_event
+DEFINE FIELD IF NOT EXISTS session ON TABLE trace_event TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE trace_event TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS event_type ON TABLE trace_event TYPE string;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE trace_event TYPE datetime;
+
+-- trace_event_content
+DEFINE FIELD IF NOT EXISTS payload ON TABLE trace_event_content TYPE string;
+
+-- user_memory
+DEFINE FIELD IF NOT EXISTS user ON TABLE user_memory TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS key ON TABLE user_memory TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE user_memory TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at ON TABLE user_memory TYPE datetime;
+
+-- user_memory_content
+DEFINE FIELD IF NOT EXISTS content ON TABLE user_memory_content TYPE string;
+
+-- context_memory
+DEFINE FIELD IF NOT EXISTS session ON TABLE context_memory TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE context_memory TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS key ON TABLE context_memory TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE context_memory TYPE datetime;
+DEFINE FIELD IF NOT EXISTS updated_at ON TABLE context_memory TYPE datetime;
+
+-- context_memory_content
+DEFINE FIELD IF NOT EXISTS content ON TABLE context_memory_content TYPE string;
 
 -- Uniqueness of secret hashes. Both fields are always present, so a plain
 -- UNIQUE index is safe and surfaces duplicates as a constraint violation.
