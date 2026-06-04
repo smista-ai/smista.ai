@@ -126,6 +126,26 @@ impl SurrealDatabase {
         owned.map(|_| ()).ok_or(StorageError::NotFound)
     }
 
+    /// Asserts that a session-scoped write belongs to `user_id`: both the
+    /// target `session` and the row's redundant `user` reference must name
+    /// `user_id`, returning [`StorageError::NotFound`] otherwise.
+    ///
+    /// The redundant `user` column is what every ownership-scoped read filters
+    /// on, so a write whose `user` disagrees with the authenticated caller
+    /// would persist a row the owner could never reach. Rejecting the mismatch
+    /// keeps ownership unforgeable through that column.
+    async fn assert_write_owned(
+        &self,
+        user_id: Uuid,
+        session: &RecordId,
+        row_user: &RecordId,
+    ) -> StorageResult<()> {
+        if row_user != &record_id::<User, _>(user_id) {
+            return Err(StorageError::NotFound);
+        }
+        self.assert_session_owned(user_id, session).await
+    }
+
     /// Creates a single metadata-only row, returning the stored row.
     async fn create_one<T>(&self, value: T) -> StorageResult<T>
     where
@@ -448,7 +468,8 @@ impl Database for SurrealDatabase {
         content: SessionMessageContent,
     ) -> StorageResult<SessionMessage> {
         tracing::debug!("appending message for user {user_id}");
-        self.assert_session_owned(user_id, &message.session).await?;
+        self.assert_write_owned(user_id, &message.session, &message.user)
+            .await?;
         self.create_paired(message, content).await
     }
 
@@ -458,7 +479,7 @@ impl Database for SurrealDatabase {
         decision: SessionRoutingDecision,
     ) -> StorageResult<SessionRoutingDecision> {
         tracing::debug!("appending routing decision for user {user_id}");
-        self.assert_session_owned(user_id, &decision.session)
+        self.assert_write_owned(user_id, &decision.session, &decision.user)
             .await?;
         self.create_one(decision).await
     }
@@ -469,7 +490,7 @@ impl Database for SurrealDatabase {
         reference: SessionContextReference,
     ) -> StorageResult<SessionContextReference> {
         tracing::debug!("appending context reference for user {user_id}");
-        self.assert_session_owned(user_id, &reference.session)
+        self.assert_write_owned(user_id, &reference.session, &reference.user)
             .await?;
         self.create_one(reference).await
     }
@@ -481,7 +502,7 @@ impl Database for SurrealDatabase {
         content: SessionToolCallContent,
     ) -> StorageResult<SessionToolCall> {
         tracing::debug!("appending tool call for user {user_id}");
-        self.assert_session_owned(user_id, &tool_call.session)
+        self.assert_write_owned(user_id, &tool_call.session, &tool_call.user)
             .await?;
         self.create_paired(tool_call, content).await
     }
@@ -493,7 +514,8 @@ impl Database for SurrealDatabase {
         content: SessionPlanContent,
     ) -> StorageResult<SessionPlan> {
         tracing::debug!("appending plan for user {user_id}");
-        self.assert_session_owned(user_id, &plan.session).await?;
+        self.assert_write_owned(user_id, &plan.session, &plan.user)
+            .await?;
         self.create_paired(plan, content).await
     }
 
@@ -504,7 +526,8 @@ impl Database for SurrealDatabase {
         content: SessionDiffContent,
     ) -> StorageResult<SessionDiff> {
         tracing::debug!("appending diff for user {user_id}");
-        self.assert_session_owned(user_id, &diff.session).await?;
+        self.assert_write_owned(user_id, &diff.session, &diff.user)
+            .await?;
         self.create_paired(diff, content).await
     }
 
@@ -514,7 +537,7 @@ impl Database for SurrealDatabase {
         approval: SessionApproval,
     ) -> StorageResult<SessionApproval> {
         tracing::debug!("appending approval for user {user_id}");
-        self.assert_session_owned(user_id, &approval.session)
+        self.assert_write_owned(user_id, &approval.session, &approval.user)
             .await?;
         self.create_one(approval).await
     }
@@ -526,7 +549,8 @@ impl Database for SurrealDatabase {
         content: TraceEventContent,
     ) -> StorageResult<TraceEvent> {
         tracing::debug!("appending trace event for user {user_id}");
-        self.assert_session_owned(user_id, &event.session).await?;
+        self.assert_write_owned(user_id, &event.session, &event.user)
+            .await?;
         self.create_paired(event, content).await
     }
 
@@ -722,7 +746,8 @@ impl Database for SurrealDatabase {
         content: ContextMemoryContent,
     ) -> StorageResult<ContextMemory> {
         tracing::debug!("recording context memory for user {user_id}");
-        self.assert_session_owned(user_id, &memory.session).await?;
+        self.assert_write_owned(user_id, &memory.session, &memory.user)
+            .await?;
 
         // A keyed memory upserts on `(session, key)`; a keyless one always inserts.
         if let Some(key) = memory.key.clone() {
