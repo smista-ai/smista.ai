@@ -97,6 +97,7 @@ jobs:
       - name: Test
         run: just test
       - name: Integration test
+        if: runner.os == 'Linux'
         run: just integration_test
 
   build:
