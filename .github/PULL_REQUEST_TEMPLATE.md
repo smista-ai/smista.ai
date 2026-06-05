@@ -7,6 +7,7 @@ Provide a brief description of the changes you made in this pull request. If you
 ## Checklist
 
 - [ ] I have read the [AI Policy](https://github.com/smista-ai/smista.ai/blob/main/AI_POLICY.md) and the [contributing guidelines](https://github.com/smista-ai/smista.ai/blob/main/CONTRIBUTING.md).
+- [ ] I agree to the [Contributor License Agreement](https://github.com/smista-ai/smista.ai/blob/main/CLA.md) and will sign it on this pull request when the CLA bot asks.
 
 ## AI Disclosure
 

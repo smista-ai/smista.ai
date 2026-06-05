@@ -8,6 +8,23 @@ up and the conventions we follow.
 This project adheres to the [Contributor Covenant](CODE_OF_CONDUCT.md). By
 participating, you are expected to uphold it.
 
+## Contributor License Agreement
+
+Before your first contribution can be merged, you must sign the
+[Contributor License Agreement](CLA.md) (CLA). It lets the Project be licensed
+and relicensed coherently — including the per-component MIT and Elastic License
+2.0 split and any future commercial licensing — while you keep ownership of your
+work.
+
+Signing is automatic: when you open your first pull request, the CLA assistant
+bot comments asking you to agree. Post a pull request comment with exactly:
+
+```text
+I have read the CLA Document and I hereby sign the CLA
+```
+
+You only need to sign once; later pull requests are recognized automatically.
+
 ## Getting started
 
 1. Fork and clone the repository.
