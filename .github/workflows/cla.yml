@@ -1,0 +1,43 @@
+name: CLA Assistant
+
+on:
+  issue_comment:
+    types:
+      - created
+  pull_request_target: # zizmor: ignore[dangerous-triggers] CLA bot needs PR write to record signatures; it never checks out or runs PR code
+    types:
+      - opened
+      - closed
+      - synchronize
+
+permissions:
+  contents: read
+
+jobs:
+  cla:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      statuses: write
+    steps:
+      - name: CLA Assistant
+        if: >-
+          (github.event.comment.body == 'recheck' ||
+           github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') ||
+          github.event_name == 'pull_request_target'
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1 # zizmor: ignore[archived-uses] canonical CLA action, repo archived upstream; pinned to an immutable SHA so archival adds no supply-chain drift
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path-to-signatures: .cla/signatures.json
+          path-to-document: https://github.com/smista-ai/smista.ai/blob/main/CLA.md
+          branch: main
+          allowlist: veeso,dependabot[bot],renovate[bot],github-actions[bot]
+          custom-notsigned-prcomment: >-
+            Thank you for your contribution. Before we can merge it, we need you
+            to sign the [Contributor License Agreement](https://github.com/smista-ai/smista.ai/blob/main/CLA.md).
+            Please post a pull request comment with the exact text below to sign:
+          custom-pr-sign-comment: I have read the CLA Document and I hereby sign the CLA
+          custom-allsigned-prcomment: All contributors have signed the CLA. Thank you!
