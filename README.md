@@ -5,12 +5,12 @@
 </p>
 
 [![license-mit](https://img.shields.io/crates/l/smista-sdk.svg?logo=rust)](https://opensource.org/licenses/MIT)
-[![repo-stars](https://img.shields.io/github/stars/veeso/smista.ai?style=flat)](https://github.com/veeso/smista.ai/stargazers)
+[![repo-stars](https://img.shields.io/github/stars/smista-ai/smista.ai?style=flat)](https://github.com/smista-ai/smista.ai/stargazers)
 [![latest-version](https://img.shields.io/crates/v/smista-sdk.svg?logo=rust)](https://crates.io/crates/smista-sdk)
 [![conventional-commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 
-[![ci](https://github.com/veeso/smista.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/veeso/smista.ai/actions)
-[![docs](https://github.com/veeso/smista.ai/actions/workflows/pages.yml/badge.svg)](https://docs.smista.ai)
+[![ci](https://github.com/smista-ai/smista.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/smista-ai/smista.ai/actions)
+[![docs](https://github.com/smista-ai/smista.ai/actions/workflows/pages.yml/badge.svg)](https://docs.smista.ai)
 
 A local-first agent and CLI that routes each phase of an AI workflow to the most
 suitable model using deterministic, configurable policies.
@@ -70,7 +70,7 @@ smista trace
 ## Status
 
 smista.ai is under active development. Work is tracked through milestones and
-issues; see the [issues](https://github.com/veeso/smista.ai/issues).
+issues; see the [issues](https://github.com/smista-ai/smista.ai/issues).
 
 ## Documentation
 

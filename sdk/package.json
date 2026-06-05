@@ -6,7 +6,7 @@
   "author": "Christian Visintin <christian.visintin@veeso.dev>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/veeso/smista.ai.git",
+    "url": "https://github.com/smista-ai/smista.ai.git",
     "directory": "sdk"
   },
   "homepage": "https://smista.ai",

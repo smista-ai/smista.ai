@@ -6,7 +6,7 @@ Provide a brief description of the changes you made in this pull request. If you
 
 ## Checklist
 
-- [ ] I have read the [AI Policy](https://github.com/veeso/smista.ai/blob/main/AI_POLICY.md) and the [contributing guidelines](https://github.com/veeso/smista.ai/blob/main/CONTRIBUTING.md).
+- [ ] I have read the [AI Policy](https://github.com/smista-ai/smista.ai/blob/main/AI_POLICY.md) and the [contributing guidelines](https://github.com/smista-ai/smista.ai/blob/main/CONTRIBUTING.md).
 
 ## AI Disclosure
 

@@ -52,6 +52,6 @@ User-facing documentation lives in `docs/` and is built with
 
 ## Reporting issues
 
-Use the [issue tracker](https://github.com/veeso/smista.ai/issues). Please
+Use the [issue tracker](https://github.com/smista-ai/smista.ai/issues). Please
 include reproduction steps and the relevant configuration (with secrets
 redacted).

@@ -5,12 +5,12 @@
 </p>
 
 [![license-mit](https://img.shields.io/npm/l/@smista-ai/sdk.svg?logo=npm)](https://opensource.org/licenses/MIT)
-[![repo-stars](https://img.shields.io/github/stars/veeso/smista.ai?style=flat)](https://github.com/veeso/smista.ai/stargazers)
+[![repo-stars](https://img.shields.io/github/stars/smista-ai/smista.ai?style=flat)](https://github.com/smista-ai/smista.ai/stargazers)
 [![npm-version](https://img.shields.io/npm/v/@smista-ai/sdk.svg?logo=npm)](https://www.npmjs.com/package/@smista-ai/sdk)
 [![conventional-commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 
-[![ci](https://github.com/veeso/smista.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/veeso/smista.ai/actions)
-[![docs](https://github.com/veeso/smista.ai/actions/workflows/pages.yml/badge.svg)](https://docs.smista.ai)
+[![ci](https://github.com/smista-ai/smista.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/smista-ai/smista.ai/actions)
+[![docs](https://github.com/smista-ai/smista.ai/actions/workflows/pages.yml/badge.svg)](https://docs.smista.ai)
 
 The TypeScript/JavaScript SDK for [smista.ai](https://smista.ai), and the way
 you talk to the router from Node.
