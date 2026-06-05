@@ -41,4 +41,5 @@ project documentation live at <https://docs.smista.ai>.
 
 ## License
 
-Licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
+Licensed under the MIT License. See [LICENSE-MIT](../../LICENSE-MIT) for
+details.

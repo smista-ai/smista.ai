@@ -18,16 +18,16 @@ Routing, policy evaluation, context selection and tool mediation belong to
 
 This is a Cargo workspace. All crates live under `crates/`:
 
-| Crate                  | Kind | Responsibility                                         |
-| ---------------------- | ---- | ------------------------------------------------------ |
-| `smista-core`          | lib  | Shared domain types, config, policy, errors.           |
-| `smista-storage`       | lib  | Storage traits, entities and SurrealDB implementation. |
-| `smista-providers`     | lib  | Model abstraction and provider adapters (via `rig`).   |
-| `smista-router`        | bin  | Routing/orchestration service.                         |
-| `smista-web`           | lib  | `axum` HTTP JSON API for the router.                   |
-| `smista-router-client` | lib  | Async Rust client for the router HTTP API.             |
-| `smista-sdk`           | lib  | Rust SDK facade re-exporting core types (+ client).    |
-| `smista-cli`           | bin  | The `smista` CLI (`ratatui` + `clap`).                 |
+| Crate                  | Kind | Responsibility                                         | License     |
+| ---------------------- | ---- | ------------------------------------------------------ | ----------- |
+| `smista-core`          | lib  | Shared domain types, config, policy, errors.           | MIT         |
+| `smista-storage`       | lib  | Storage traits, entities and SurrealDB implementation. | Elastic-2.0 |
+| `smista-providers`     | lib  | Model abstraction and provider adapters (via `rig`).   | Elastic-2.0 |
+| `smista-router`        | bin  | Routing/orchestration service.                         | Elastic-2.0 |
+| `smista-web`           | lib  | `axum` HTTP JSON API for the router.                   | Elastic-2.0 |
+| `smista-router-client` | lib  | Async Rust client for the router HTTP API.             | MIT         |
+| `smista-sdk`           | lib  | Rust SDK facade re-exporting core types (+ client).    | MIT         |
+| `smista-cli`           | bin  | The `smista` CLI (`ratatui` + `clap`).                 | Elastic-2.0 |
 
 The TypeScript SDK lives in `sdk/` (`@smista-ai/sdk`). Documentation (mdBook)
 lives in `docs/`.
@@ -37,6 +37,15 @@ lives in `docs/`.
 - **Commits**: [Conventional Commits](https://conventionalcommits.org). Never
   add a `Co-Authored-By` line.
 - **Branches**: `feat/{issue_number}-{issue_name}` (e.g. `feat/1-scaffolding`).
+- **Licensing**: the project is dual-licensed per crate. Consumer-facing
+  libraries (`smista-core`, `smista-router-client`, `smista-sdk`, the TS
+  `@smista-ai/sdk`) are MIT; everything else is Elastic-2.0. There is **no**
+  workspace-level `license` default — every crate MUST set its own `license`
+  field explicitly. When creating a new crate, ALWAYS ask whether it should be
+  `MIT` or `Elastic-2.0` before scaffolding it, and reflect the choice in the
+  crate `Cargo.toml`, its `README.md` and both license tables (this file's
+  Layout table and the root `README.md` Components table). MIT crates must never
+  depend on Elastic-2.0 crates.
 - **Rust**: follow the project rustfmt config; `clippy` must pass with
   `-D warnings`. Use `module_name.rs`, not `mod.rs`.
 - **TypeScript**: Biome for lint + format; strict `tsconfig`. No `any`.

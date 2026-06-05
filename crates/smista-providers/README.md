@@ -4,7 +4,7 @@
   <img src="https://smista.ai/logo-150.png" alt="smista.ai logo" width="150" />
 </p>
 
-[![license-mit](https://img.shields.io/crates/l/smista-providers.svg?logo=rust)](https://opensource.org/licenses/MIT)
+[![license-elastic](https://img.shields.io/crates/l/smista-providers.svg?logo=rust)](https://www.elastic.co/licensing/elastic-license)
 [![repo-stars](https://img.shields.io/github/stars/smista-ai/smista.ai?style=flat)](https://github.com/smista-ai/smista.ai/stargazers)
 [![latest-version](https://img.shields.io/crates/v/smista-providers.svg?logo=rust)](https://crates.io/crates/smista-providers)
 [![conventional-commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
@@ -39,4 +39,7 @@ wider project documentation live at <https://docs.smista.ai>.
 
 ## License
 
-Licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
+Licensed under the Elastic License 2.0 (ELv2). See
+[LICENSE-ELv2](../../LICENSE-ELv2) for details. You may use, self-host, modify
+and embed it freely; you may not offer it to third parties as a hosted or
+managed service.

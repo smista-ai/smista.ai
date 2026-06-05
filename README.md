@@ -4,7 +4,8 @@
   <img src="https://smista.ai/logo-150.png" alt="smista.ai logo" width="150" />
 </p>
 
-[![license-mit](https://img.shields.io/crates/l/smista-sdk.svg?logo=rust)](https://opensource.org/licenses/MIT)
+[![license-mit](https://img.shields.io/badge/SDK%20%26%20core-MIT-blue.svg)](LICENSE-MIT)
+[![license-elastic](https://img.shields.io/badge/CLI%2C%20router%20%26%20more-Elastic--2.0-005571.svg)](LICENSE-ELv2)
 [![repo-stars](https://img.shields.io/github/stars/smista-ai/smista.ai?style=flat)](https://github.com/smista-ai/smista.ai/stargazers)
 [![latest-version](https://img.shields.io/crates/v/smista-sdk.svg?logo=rust)](https://crates.io/crates/smista-sdk)
 [![conventional-commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
@@ -33,17 +34,17 @@ deterministic routing.
 
 ## Components
 
-| Component                                                       | Description                                                          |
-| --------------------------------------------------------------- | -------------------------------------------------------------------- |
-| [`smista-cli`](crates/smista-cli/README.md)                     | The `smista` command-line interface for developers.                  |
-| [`smista-core`](crates/smista-core/README.md)                   | Shared domain types, config, routing policy and validation.          |
-| [`smista-providers`](crates/smista-providers/README.md)         | Model abstraction and provider adapters (OpenAI, Anthropic, …).      |
-| [`smista-router`](crates/smista-router/README.md)               | Routing and orchestration service exposing a local HTTP JSON API.    |
-| [`smista-router-client`](crates/smista-router-client/README.md) | Async Rust client for the router HTTP JSON API.                      |
-| [`smista-sdk`](crates/smista-sdk/README.md)                     | Rust SDK facade re-exporting the domain types (and the client).      |
-| [`smista-storage`](crates/smista-storage/README.md)             | Storage traits, entities and the SurrealDB-backed persistence layer. |
-| [`smista-web`](crates/smista-web/README.md)                     | `axum` HTTP JSON API server for the router.                          |
-| [`@smista-ai/sdk`](sdk/README.md)                               | TypeScript SDK for building clients on top of the router.            |
+| Component                                                       | Description                                                          | License     |
+| --------------------------------------------------------------- | -------------------------------------------------------------------- | ----------- |
+| [`smista-cli`](crates/smista-cli/README.md)                     | The `smista` command-line interface for developers.                  | Elastic-2.0 |
+| [`smista-core`](crates/smista-core/README.md)                   | Shared domain types, config, routing policy and validation.          | MIT         |
+| [`smista-providers`](crates/smista-providers/README.md)         | Model abstraction and provider adapters (OpenAI, Anthropic, …).      | Elastic-2.0 |
+| [`smista-router`](crates/smista-router/README.md)               | Routing and orchestration service exposing a local HTTP JSON API.    | Elastic-2.0 |
+| [`smista-router-client`](crates/smista-router-client/README.md) | Async Rust client for the router HTTP JSON API.                      | MIT         |
+| [`smista-sdk`](crates/smista-sdk/README.md)                     | Rust SDK facade re-exporting the domain types (and the client).      | MIT         |
+| [`smista-storage`](crates/smista-storage/README.md)             | Storage traits, entities and the SurrealDB-backed persistence layer. | Elastic-2.0 |
+| [`smista-web`](crates/smista-web/README.md)                     | `axum` HTTP JSON API server for the router.                          | Elastic-2.0 |
+| [`@smista-ai/sdk`](sdk/README.md)                               | TypeScript SDK for building clients on top of the router.            | MIT         |
 
 ## Golden workflow
 
@@ -83,5 +84,16 @@ the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file
-for details.
+smista.ai is **source available**, dual-licensed per component:
+
+- The consumer-facing libraries — `smista-core`, `smista-router-client`,
+  `smista-sdk` and the TypeScript `@smista-ai/sdk` — are licensed under the
+  [MIT License](LICENSE-MIT). Build on them freely.
+- Everything else — the `smista` CLI, the router, its web API, providers and
+  storage — is licensed under the [Elastic License 2.0](LICENSE-ELv2) (ELv2).
+  You may use, self-host, modify and embed it freely; you may not offer it to
+  third parties as a hosted or managed service.
+
+The per-component license is listed in the [Components](#components) table
+above. ELv2 is not an OSI-approved open-source license, so the project is
+described as "source available" rather than "open source".
