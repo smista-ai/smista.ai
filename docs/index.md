@@ -2,10 +2,10 @@
 
 ![logo](logo-150.png)
 
-[![license-mit](https://img.shields.io/github/license/veeso/smista.ai)](https://opensource.org/licenses/MIT)
-[![repo-stars](https://img.shields.io/github/stars/veeso/smista.ai?style=flat)](https://github.com/veeso/smista.ai/stargazers)
+[![license-mit](https://img.shields.io/github/license/smista-ai/smista.ai)](https://opensource.org/licenses/MIT)
+[![repo-stars](https://img.shields.io/github/stars/smista-ai/smista.ai?style=flat)](https://github.com/smista-ai/smista.ai/stargazers)
 [![conventional-commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
-[![ci](https://github.com/veeso/smista.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/veeso/smista.ai/actions)
+[![ci](https://github.com/smista-ai/smista.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/smista-ai/smista.ai/actions)
 
 ---
 

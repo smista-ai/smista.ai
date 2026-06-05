@@ -8,7 +8,7 @@ src = "."
 [output.html]
 default-theme = "light"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/veeso/smista.ai"
+git-repository-url = "https://github.com/smista-ai/smista.ai"
 additional-css = []
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 
