@@ -4,7 +4,7 @@ version = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }
 description = "Async Rust client for the smista-router HTTP JSON API."
-license = { workspace = true }
+license = "MIT"
 repository = { workspace = true }
 categories = { workspace = true }
 keywords = { workspace = true }

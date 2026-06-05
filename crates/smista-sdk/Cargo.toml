@@ -4,7 +4,7 @@ version = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }
 description = "Rust SDK facade for smista.ai: a single entry point re-exporting the domain types and (later) the router client."
-license = { workspace = true }
+license = "MIT"
 repository = { workspace = true }
 categories = { workspace = true }
 keywords = { workspace = true }
