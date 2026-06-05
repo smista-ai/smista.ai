@@ -31,9 +31,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path-to-signatures: .cla/signatures.json
+          path-to-signatures: signatures.json
           path-to-document: https://github.com/smista-ai/smista.ai/blob/main/CLA.md
-          branch: main
+          branch: cla-signatures
           allowlist: veeso,dependabot[bot],renovate[bot],github-actions[bot]
           custom-notsigned-prcomment: >-
             Thank you for your contribution. Before we can merge it, we need you
