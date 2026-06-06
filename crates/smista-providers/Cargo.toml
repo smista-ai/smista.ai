@@ -10,3 +10,14 @@ categories = { workspace = true }
 keywords = { workspace = true }
 readme = "README.md"
 rust-version = { workspace = true }
+
+[dependencies]
+async-trait = { workspace = true }
+futures = { workspace = true }
+serde_json = { workspace = true }
+smista-core = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
