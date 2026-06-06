@@ -14,5 +14,7 @@
 
 pub mod api;
 mod model;
+mod provider;
 
 pub use self::model::Model;
+pub use self::provider::Provider;

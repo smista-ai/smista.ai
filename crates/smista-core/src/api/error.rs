@@ -234,6 +234,7 @@ fn map_provider(error: ProviderError) -> ApiErrorResponse {
             StatusCode::SERVICE_UNAVAILABLE,
             "missing_provider_credentials",
         ),
+        ProviderErrorCategory::ModelNotFound => (StatusCode::NOT_FOUND, "model_not_found"),
         ProviderErrorCategory::ProviderUnavailable => {
             (StatusCode::SERVICE_UNAVAILABLE, "provider_unavailable")
         }

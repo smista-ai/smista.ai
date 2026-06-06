@@ -424,6 +424,7 @@ alongside for convenience.
 | `missing_capability`              | 422    | Selected model lacks a capability the task requires.                        |
 | `missing_credentials`             | 401    | No session token was presented to a protected endpoint.                     |
 | `missing_provider_credentials`    | 503    | The selected model requires provider credentials none were configured.      |
+| `model_not_found`                 | 404    | The referenced model is not offered by the provider asked to resolve it.    |
 | `no_route`                        | 422    | No routing rule matched and no default route is configured.                 |
 | `override_not_allowed`            | 403    | Caller asked for a model override that policy forbids.                      |
 | `permission_expansion`            | 422    | An override tried to loosen a tool permission that may only be tightened.   |
