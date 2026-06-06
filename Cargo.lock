@@ -4497,6 +4497,15 @@ dependencies = [
 [[package]]
 name = "smista-providers"
 version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "serde_json",
+ "smista-core",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "smista-router"

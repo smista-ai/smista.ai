@@ -7,7 +7,12 @@
 //! interface so the router can execute requests against different providers
 //! without coupling routing logic to provider-specific APIs.
 //!
-//! Initial providers are OpenAI, Anthropic, Ollama and OpenAI-compatible
+//! Implemented providers are OpenAI, Anthropic, Ollama and OpenAI-compatible
 //! endpoints, integrated through `rig` where practical. `rig` remains an
 //! implementation detail of this adapter layer.
 //!
+
+pub mod api;
+mod model;
+
+pub use self::model::Model;
