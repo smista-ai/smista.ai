@@ -171,7 +171,7 @@ pub enum RoutingError {
 /// The `message` field is provider-agnostic and must never embed credentials
 /// or other secret values.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("provider `{provider}` reported {category:?}: {message}")]
+#[error("provider `{provider}` reported {category}: {message}")]
 pub struct ProviderError {
     /// The classification of the failure, used for routing and API mapping.
     pub category: ProviderErrorCategory,
@@ -189,29 +189,43 @@ pub struct ProviderError {
 /// can reason about independently of the provider-specific HTTP status or
 /// SDK error code that produced it. The categories follow the smista.ai
 /// specification (Model interfaces → Error handling).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, thiserror::Error)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderErrorCategory {
     /// The request was authenticated but rejected (for example, a quota
     /// rule, plan limit, or organization policy denied it).
+    #[error("authenticated request rejected by provider policy")]
     Authentication,
     /// The request exceeded the model's context window.
+    #[error("request exceeded the model context window")]
     ContextLength,
     /// Credentials were provided but rejected by the provider.
+    #[error("provider rejected the configured credentials")]
     InvalidCredentials,
     /// The request body was malformed or referenced an unknown parameter.
+    #[error("provider rejected the request as malformed")]
     InvalidRequest,
     /// No credentials were configured for the provider when the call was made.
+    #[error("no credentials configured for the provider")]
     MissingCredentials,
+    /// The referenced model is not offered by the provider that was asked to
+    /// resolve it.
+    #[error("model not offered by the provider")]
+    ModelNotFound,
     /// The provider returned a service-level error and may recover.
+    #[error("provider is unavailable")]
     ProviderUnavailable,
     /// The provider rate-limited the request.
+    #[error("provider rate-limited the request")]
     RateLimit,
     /// The call timed out before the provider returned a response.
+    #[error("call to the provider timed out")]
     Timeout,
     /// The error did not match any known category.
+    #[error("unknown provider error")]
     Unknown,
     /// The model does not support a capability the request required.
+    #[error("model does not support a required capability")]
     UnsupportedCapability,
 }
 
@@ -251,6 +265,7 @@ mod tests {
         assert!(!ProviderErrorCategory::Authentication.is_fallback_eligible());
         assert!(!ProviderErrorCategory::InvalidCredentials.is_fallback_eligible());
         assert!(!ProviderErrorCategory::MissingCredentials.is_fallback_eligible());
+        assert!(!ProviderErrorCategory::ModelNotFound.is_fallback_eligible());
         assert!(!ProviderErrorCategory::InvalidRequest.is_fallback_eligible());
         assert!(!ProviderErrorCategory::ContextLength.is_fallback_eligible());
         assert!(!ProviderErrorCategory::UnsupportedCapability.is_fallback_eligible());
