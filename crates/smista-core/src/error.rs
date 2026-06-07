@@ -248,6 +248,19 @@ impl ProviderErrorCategory {
     }
 }
 
+impl From<http::StatusCode> for ProviderErrorCategory {
+    fn from(status: http::StatusCode) -> Self {
+        match status {
+            http::StatusCode::BAD_REQUEST => Self::InvalidRequest,
+            http::StatusCode::UNAUTHORIZED => Self::InvalidCredentials,
+            http::StatusCode::FORBIDDEN => Self::Authentication,
+            http::StatusCode::TOO_MANY_REQUESTS => Self::RateLimit,
+            status if status.is_server_error() => Self::ProviderUnavailable,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,6 +312,62 @@ mod tests {
         }
         .into();
         assert!(matches!(provider, CoreError::Provider(_)));
+    }
+
+    #[test]
+    fn should_map_client_status_codes_to_categories() {
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::BAD_REQUEST),
+            ProviderErrorCategory::InvalidRequest,
+        );
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::UNAUTHORIZED),
+            ProviderErrorCategory::InvalidCredentials,
+        );
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::FORBIDDEN),
+            ProviderErrorCategory::Authentication,
+        );
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::TOO_MANY_REQUESTS),
+            ProviderErrorCategory::RateLimit,
+        );
+    }
+
+    #[test]
+    fn should_map_server_status_codes_to_provider_unavailable() {
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::INTERNAL_SERVER_ERROR),
+            ProviderErrorCategory::ProviderUnavailable,
+        );
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::BAD_GATEWAY),
+            ProviderErrorCategory::ProviderUnavailable,
+        );
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::SERVICE_UNAVAILABLE),
+            ProviderErrorCategory::ProviderUnavailable,
+        );
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::GATEWAY_TIMEOUT),
+            ProviderErrorCategory::ProviderUnavailable,
+        );
+    }
+
+    #[test]
+    fn should_map_unhandled_status_codes_to_unknown() {
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::OK),
+            ProviderErrorCategory::Unknown,
+        );
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::NOT_FOUND),
+            ProviderErrorCategory::Unknown,
+        );
+        assert_eq!(
+            ProviderErrorCategory::from(http::StatusCode::CONFLICT),
+            ProviderErrorCategory::Unknown,
+        );
     }
 
     #[test]
