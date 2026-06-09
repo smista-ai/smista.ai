@@ -18,6 +18,11 @@ clippy args="":
 doc args="":
     RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps {{ args }}
 
+# Check dependencies for advisories, licenses, bans and sources (cargo-deny)
+[group('code_check')]
+deny args="":
+    cargo deny check {{ args }}
+
 # Lint and format-check the TypeScript SDK (Biome)
 [group('code_check')]
 check_sdk: sdk_check
@@ -32,5 +37,6 @@ check_code:
     just fmt_nightly "--check"
     just clippy "-- -D warnings"
     just doc
+    just deny
     just check_sdk
     just typecheck_sdk
