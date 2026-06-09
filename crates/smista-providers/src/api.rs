@@ -8,7 +8,7 @@
 //! [`ModelParameters`], [`Usage`], [`StreamEvent`], [`ProviderError`] — it is
 //! reused rather than redefined here.
 //!
-//! [`Model`]: crate::Model
+//! [`Model`]: crate::model::Model
 
 use std::pin::Pin;
 use std::task::{Context, Poll};
