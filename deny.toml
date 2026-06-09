@@ -1,0 +1,129 @@
+# cargo-deny configuration for the smista.ai workspace.
+#
+# Run locally with `just deny` (see just/code_check.just). The same command
+# runs in CI. Four checks are enforced: advisories, licenses, bans, sources.
+#
+# Docs: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Check every target the workspace can build for.
+all-features = true
+
+[output]
+feature-depth = 1
+
+# ---------------------------------------------------------------------------
+# Security advisories (RustSec) and yanked crates.
+# ---------------------------------------------------------------------------
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# Fail on crates pulled from a version that has been yanked from the registry.
+yanked = "deny"
+# Fail on dependencies flagged as unmaintained anywhere in the tree.
+unmaintained = "all"
+# Each ignored advisory is assessed and documented below. Re-review whenever
+# the SurrealDB stack is bumped, as both originate from it.
+ignore = [
+    # rsa has no constant-time implementation and no safe upgrade is available.
+    # Reaches us only transitively via surrealdb -> jsonwebtoken -> rsa, used
+    # server-side where the timing sidechannel is not remotely observable.
+    { id = "RUSTSEC-2023-0071", reason = "transitive via surrealdb/jsonwebtoken; no upgrade available; server-side use" },
+    # bincode 2.x is permanently unmaintained but feature-complete. Reaches us
+    # only transitively via surrealdb-core -> surrealmx -> bincode.
+    { id = "RUSTSEC-2025-0141", reason = "transitive via surrealdb; bincode is feature-complete, no action possible" },
+]
+
+# ---------------------------------------------------------------------------
+# License policy.
+#
+# Allowed licenses are the permissive ones compatible with redistributing this
+# (Elastic-2.0 / MIT) workspace. Strong/weak copyleft (GPL/AGPL/LGPL) is NOT in
+# the allow list; r-efi carries an `... OR LGPL-2.1-or-later` expression, so the
+# permissive arm is selected automatically and no LGPL allow is required.
+#
+# BUSL-1.1 (the SurrealDB stack) is a deliberate dependency choice and is
+# allowed only for those crates via `exceptions`, so nothing new can slip in
+# under BUSL.
+#
+# SurrealDB BUSL-1.1 compliance (assessed 2026-06-09):
+# The only restriction is the Additional Use Grant: you may NOT use SurrealDB
+# "as a Database Service" -- defined as an offering that lets third parties
+# create, manage, or control schemas or tables. smista.ai uses SurrealDB purely
+# as an internal datastore for routing/memory; users interact with smista's own
+# API/CLI and never create or control SurrealDB schemas or tables. We are not
+# offering SurrealDB-as-a-service, so this use is permitted, including for a
+# future commercial SaaS. The license auto-converts to Apache-2.0 on its Change
+# Date (2030-01-01).
+# ---------------------------------------------------------------------------
+[licenses]
+allow = [
+    "Apache-2.0",
+    "BSD-1-Clause",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "Elastic-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+exceptions = [
+    { allow = [
+        "BUSL-1.1",
+    ], crate = "surrealdb" },
+    { allow = [
+        "BUSL-1.1",
+    ], crate = "surrealdb-collections" },
+    { allow = [
+        "BUSL-1.1",
+    ], crate = "surrealdb-core" },
+    { allow = [
+        "BUSL-1.1",
+    ], crate = "surrealdb-protocol" },
+    { allow = [
+        "BUSL-1.1",
+    ], crate = "surrealdb-strand" },
+    { allow = [
+        "BUSL-1.1",
+    ], crate = "surrealdb-types" },
+    { allow = [
+        "BUSL-1.1",
+    ], crate = "surrealdb-types-derive" },
+]
+
+[licenses.private]
+# Workspace crates carry MIT / Elastic-2.0, both allowed, so still check them.
+ignore = false
+
+# ---------------------------------------------------------------------------
+# Bans: duplicate versions, wildcard requirements, banned crates.
+# ---------------------------------------------------------------------------
+[bans]
+# Duplicate versions are reported but do not fail CI (large trees always have a
+# few). Tighten to "deny" with `skip`/`skip-tree` entries if desired.
+multiple-versions = "warn"
+# A `version = "*"` requirement is forbidden; pin to a real range.
+wildcards = "deny"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+deny = []
+skip = []
+skip-tree = []
+
+# ---------------------------------------------------------------------------
+# Sources: only crates.io is allowed; git dependencies are rejected.
+# ---------------------------------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
