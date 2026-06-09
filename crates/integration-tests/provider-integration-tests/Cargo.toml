@@ -1,0 +1,13 @@
+[package]
+name = "provider-integration-tests"
+version = { workspace = true }
+edition = { workspace = true }
+description = "API-key-gated provider integration tests for the smista.ai workspace."
+license = "Elastic-2.0"
+publish = false
+
+[dev-dependencies]
+rig-core = { workspace = true }
+smista-providers = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }

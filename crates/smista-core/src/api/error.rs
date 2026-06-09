@@ -240,9 +240,7 @@ fn map_provider(error: ProviderError) -> ApiErrorResponse {
         }
         ProviderErrorCategory::RateLimit => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
         ProviderErrorCategory::Timeout => (StatusCode::GATEWAY_TIMEOUT, "request_timeout"),
-        ProviderErrorCategory::Unknown | ProviderErrorCategory::Storage => {
-            (StatusCode::BAD_GATEWAY, "provider_error")
-        }
+        ProviderErrorCategory::Unknown => (StatusCode::BAD_GATEWAY, "provider_error"),
         ProviderErrorCategory::UnsupportedCapability => (
             StatusCode::UNPROCESSABLE_ENTITY,
             "provider_unsupported_capability",

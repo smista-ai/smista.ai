@@ -2479,17 +2479,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c00403deb17c3221a1fe4fb571b9ed0370b3dcd116553c77fa294a3d918699"
 
 [[package]]
-name = "integration-tests"
-version = "0.0.0"
-dependencies = [
- "secrecy",
- "smista-storage",
- "surrealdb",
- "testcontainers",
- "tokio",
-]
-
-[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3545,6 +3534,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8991c4cbdb8bc5b11f0b074ffe286c30e523de90fee5ba8132f1399f23cb3dd7"
 dependencies = [
  "prost",
+]
+
+[[package]]
+name = "provider-integration-tests"
+version = "0.0.0"
+dependencies = [
+ "rig-core",
+ "smista-providers",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -4854,6 +4853,17 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "storage-integration-tests"
+version = "0.0.0"
+dependencies = [
+ "secrecy",
+ "smista-storage",
+ "surrealdb",
+ "testcontainers",
+ "tokio",
+]
 
 [[package]]
 name = "storekey"
