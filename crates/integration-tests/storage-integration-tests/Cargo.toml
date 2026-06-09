@@ -1,8 +1,8 @@
 [package]
-name = "integration-tests"
+name = "storage-integration-tests"
 version = { workspace = true }
 edition = { workspace = true }
-description = "Container-backed integration tests for the smista.ai workspace."
+description = "Container-backed storage integration tests for the smista.ai workspace."
 license = "Elastic-2.0"
 publish = false
 

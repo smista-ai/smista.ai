@@ -1,6 +1,7 @@
 [workspace]
 members = [
-  "crates/integration-tests",
+  "crates/integration-tests/provider-integration-tests",
+  "crates/integration-tests/storage-integration-tests",
   "crates/smista-cli",
   "crates/smista-core",
   "crates/smista-providers",
