@@ -4738,6 +4738,7 @@ dependencies = [
  "futures",
  "reqwest",
  "rig-core",
+ "serde",
  "serde_json",
  "smista-core",
  "thiserror",

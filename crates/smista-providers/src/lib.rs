@@ -14,8 +14,6 @@
 
 pub mod api;
 mod error;
-mod model;
-mod provider;
-
-pub use self::model::Model;
-pub use self::provider::Provider;
+pub mod memory;
+pub mod model;
+pub mod provider;

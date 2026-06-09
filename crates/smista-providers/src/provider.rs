@@ -13,7 +13,7 @@ use std::sync::Arc;
 use smista_core::error::ProviderError;
 use smista_core::model::{ModelReference, Provider as ProviderId};
 
-use crate::Model;
+use crate::model::Model;
 
 /// A provider account or endpoint: discovers models and resolves them for
 /// execution.
