@@ -218,6 +218,9 @@ pub enum ProviderErrorCategory {
     /// The provider rate-limited the request.
     #[error("provider rate-limited the request")]
     RateLimit,
+    /// Storage error occurred while attempting to save or retrieve data related to the provider call.
+    #[error("storage error")]
+    Storage,
     /// The call timed out before the provider returned a response.
     #[error("call to the provider timed out")]
     Timeout,
