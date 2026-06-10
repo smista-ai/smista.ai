@@ -7,9 +7,11 @@
 //! capabilities, limits, auth requirements and costs — which are read from the
 //! provider's knowledge at runtime rather than hand-declared in configuration.
 
-use smista_core::error::ProviderError;
+pub mod anthropic;
+
 use smista_core::model::{ModelDescriptor, ModelReference};
 
+use crate::ProviderResult;
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
 
 /// A provider-backed model: the interface routing and execution use, and the
@@ -42,15 +44,12 @@ pub trait Model: Send + Sync {
     ///
     /// Returns the model's final content, any tool calls it issued for the
     /// router to mediate, usage totals and the reason generation stopped.
-    async fn complete(
-        &self,
-        request: CompletionRequest,
-    ) -> Result<CompletionResponse, ProviderError>;
+    async fn complete(&self, request: CompletionRequest) -> ProviderResult<CompletionResponse>;
 
     /// Sends a request and returns a stream of response events.
     ///
     /// The streaming counterpart to [`Self::complete`]: events carry partial or
     /// final content, tool-call activity, usage updates and a terminal marker as
     /// the model produces them.
-    async fn stream(&self, request: CompletionRequest) -> Result<ResponseStream, ProviderError>;
+    async fn stream(&self, request: CompletionRequest) -> ProviderResult<ResponseStream>;
 }

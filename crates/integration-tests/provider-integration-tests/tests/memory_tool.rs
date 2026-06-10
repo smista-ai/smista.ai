@@ -11,18 +11,18 @@
 //! model's prose. The only assertion on model output is the recall step, which
 //! checks for two rare verbatim tokens the model cannot reasonably paraphrase.
 //!
-//! Requires `ANTHROPIC_API_KEY`; when it is absent the test skips so it never
-//! fails on a machine without credentials. It runs only under
-//! `just provider_integration_test`.
+//! Requires `ANTHROPIC_API_KEY`; when it is absent the test panics rather than
+//! silently passing. It runs only under `just provider_integration_test`,
+//! which CI dispatches manually.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
+use provider_integration_tests::InMemoryStorage;
 use rig_core::completion::Prompt;
 use rig_core::prelude::{CompletionClient, ProviderClient};
 use rig_core::providers::anthropic;
 use rig_core::providers::anthropic::completion::CLAUDE_HAIKU_4_5;
-use smista_providers::memory::{MemoryRecord, MemoryStorage, MemoryTool, build_preamble};
+use smista_providers::memory::{MemoryStorage, MemoryTool, build_preamble};
 
 /// A long-term user fact and a rare value the model will echo verbatim.
 const USER_KEY: &str = "favorite_color";
@@ -30,121 +30,6 @@ const USER_VALUE: &str = "chartreuse";
 /// A session-scoped fact and an equally distinctive value.
 const SESSION_KEY: &str = "active_ticket";
 const SESSION_VALUE: &str = "SMISTA-4242";
-
-/// In-memory [`MemoryStorage`], keyed by `key` within each scope.
-///
-/// Mirrors how a real backend resolves a key to a `handle`: the handle is just
-/// `handle:{key}`, so `forget` can strip the prefix to find the entry.
-#[derive(Default)]
-struct InMemoryStorage {
-    user: Mutex<HashMap<String, String>>,
-    session: Mutex<HashMap<String, String>>,
-}
-
-/// Error type for [`InMemoryStorage`]; the fake never actually fails.
-#[derive(Debug, thiserror::Error)]
-#[error("in-memory storage error")]
-struct InMemoryError;
-
-impl InMemoryStorage {
-    fn put(
-        store: &Mutex<HashMap<String, String>>,
-        key: Option<String>,
-        content: String,
-    ) -> MemoryRecord {
-        let key = key.unwrap_or_default();
-        store.lock().unwrap().insert(key.clone(), content.clone());
-        MemoryRecord {
-            handle: format!("handle:{key}"),
-            key: Some(key),
-            content,
-        }
-    }
-
-    fn forget(store: &Mutex<HashMap<String, String>>, handle: &str) {
-        let key = handle.strip_prefix("handle:").unwrap_or(handle);
-        store.lock().unwrap().remove(key);
-    }
-
-    fn list(store: &Mutex<HashMap<String, String>>) -> Vec<MemoryRecord> {
-        store
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(key, content)| MemoryRecord {
-                handle: format!("handle:{key}"),
-                key: Some(key.clone()),
-                content: content.clone(),
-            })
-            .collect()
-    }
-
-    fn by_key(store: &Mutex<HashMap<String, String>>, key: &str) -> Option<MemoryRecord> {
-        store.lock().unwrap().get(key).map(|content| MemoryRecord {
-            handle: format!("handle:{key}"),
-            key: Some(key.to_string()),
-            content: content.clone(),
-        })
-    }
-}
-
-impl MemoryStorage for InMemoryStorage {
-    type Error = InMemoryError;
-
-    async fn put_user_memory(
-        &self,
-        key: Option<String>,
-        content: String,
-    ) -> Result<MemoryRecord, Self::Error> {
-        Ok(Self::put(&self.user, key, content))
-    }
-
-    async fn forget_user_memory(&self, handle: String) -> Result<(), Self::Error> {
-        Self::forget(&self.user, &handle);
-        Ok(())
-    }
-
-    async fn get_user_memories(
-        &self,
-        _limit: Option<usize>,
-    ) -> Result<Vec<MemoryRecord>, Self::Error> {
-        Ok(Self::list(&self.user))
-    }
-
-    async fn get_user_memory_by_key(
-        &self,
-        key: String,
-    ) -> Result<Option<MemoryRecord>, Self::Error> {
-        Ok(Self::by_key(&self.user, &key))
-    }
-
-    async fn put_session_memory(
-        &self,
-        key: Option<String>,
-        content: String,
-    ) -> Result<MemoryRecord, Self::Error> {
-        Ok(Self::put(&self.session, key, content))
-    }
-
-    async fn forget_session_memory(&self, handle: String) -> Result<(), Self::Error> {
-        Self::forget(&self.session, &handle);
-        Ok(())
-    }
-
-    async fn get_session_memories(
-        &self,
-        _limit: Option<usize>,
-    ) -> Result<Vec<MemoryRecord>, Self::Error> {
-        Ok(Self::list(&self.session))
-    }
-
-    async fn get_session_memory_by_key(
-        &self,
-        key: String,
-    ) -> Result<Option<MemoryRecord>, Self::Error> {
-        Ok(Self::by_key(&self.session, &key))
-    }
-}
 
 #[tokio::test]
 async fn should_record_recall_and_forget_user_and_session_memories() {

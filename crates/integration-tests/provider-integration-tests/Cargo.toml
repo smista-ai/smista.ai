@@ -6,8 +6,13 @@ description = "API-key-gated provider integration tests for the smista.ai worksp
 license = "Elastic-2.0"
 publish = false
 
-[dev-dependencies]
-rig-core = { workspace = true }
+[dependencies]
 smista-providers = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+rig-core = { workspace = true }
+secrecy = { workspace = true }
+smista-core = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

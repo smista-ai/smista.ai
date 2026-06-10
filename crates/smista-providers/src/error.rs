@@ -195,7 +195,7 @@ pub(crate) fn category_from_structured(error: &StructuredOutputError) -> Provide
 }
 
 /// Classifies a transport-level [`RigHttpClientError`].
-fn category_from_http(error: &RigHttpClientError) -> ProviderErrorCategory {
+pub(crate) fn category_from_http(error: &RigHttpClientError) -> ProviderErrorCategory {
     match error {
         RigHttpClientError::InvalidStatusCode(status) => {
             let category: ProviderErrorCategory = (*status).into();

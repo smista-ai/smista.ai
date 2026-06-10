@@ -12,8 +12,12 @@
 //! implementation detail of this adapter layer.
 //!
 
+mod agent;
 pub mod api;
 mod error;
 pub mod memory;
 pub mod model;
 pub mod provider;
+
+/// A convenient alias for results returned by provider implementations, which all use the same error type.
+pub type ProviderResult<T> = Result<T, smista_core::error::ProviderError>;

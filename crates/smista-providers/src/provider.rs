@@ -8,11 +8,13 @@
 //! implementations own credentials and connection details; everything beyond
 //! resolution happens through the [`Model`] abstraction.
 
+pub mod anthropic;
+
 use std::sync::Arc;
 
-use smista_core::error::ProviderError;
 use smista_core::model::{ModelReference, Provider as ProviderId};
 
+use crate::ProviderResult;
 use crate::model::Model;
 
 /// A provider account or endpoint: discovers models and resolves them for
@@ -42,14 +44,14 @@ pub trait Provider: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns a [`ProviderError`] whose
-    /// [`category`](ProviderError::category) classifies the failure.
+    /// Returns a [`smista_core::error::ProviderError`] whose
+    /// [`category`](smista_core::error::ProviderError::category) classifies the failure.
     ///
     /// In particular, a reference this provider does not offer yields
     /// [`smista_core::error::ProviderErrorCategory::ModelNotFound`].
     ///
     /// Authentication, credential and connectivity problems surfaced while resolving map to their respective categories.
-    async fn resolve(&self, reference: &ModelReference) -> Result<Arc<dyn Model>, ProviderError>;
+    async fn resolve(&self, reference: &ModelReference) -> ProviderResult<Arc<dyn Model>>;
 
     /// Lists every model this provider currently offers.
     ///
@@ -59,8 +61,8 @@ pub trait Provider: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns a [`ProviderError`] when the provider cannot be reached or
+    /// Returns a [`smista_core::error::ProviderError`] when the provider cannot be reached or
     /// rejects the request — for example, missing or invalid credentials, or an
     /// unavailable upstream.
-    async fn list_models(&self) -> Result<Vec<ModelReference>, ProviderError>;
+    async fn list_models(&self) -> ProviderResult<Vec<ModelReference>>;
 }

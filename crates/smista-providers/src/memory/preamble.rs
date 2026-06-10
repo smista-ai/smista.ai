@@ -70,18 +70,39 @@ pub fn build_preamble(user: &[MemoryRecord], session: &[MemoryRecord]) -> Option
     Some(out)
 }
 
+/// Maximum number of characters rendered from a single record's `content`.
+///
+/// `MemoryRecord.content` is unbounded, but the preamble is re-sent on every
+/// turn, so an oversized fact would inflate token cost on each request. The
+/// record-count cap upstream bounds *how many* facts load, not their size; this
+/// bounds the size of each one. A single remembered fact rarely exceeds a short
+/// paragraph, so anything past this is almost certainly accidental bulk (pasted
+/// logs, documents) and is truncated rather than billed in full.
+const MAX_CONTENT_CHARS: usize = 500;
+
 /// Appends `records` to `out` as a bullet list, one fact per line.
 fn write_records(out: &mut String, records: &[MemoryRecord]) {
     for record in records {
+        let content = truncate_content(&record.content);
         // Writing into a String is infallible, so the result is discarded.
         match &record.key {
             Some(key) => {
-                let _ = writeln!(out, "- {key}: {}", record.content);
+                let _ = writeln!(out, "- {key}: {content}");
             }
             None => {
-                let _ = writeln!(out, "- {}", record.content);
+                let _ = writeln!(out, "- {content}");
             }
         }
+    }
+}
+
+/// Truncates `content` to [`MAX_CONTENT_CHARS`] on a character boundary,
+/// appending an ellipsis when shortened. Returns the input unchanged when it is
+/// already within the limit, avoiding an allocation in the common case.
+fn truncate_content(content: &str) -> std::borrow::Cow<'_, str> {
+    match content.char_indices().nth(MAX_CONTENT_CHARS) {
+        Some((boundary, _)) => std::borrow::Cow::Owned(format!("{}…", &content[..boundary])),
+        None => std::borrow::Cow::Borrowed(content),
     }
 }
 
@@ -132,6 +153,38 @@ mod tests {
         let user_at = preamble.find("## About the user").expect("user section");
         let session_at = preamble.find("## This session").expect("session section");
         assert!(user_at < session_at);
+    }
+
+    #[test]
+    fn should_truncate_oversized_content() {
+        let long = "x".repeat(MAX_CONTENT_CHARS + 50);
+        let user = vec![record(None, &long)];
+        let preamble = build_preamble(&user, &[]).expect("non-empty");
+
+        let kept = "x".repeat(MAX_CONTENT_CHARS);
+        assert!(preamble.contains(&format!("- {kept}…")));
+        assert!(!preamble.contains(&"x".repeat(MAX_CONTENT_CHARS + 1)));
+    }
+
+    #[test]
+    fn should_not_truncate_content_within_limit() {
+        let exact = "y".repeat(MAX_CONTENT_CHARS);
+        let user = vec![record(None, &exact)];
+        let preamble = build_preamble(&user, &[]).expect("non-empty");
+
+        assert!(preamble.contains(&format!("- {exact}\n")));
+        assert!(!preamble.contains('…'));
+    }
+
+    #[test]
+    fn should_truncate_on_char_boundary_for_multibyte() {
+        // Each 'é' is 2 bytes; truncating mid-codepoint would panic.
+        let long = "é".repeat(MAX_CONTENT_CHARS + 10);
+        let user = vec![record(None, &long)];
+        let preamble = build_preamble(&user, &[]).expect("non-empty");
+
+        let kept = "é".repeat(MAX_CONTENT_CHARS);
+        assert!(preamble.contains(&format!("- {kept}…")));
     }
 
     #[test]

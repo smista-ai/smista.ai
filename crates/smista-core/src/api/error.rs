@@ -239,6 +239,7 @@ fn map_provider(error: ProviderError) -> ApiErrorResponse {
             (StatusCode::SERVICE_UNAVAILABLE, "provider_unavailable")
         }
         ProviderErrorCategory::RateLimit => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
+        ProviderErrorCategory::Storage => (StatusCode::INTERNAL_SERVER_ERROR, "storage_error"),
         ProviderErrorCategory::Timeout => (StatusCode::GATEWAY_TIMEOUT, "request_timeout"),
         ProviderErrorCategory::Unknown => (StatusCode::BAD_GATEWAY, "provider_error"),
         ProviderErrorCategory::UnsupportedCapability => (
@@ -474,6 +475,16 @@ mod tests {
                 ProviderErrorCategory::InvalidCredentials,
                 StatusCode::SERVICE_UNAVAILABLE,
                 "invalid_provider_credentials",
+            ),
+            (
+                ProviderErrorCategory::Storage,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "storage_error",
+            ),
+            (
+                ProviderErrorCategory::ModelNotFound,
+                StatusCode::NOT_FOUND,
+                "model_not_found",
             ),
             (
                 ProviderErrorCategory::Authentication,
