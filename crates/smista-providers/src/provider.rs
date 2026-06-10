@@ -7,8 +7,14 @@
 //! [`ModelReference`] into an `Arc<dyn Model>` it can execute. Provider
 //! implementations own credentials and connection details; everything beyond
 //! resolution happens through the [`Model`] abstraction.
+//!
+//! Available providers include:
+//!
+//! - [`anthropic::AnthropicProvider`] for Anthropic's API.
+//! - [`openai::OpenAIProvider`] for OpenAI's API.
 
 pub mod anthropic;
+pub mod openai;
 
 use std::sync::Arc;
 
