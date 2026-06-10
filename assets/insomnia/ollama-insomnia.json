@@ -1,0 +1,283 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_source": "claude-code:ollama-api",
+  "resources": [
+    {
+      "_id": "wrk_ollama",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "Ollama API",
+      "description": "All Ollama REST API calls. Set base_url in the environment.",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_base",
+      "_type": "environment",
+      "parentId": "wrk_ollama",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:11434"
+      },
+      "dataPropertyOrder": {
+        "&": ["base_url"]
+      },
+      "metaSortKey": 1
+    },
+    {
+      "_id": "fld_generation",
+      "_type": "request_group",
+      "parentId": "wrk_ollama",
+      "name": "Generation",
+      "metaSortKey": -100
+    },
+    {
+      "_id": "fld_models",
+      "_type": "request_group",
+      "parentId": "wrk_ollama",
+      "name": "Models",
+      "metaSortKey": -90
+    },
+    {
+      "_id": "fld_embeddings",
+      "_type": "request_group",
+      "parentId": "wrk_ollama",
+      "name": "Embeddings",
+      "metaSortKey": -80
+    },
+    {
+      "_id": "fld_blobs",
+      "_type": "request_group",
+      "parentId": "wrk_ollama",
+      "name": "Blobs",
+      "metaSortKey": -70
+    },
+    {
+      "_id": "fld_system",
+      "_type": "request_group",
+      "parentId": "wrk_ollama",
+      "name": "System",
+      "metaSortKey": -60
+    },
+    {
+      "_id": "req_generate",
+      "_type": "request",
+      "parentId": "fld_generation",
+      "name": "Generate Completion",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/generate",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"model\": \"llama3.2\",\n  \"prompt\": \"Why is the sky blue?\",\n  \"stream\": false\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -100
+    },
+    {
+      "_id": "req_chat",
+      "_type": "request",
+      "parentId": "fld_generation",
+      "name": "Generate Chat Completion",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/chat",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"model\": \"llama3.2\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"why is the sky blue?\"\n    }\n  ],\n  \"stream\": false\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -90
+    },
+    {
+      "_id": "req_create",
+      "_type": "request",
+      "parentId": "fld_models",
+      "name": "Create Model",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/create",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"model\": \"mario\",\n  \"from\": \"llama3.2\",\n  \"system\": \"You are Mario from Super Mario Bros.\",\n  \"stream\": false\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -100
+    },
+    {
+      "_id": "req_tags",
+      "_type": "request",
+      "parentId": "fld_models",
+      "name": "List Local Models",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/tags",
+      "body": {},
+      "headers": [],
+      "metaSortKey": -90
+    },
+    {
+      "_id": "req_show",
+      "_type": "request",
+      "parentId": "fld_models",
+      "name": "Show Model Information",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/show",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"model\": \"llama3.2\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -80
+    },
+    {
+      "_id": "req_copy",
+      "_type": "request",
+      "parentId": "fld_models",
+      "name": "Copy Model",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/copy",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"source\": \"llama3.2\",\n  \"destination\": \"llama3-backup\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -70
+    },
+    {
+      "_id": "req_delete",
+      "_type": "request",
+      "parentId": "fld_models",
+      "name": "Delete Model",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/api/delete",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"model\": \"llama3:13b\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -60
+    },
+    {
+      "_id": "req_pull",
+      "_type": "request",
+      "parentId": "fld_models",
+      "name": "Pull Model",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/pull",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"model\": \"llama3.2\",\n  \"stream\": false\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -50
+    },
+    {
+      "_id": "req_push",
+      "_type": "request",
+      "parentId": "fld_models",
+      "name": "Push Model",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/push",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"model\": \"mattw/pygmalion:latest\",\n  \"stream\": false\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -40
+    },
+    {
+      "_id": "req_embed",
+      "_type": "request",
+      "parentId": "fld_embeddings",
+      "name": "Generate Embeddings",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/embed",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"model\": \"all-minilm\",\n  \"input\": \"Why is the sky blue?\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -100
+    },
+    {
+      "_id": "req_embeddings_legacy",
+      "_type": "request",
+      "parentId": "fld_embeddings",
+      "name": "Generate Embedding (Legacy)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/embeddings",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"model\": \"all-minilm\",\n  \"prompt\": \"Here is an article about llamas...\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "metaSortKey": -90
+    },
+    {
+      "_id": "req_blob_check",
+      "_type": "request",
+      "parentId": "fld_blobs",
+      "name": "Check Blob Exists",
+      "method": "HEAD",
+      "url": "{{ _.base_url }}/api/blobs/sha256:11553e82c7ba1eda8d2e3a5da3df8b3a31b6c1e3a4f2b1234567890abcdef0123",
+      "body": {},
+      "headers": [],
+      "metaSortKey": -100
+    },
+    {
+      "_id": "req_blob_push",
+      "_type": "request",
+      "parentId": "fld_blobs",
+      "name": "Push Blob",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/blobs/sha256:11553e82c7ba1eda8d2e3a5da3df8b3a31b6c1e3a4f2b1234567890abcdef0123",
+      "body": {
+        "mimeType": "application/octet-stream",
+        "text": ""
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/octet-stream" }
+      ],
+      "metaSortKey": -90
+    },
+    {
+      "_id": "req_ps",
+      "_type": "request",
+      "parentId": "fld_system",
+      "name": "List Running Models",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/ps",
+      "body": {},
+      "headers": [],
+      "metaSortKey": -100
+    },
+    {
+      "_id": "req_version",
+      "_type": "request",
+      "parentId": "fld_system",
+      "name": "Get Version",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/version",
+      "body": {},
+      "headers": [],
+      "metaSortKey": -90
+    }
+  ]
+}
