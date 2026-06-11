@@ -84,7 +84,8 @@ pub enum Specificity {
 /// assert_eq!(rule.model.model, "claude-sonnet");
 /// assert_eq!(rule.paths, vec!["src/auth/**".to_string()]);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RoutingRule {
     /// Human-readable rule name.
     pub name: String,
@@ -112,6 +113,7 @@ pub struct RoutingRule {
     /// Capability gate: when set, the matched model must satisfy every
     /// capability flagged `true` here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub requires_capabilities: Option<ModelCapabilities>,
     /// Model selected when the rule matches. Using syntax supported by [`ModelReference`] (e.g. `"ollama/llama3"`).
     pub model: ModelReference,
@@ -132,6 +134,7 @@ pub struct RoutingRule {
         with = "rust_decimal::serde::str_option",
         skip_serializing_if = "Option::is_none"
     )]
+    #[ts(optional, type = "string")]
     pub cost_limit: Option<Decimal>,
 }
 
@@ -255,7 +258,8 @@ fn default_priority() -> u32 {
 /// assert!(policy.rules.is_empty());
 /// assert!(policy.default.is_none());
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RoutingPolicy {
     /// Routing rules; evaluated in ascending priority order, first match wins.
     #[serde(default)]
@@ -281,7 +285,8 @@ pub struct RoutingPolicy {
 /// .unwrap();
 /// assert_eq!(route.model.to_string(), "openai/gpt-5.5-mini");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DefaultRoute {
     /// Model used when no rule matches.
     pub model: ModelReference,

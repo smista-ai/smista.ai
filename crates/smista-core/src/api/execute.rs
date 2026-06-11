@@ -7,12 +7,12 @@
 //! context. [`ExecuteResponse`] reports the outcome: the routed model, what
 //! context was used, the assistant message, usage, and the trace id.
 //!
-//! The `policy` block is the API wire snapshot the CLI sends, not the CLI's own
-//! config schema: it carries a flat `permissions` map and a `default_model`
-//! plus per-rule `match`/`use`, reusing
-//! [`ModelReference`](crate::model::ModelReference),
-//! [`TaskIntent`](crate::intent::TaskIntent) and
-//! [`PermissionMode`](crate::policy::PermissionMode) for the leaf values.
+//! The `policy` block is the deterministic policy the CLI assembles from its
+//! config layers and sends verbatim: it embeds the very same
+//! [`RoutingPolicy`](crate::policy::RoutingPolicy),
+//! [`ToolsConfig`](crate::policy::ToolsConfig) and
+//! [`PrivacyPolicy`](crate::policy::PrivacyPolicy) the router evaluates, so
+//! there is one policy vocabulary instead of a separate, lossy wire model.
 //!
 //! Provider credentials are never part of this body; they travel as request
 //! headers and are handled at the HTTP boundary.
@@ -32,7 +32,6 @@
 //! assert!(json.contains("\"command\":\"edit\""));
 //! ```
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -40,7 +39,7 @@ use serde::{Deserialize, Serialize};
 use crate::intent::TaskIntent;
 use crate::message::Message;
 use crate::model::{ModelReference, Provider};
-use crate::policy::PermissionMode;
+use crate::policy::{PrivacyPolicy, RoutingPolicy, ToolsConfig};
 use crate::skill::Skill;
 use crate::usage::Usage;
 
@@ -103,83 +102,22 @@ pub struct Workspace {
 /// The deterministic policy snapshot the client sends with a task.
 ///
 /// `version` is the schema version of the snapshot; `source` records how it was
-/// assembled (for example `merged`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+/// assembled (for example `merged`). The `routing`, `tools` and `privacy`
+/// blocks are the canonical [`crate::policy`] types — the same vocabulary the
+/// router evaluates and the CLI loads from `config.toml`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ExecutePolicy {
     /// Schema version of the policy snapshot.
     pub version: u32,
     /// How the snapshot was assembled, for example `merged`.
     pub source: String,
-    /// Routing rules, default model and fallbacks.
-    pub routing: ExecuteRoutingPolicy,
-    /// Tool permission modes.
-    pub permissions: ExecutePermissions,
-    /// Privacy constraints on context.
-    pub privacy: ExecutePrivacy,
-}
-
-/// Routing portion of the policy snapshot.
-///
-/// `fallbacks` maps a primary model to the ordered models to try if it is
-/// unavailable.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct ExecuteRoutingPolicy {
-    /// Model used when no rule matches.
-    pub default_model: ModelReference,
-    /// Ordered routing rules.
-    pub rules: Vec<ExecuteRoutingRule>,
-    /// Per-model ordered fallbacks, keyed by the primary model.
-    pub fallbacks: HashMap<ModelReference, Vec<ModelReference>>,
-}
-
-/// A single routing rule: match criteria and the model to use.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct ExecuteRoutingRule {
-    /// Criteria that select this rule.
-    #[serde(rename = "match")]
-    pub match_criteria: RuleMatch,
-    /// Model to use when the rule matches.
-    #[serde(rename = "use")]
-    pub use_model: ModelReference,
-}
-
-/// Criteria selecting a routing rule.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct RuleMatch {
-    /// Task type the rule applies to.
-    pub task_type: TaskIntent,
-    /// Glob of paths the rule applies to, if scoped.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub path: Option<String>,
-}
-
-/// Tool permission modes for a task.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct ExecutePermissions {
-    /// Permission for reading files.
-    pub file_read: PermissionMode,
-    /// Permission for writing files.
-    pub file_write: PermissionMode,
-    /// Permission for running shell commands.
-    pub shell: PermissionMode,
-    /// Permission for network access.
-    pub network: PermissionMode,
-}
-
-/// Privacy constraints on the context sent to models.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct ExecutePrivacy {
-    /// Glob patterns whose contents must not be sent to remote models.
-    pub restricted_paths: Vec<String>,
-    /// Whether including restricted context in a remote request needs approval.
-    pub remote_model_requires_approval_for_restricted_context: bool,
+    /// Routing rules and default route.
+    pub routing: RoutingPolicy,
+    /// Tool permission modes, keyed by tool name.
+    pub tools: ToolsConfig,
+    /// Privacy constraints on the context sent to models.
+    pub privacy: PrivacyPolicy,
 }
 
 /// Client-side execution preferences.
@@ -327,6 +265,8 @@ pub struct ContextOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::effort::Effort;
+    use crate::policy::PermissionMode;
 
     /// The `/execute` request body from the API specification.
     const SPEC_REQUEST: &str = r#"{
@@ -342,18 +282,27 @@ mod tests {
             "version": 1,
             "source": "merged",
             "routing": {
-                "default_model": "anthropic/claude-sonnet",
+                "default": {
+                    "model": "anthropic/claude-sonnet",
+                    "fallbacks": ["openai/gpt-5.5-thinking", "ollama/qwen2.5-coder"]
+                },
                 "rules": [
-                    { "match": { "task_type": "edit", "path": "src/auth/**" }, "use": "anthropic/claude-sonnet" }
-                ],
-                "fallbacks": {
-                    "anthropic/claude-sonnet": ["openai/gpt-5.5-thinking", "ollama/qwen2.5-coder"]
-                }
+                    {
+                        "name": "auth edits use Claude",
+                        "priority": 30,
+                        "effort": "high",
+                        "intent": "edit",
+                        "paths": ["src/auth/**"],
+                        "model": "anthropic/claude-sonnet",
+                        "fallbacks": ["openai/gpt-5.5-thinking"]
+                    }
+                ]
             },
-            "permissions": { "file_read": "allow", "file_write": "ask", "shell": "ask", "network": "deny" },
+            "tools": { "permissions": { "file_read": "allow", "file_write": "ask", "shell": "ask", "network": "deny" } },
             "privacy": {
                 "restricted_paths": [".env", "secrets/**", "target/**"],
-                "remote_model_requires_approval_for_restricted_context": true
+                "remote": { "mode": "ask", "blocked_paths": [] },
+                "local": { "mode": "allow" }
             }
         },
         "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
@@ -382,25 +331,28 @@ mod tests {
         );
         assert_eq!(request.workspace.active_file, None);
         assert_eq!(request.policy.version, 1);
+        let default_route = request.policy.routing.default.as_ref().unwrap();
         assert_eq!(
-            request.policy.routing.default_model,
+            default_route.model,
             "anthropic/claude-sonnet".parse().unwrap()
         );
-        assert_eq!(request.policy.permissions.network, PermissionMode::Deny);
-        assert!(
-            request
-                .policy
-                .privacy
-                .remote_model_requires_approval_for_restricted_context
-        );
         assert_eq!(
-            request.policy.routing.fallbacks
-                [&"anthropic/claude-sonnet".parse::<ModelReference>().unwrap()],
+            default_route.fallbacks,
             vec![
                 "openai/gpt-5.5-thinking".parse().unwrap(),
                 "ollama/qwen2.5-coder".parse().unwrap(),
             ]
         );
+        assert_eq!(
+            request.policy.tools.mode_for("network"),
+            Some(PermissionMode::Deny)
+        );
+        assert_eq!(request.policy.privacy.remote.mode(), PermissionMode::Ask);
+        let rule = &request.policy.routing.rules[0];
+        assert_eq!(rule.name, "auth edits use Claude");
+        assert_eq!(rule.intent, Some(TaskIntent::Edit));
+        assert_eq!(rule.effort, Effort::High);
+        assert_eq!(rule.paths, vec!["src/auth/**".to_string()]);
         assert!(request.context.skills.is_empty());
         assert_eq!(request.providers.len(), 2);
     }
@@ -413,21 +365,6 @@ mod tests {
             serde_json::from_str::<ExecuteRequest>(&json).unwrap(),
             request
         );
-    }
-
-    #[test]
-    fn should_rename_match_and_use_on_routing_rule() {
-        let rule = ExecuteRoutingRule {
-            match_criteria: RuleMatch {
-                task_type: TaskIntent::Review,
-                path: None,
-            },
-            use_model: "openai/gpt-5.5-thinking".parse().unwrap(),
-        };
-        let value = serde_json::to_value(&rule).unwrap();
-        assert_eq!(value["match"]["task_type"], "review");
-        assert_eq!(value["use"], "openai/gpt-5.5-thinking");
-        assert!(value["match"].get("path").is_none());
     }
 
     #[test]

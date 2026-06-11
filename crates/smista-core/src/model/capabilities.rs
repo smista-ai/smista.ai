@@ -34,7 +34,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Every flag defaults to `false`, so a [`Default`] value advertises no
 /// capabilities — a conservative starting point a descriptor builds upon.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelCapabilities {
     /// The model can stream its response incrementally.
     #[serde(default)]

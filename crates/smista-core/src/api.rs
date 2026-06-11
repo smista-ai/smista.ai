@@ -50,10 +50,9 @@ pub use approval::{ApprovalDecision, SubmitApprovalRequest, SubmitApprovalRespon
 pub use auth::{BootstrapResponse, MeResponse, SignInRequest, SignInResponse, SignOutResponse};
 pub use error::{ApiError, ApiErrorBody, ApiErrorResponse};
 pub use execute::{
-    ContextFile, ContextInstruction, ContextOutcome, ExecuteContext, ExecutePermissions,
-    ExecutePolicy, ExecutePrivacy, ExecuteRequest, ExecuteResponse, ExecuteRoutingPolicy,
-    ExecuteRoutingRule, ExecutionStatus, LocalPreferences, ProviderCredentialInfo,
-    ProviderModelInfo, RoutingOutcome, RuleMatch, TaskInput, Workspace,
+    ContextFile, ContextInstruction, ContextOutcome, ExecuteContext, ExecutePolicy, ExecuteRequest,
+    ExecuteResponse, ExecutionStatus, LocalPreferences, ProviderCredentialInfo, ProviderModelInfo,
+    RoutingOutcome, TaskInput, Workspace,
 };
 pub use llm::{ListModelsResponse, ListProvidersResponse, ModelInfo};
 pub use preview::{CostRange, PreviewResponse, RequiredPermission};

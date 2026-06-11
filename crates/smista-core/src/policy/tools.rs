@@ -26,7 +26,8 @@ use crate::error::PolicyError;
 /// assert_eq!(config.mode_for("network"), Some(PermissionMode::Deny));
 /// assert_eq!(config.mode_for("unlisted"), None);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ToolsConfig {
     /// Per-tool permission mode, keyed by tool name.
     #[serde(default)]
