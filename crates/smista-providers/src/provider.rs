@@ -12,10 +12,14 @@
 //!
 //! - [`anthropic::AnthropicProvider`] for Anthropic's API.
 //! - [`openai::OpenAIProvider`] for OpenAI's API.
+//! - [`openai_compat::OpenAICompatProvider`] for a named OpenAI-compatible
+//!   endpoint (vLLM, LM Studio, a gateway, …).
+//! - [`ollama::OllamaProvider`] for a local or self-hosted Ollama instance.
 
 pub mod anthropic;
 pub mod ollama;
 pub mod openai;
+pub mod openai_compat;
 
 use std::sync::Arc;
 
