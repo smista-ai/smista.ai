@@ -5,10 +5,12 @@
 //! example `anthropic/claude-sonnet` pairs the [`Provider::Anthropic`]
 //! provider with a model name.
 //!
-//! Provider identifiers serialize to their lowercase name (e.g.
-//! [`Provider::OpenAI`] becomes `"openai"`). The same lowercase form is
-//! produced by [`Display`] and parsed by [`FromStr`], so the textual
-//! representation is stable across config files, the CLI and the HTTP API.
+//! The three built-in providers serialize to their bare lowercase name (e.g.
+//! [`Provider::OpenAI`] becomes `"openai"`). A generic OpenAI-compatible
+//! endpoint is a named instance that serializes as `openai-compat:<name>` (e.g.
+//! `openai-compat:my-vllm`). The same form is produced by [`Display`] and
+//! parsed by [`FromStr`], so the textual representation is stable across config
+//! files, the CLI and the HTTP API.
 //!
 //! # Examples
 //!
@@ -25,23 +27,24 @@
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "surrealdb")]
-use surrealdb_types::SurrealValue;
+use surrealdb_types::{Kind, SurrealValue, Value};
 
 use crate::error::{CoreError, ParseError};
 
 /// The identifier of a provider, used for configuration and routing.
 ///
-/// Each variant serializes to its lowercase name.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, ts_rs::TS,
-)]
-#[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
-#[cfg_attr(feature = "surrealdb", surreal(crate = "::surrealdb_types"))]
-#[cfg_attr(feature = "surrealdb", surreal(rename_all = "lowercase", untagged))]
-#[serde(rename_all = "lowercase")]
+/// The three built-in providers render as their bare lowercase name. A generic
+/// OpenAI-compatible endpoint is a named instance that renders as
+/// `openai-compat:<name>`, so several such endpoints can be configured and
+/// routed to independently.
+///
+/// The type is intentionally not `Copy`: the named variant owns a `String`.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
 #[ts(export)]
+#[ts(type = "string")]
 pub enum Provider {
     /// Anthropic, serving the Claude family of models.
     Anthropic,
@@ -49,44 +52,149 @@ pub enum Provider {
     OpenAI,
     /// Ollama, serving local models.
     Ollama,
+    /// A generic OpenAI-compatible endpoint (vLLM, LM Studio, a gateway, …),
+    /// identified by its user-chosen instance name. Renders as
+    /// `openai-compat:<name>`.
+    OpenAICompatible(String),
 }
 
+/// Scheme tag that prefixes a named OpenAI-compatible instance in its textual
+/// form, separated from the instance name by [`TAG_SEPARATOR`].
+///
+/// Chosen over a bare `openai` (which would read as if the endpoint *were*
+/// OpenAI) and over a generic `compat` (which would be ambiguous if another
+/// compatible family is ever added).
+const OPENAI_COMPATIBLE_TAG: &str = "openai-compat";
+
+/// Separator between the scheme tag and the instance name in a provider's
+/// textual form: the `:` in `openai-compat:my-vllm`. Distinct from the `/` that
+/// separates a provider from a model in a model reference.
+const TAG_SEPARATOR: char = ':';
+
 impl Provider {
-    /// Returns the lowercase string representation of the provider.
+    /// Returns whether `name` is a valid OpenAI-compatible instance name.
     ///
-    /// This is the same form used for serialization, [`Display`] and
-    /// [`FromStr`].
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Anthropic => "anthropic",
-            Self::OpenAI => "openai",
-            Self::Ollama => "ollama",
+    /// Instance names are restricted to non-empty runs of lowercase ASCII
+    /// letters, digits, `-` and `_`. The restriction keeps a name safe to use
+    /// unquoted and free of the `/` and `:` characters that delimit a model
+    /// reference.
+    fn is_valid_instance_name(name: &str) -> bool {
+        !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+    }
+
+    /// Parses a provider from its exact canonical (lowercase) textual form.
+    ///
+    /// Unlike [`FromStr`], this performs no case folding: the input must already
+    /// match the form produced by [`Display`]. It backs the strict
+    /// [`Deserialize`] implementation, where configuration and stored values are
+    /// expected to be canonical.
+    fn from_canonical(s: &str) -> Result<Self, CoreError> {
+        match s {
+            "anthropic" => Ok(Self::Anthropic),
+            "openai" => Ok(Self::OpenAI),
+            "ollama" => Ok(Self::Ollama),
+            other => match other.split_once(TAG_SEPARATOR) {
+                Some((OPENAI_COMPATIBLE_TAG, name)) if Self::is_valid_instance_name(name) => {
+                    Ok(Self::OpenAICompatible(name.to_string()))
+                }
+                Some((OPENAI_COMPATIBLE_TAG, name)) => {
+                    Err(ParseError::InvalidProviderName(name.to_string()).into())
+                }
+                _ => Err(ParseError::UnknownProvider(other.to_string()).into()),
+            },
         }
     }
 }
 
 impl Display for Provider {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
+        match self {
+            Self::Anthropic => f.write_str("anthropic"),
+            Self::OpenAI => f.write_str("openai"),
+            Self::Ollama => f.write_str("ollama"),
+            Self::OpenAICompatible(name) => {
+                write!(f, "{OPENAI_COMPATIBLE_TAG}{TAG_SEPARATOR}{name}")
+            }
+        }
     }
 }
 
 impl FromStr for Provider {
     type Err = CoreError;
 
-    /// Parses the lowercase name of a provider, as produced by [`Display`].
+    /// Parses a provider name, as produced by [`Display`], case-insensitively.
     ///
     /// # Errors
     ///
-    /// Returns [`ParseError::UnknownProvider`] if `s` is not a known provider
-    /// name.
+    /// Returns [`ParseError::UnknownProvider`] if `s` names no known provider,
+    /// or [`ParseError::InvalidProviderName`] if an `openai-compat:` instance
+    /// name contains unsupported characters.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s.to_ascii_lowercase() as &str {
-            "anthropic" => Ok(Self::Anthropic),
-            "openai" => Ok(Self::OpenAI),
-            "ollama" => Ok(Self::Ollama),
-            other => Err(ParseError::UnknownProvider(other.to_string()).into()),
+        Self::from_canonical(&s.to_ascii_lowercase())
+    }
+}
+
+impl Serialize for Provider {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Provider {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ProviderVisitor;
+
+        impl Visitor<'_> for ProviderVisitor {
+            type Value = Provider;
+
+            fn expecting(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                f.write_str("a provider name such as `openai` or `openai-compat:<name>`")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Provider::from_canonical(value).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(ProviderVisitor)
+    }
+}
+
+#[cfg(feature = "surrealdb")]
+impl SurrealValue for Provider {
+    fn kind_of() -> Kind {
+        Kind::String
+    }
+
+    fn is_value(value: &Value) -> bool {
+        matches!(value, Value::String(_))
+    }
+
+    fn into_value(self) -> Value {
+        Value::String(self.to_string())
+    }
+
+    fn from_value(value: Value) -> Result<Self, surrealdb_types::Error> {
+        match value {
+            Value::String(value) => value.parse().map_err(|error: CoreError| {
+                surrealdb_types::Error::serialization(
+                    error.to_string(),
+                    surrealdb_types::SerializationError::Deserialization,
+                )
+            }),
+            other => Err(surrealdb_types::conversion_error(Kind::String, other)),
         }
     }
 }
@@ -207,6 +315,83 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<ProviderDescriptor>(&json).unwrap(),
             descriptor
+        );
+    }
+
+    #[test]
+    fn should_display_openai_compatible_with_scheme_tag() {
+        let provider = Provider::OpenAICompatible("my-vllm".to_string());
+        assert_eq!(provider.to_string(), "openai-compat:my-vllm");
+    }
+
+    #[test]
+    fn should_parse_openai_compatible_instance() {
+        assert_eq!(
+            Provider::from_str("openai-compat:my-vllm"),
+            Ok(Provider::OpenAICompatible("my-vllm".to_string()))
+        );
+    }
+
+    #[test]
+    fn should_roundtrip_openai_compatible_serde() {
+        let provider = Provider::OpenAICompatible("lmstudio_1".to_string());
+        let json = serde_json::to_string(&provider).unwrap();
+        assert_eq!(json, "\"openai-compat:lmstudio_1\"");
+        assert_eq!(serde_json::from_str::<Provider>(&json).unwrap(), provider);
+    }
+
+    #[test]
+    fn should_parse_openai_compatible_case_insensitively() {
+        assert_eq!(
+            Provider::from_str("OpenAI-Compat:my-vllm"),
+            Ok(Provider::OpenAICompatible("my-vllm".to_string()))
+        );
+    }
+
+    #[test]
+    fn should_reject_openai_compatible_without_instance_name() {
+        // The bare tag with no name is not a usable identity.
+        let err = Provider::from_str("openai-compat:").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Parse(ParseError::InvalidProviderName(_))
+        ));
+    }
+
+    #[test]
+    fn should_reject_bare_scheme_tag_as_unknown_provider() {
+        // Without the `:` separator the tag is just an unknown provider name.
+        let err = Provider::from_str("openai-compat").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Parse(ParseError::UnknownProvider(_))
+        ));
+    }
+
+    #[test]
+    fn should_reject_instance_name_with_unsupported_characters() {
+        let err = Provider::from_str("openai-compat:bad name").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Parse(ParseError::InvalidProviderName(_))
+        ));
+    }
+
+    #[test]
+    fn should_order_builtins_before_openai_compatible() {
+        let mut providers = [
+            Provider::OpenAICompatible("z".to_string()),
+            Provider::Ollama,
+            Provider::Anthropic,
+        ];
+        providers.sort();
+        assert_eq!(
+            providers,
+            [
+                Provider::Anthropic,
+                Provider::Ollama,
+                Provider::OpenAICompatible("z".to_string()),
+            ]
         );
     }
 }

@@ -160,6 +160,30 @@ mod tests {
     }
 
     #[test]
+    fn should_parse_openai_compatible_reference() {
+        // The provider segment carries the scheme tag and instance name; the
+        // first `/` still splits provider from model.
+        let parsed = ModelReference::from_str("openai-compat:my-vllm/llama-3.1-70b").unwrap();
+        assert_eq!(
+            parsed.provider,
+            Provider::OpenAICompatible("my-vllm".to_string())
+        );
+        assert_eq!(parsed.model, "llama-3.1-70b");
+    }
+
+    #[test]
+    fn should_roundtrip_openai_compatible_reference() {
+        let reference = ModelReference {
+            provider: Provider::OpenAICompatible("my-vllm".to_string()),
+            model: "llama-3.1-70b".to_string(),
+        };
+        assert_eq!(
+            ModelReference::from_str(&reference.to_string()),
+            Ok(reference)
+        );
+    }
+
+    #[test]
     fn should_roundtrip_display_and_from_str() {
         assert_eq!(
             ModelReference::from_str(&reference().to_string()),

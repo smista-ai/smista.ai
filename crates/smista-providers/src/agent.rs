@@ -105,7 +105,8 @@ where
         tracing::debug!(
             "loading preamble from memory storage for {model} with provider {provider}"
         );
-        let memory_preamble = load_memories_preamble(storage.as_ref(), provider, &model).await?;
+        let memory_preamble =
+            load_memories_preamble(storage.as_ref(), provider.clone(), &model).await?;
 
         // load memory tool
         let memory_tool = MemoryTool::new(storage.clone());
@@ -133,7 +134,7 @@ where
             .map_err(|error| {
                 crate::error::provider_error(
                     ProviderErrorCategory::Unknown,
-                    provider,
+                    provider.clone(),
                     Some(model.clone()),
                     format!("failed to enumerate agent tools: {error}"),
                 )
@@ -288,10 +289,12 @@ where
                 )
             })?;
 
-        let provider = self.provider;
+        let provider = self.provider.clone();
         let model = self.model.clone();
         let events = stream
-            .filter_map(move |item| futures::future::ready(map_stream_item(item, provider, &model)))
+            .filter_map(move |item| {
+                futures::future::ready(map_stream_item(item, provider.clone(), &model))
+            })
             .chain(futures::stream::once(futures::future::ready(Ok(
                 StreamEvent::Done,
             ))))
@@ -374,7 +377,12 @@ where
 
     /// Builds a [`ProviderError`] carrying this agent's provider and model context.
     fn error(&self, category: ProviderErrorCategory, message: impl Into<String>) -> ProviderError {
-        crate::error::provider_error(category, self.provider, Some(self.model.clone()), message)
+        crate::error::provider_error(
+            category,
+            self.provider.clone(),
+            Some(self.model.clone()),
+            message,
+        )
     }
 }
 
@@ -574,7 +582,7 @@ where
 {
     let user_memories = normalize_memories_result::<S>(
         storage.get_user_memories(Some(MEMORIES_MAX_RECORDS)).await,
-        provider,
+        provider.clone(),
         model,
     )
     .await?;

@@ -170,6 +170,11 @@ Each table below lists its fields. The `id` field is the SurrealDB record id
 (UUIDv7 key); it is shown for completeness, not as a separate column. Owner
 references (`user`, `session`) are stored as explicit `RecordId` references.
 
+Enum-typed fields are stored as their lowercase textual form. A `Provider` enum
+value is the provider identifier as it appears in a model reference: one of
+`anthropic`, `openai`, `ollama`, or `openai-compat:<name>` for a named
+OpenAI-compatible instance.
+
 ### user
 
 An identity that can own sessions. In local-first deployments a user may be

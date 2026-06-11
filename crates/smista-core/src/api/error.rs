@@ -159,6 +159,7 @@ fn map_parse(error: &ParseError) -> ApiErrorResponse {
     let message = error.to_string();
     let code = match error {
         ParseError::InvalidModelReference(_) => "invalid_model_reference",
+        ParseError::InvalidProviderName(_) => "invalid_provider_name",
         ParseError::UnknownEffort(_) => "unknown_effort",
         ParseError::UnknownIntent(_) => "unknown_intent",
         ParseError::UnknownProvider(_) => "unknown_provider",
@@ -511,7 +512,7 @@ mod tests {
             let response = ApiErrorResponse::from(CoreError::from(ProviderError {
                 category,
                 message: "provider said no".to_string(),
-                provider,
+                provider: provider.clone(),
                 model: Some("claude-sonnet".to_string()),
             }));
             assert_eq!(response.status, status, "status for {category:?}");

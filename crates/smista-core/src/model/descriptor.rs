@@ -92,7 +92,7 @@ impl ModelDescriptor {
     #[must_use]
     pub fn reference(&self) -> ModelReference {
         ModelReference {
-            provider: self.provider,
+            provider: self.provider.clone(),
             model: self.model.clone(),
         }
     }

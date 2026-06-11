@@ -236,9 +236,36 @@ base_url = "https://api.openai.com/v1"
 
 Each `[router.providers.<id>]` table accepts:
 
-| Key        | Type   | Default  | Purpose                                                |
-| ---------- | ------ | -------- | ------------------------------------------------------ |
-| `base_url` | string | provider | Endpoint base URL; omit to use the provider's default. |
+| Key        | Type            | Default  | Purpose                                                                                                                           |
+| ---------- | --------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url` | string          | provider | Endpoint base URL; omit to use the provider's default.                                                                            |
+| `models`   | list of strings | `[]`     | Models advertised for an `openai-compat:<name>` endpoint with no model-listing API; see below. Ignored by the built-in providers. |
+
+### Generic OpenAI-compatible endpoints
+
+You can point the router at any number of OpenAI-compatible endpoints — a local
+vLLM or LM Studio server, llama.cpp, or a hosted gateway. Each one is a *named
+instance*: you choose a name, and routing rules address it as
+`openai-compat:<name>/<model>` (for example
+`openai-compat:my-vllm/llama-3.1-70b`).
+
+Configure each instance under its full identity as the table key. The name is
+quoted because it contains a colon:
+
+```toml
+[router.providers."openai-compat:my-vllm"]
+base_url = "http://localhost:8000/v1"
+models   = ["llama-3.1-70b"]
+
+[router.providers."openai-compat:lmstudio"]
+base_url = "http://localhost:1234/v1"
+```
+
+The router lists an endpoint's models from its `/v1/models` API when it offers
+one; otherwise it advertises the `models` you list here. A model name still
+routes even when it is not listed. The credential, if the endpoint needs one, is
+set on the CLI side — see the `openai-compat:<name>` provider in
+[Configuring the CLI](cli.md).
 
 > [!NOTE]
 > Model facts — capabilities, context window, costs, whether a model is local,
