@@ -14,6 +14,7 @@
 //! - [`openai::OpenAIProvider`] for OpenAI's API.
 
 pub mod anthropic;
+pub mod ollama;
 pub mod openai;
 
 use std::sync::Arc;

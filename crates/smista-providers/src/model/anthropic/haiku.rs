@@ -36,7 +36,7 @@ impl Haiku_4_5 {
     /// Creates a new Haiku 4.5 model with the given arguments.
     pub async fn new<S>(
         AnthropicModelArgs {
-            apikey,
+            api_key,
             preamble,
             storage,
         }: AnthropicModelArgs<S>,
@@ -45,7 +45,7 @@ impl Haiku_4_5 {
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating Anthropic Haiku 4.5 model");
-        let client = AnthropicClient::new(apikey.expose_secret()).map_err(|e| {
+        let client = AnthropicClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
                 Provider::Anthropic,

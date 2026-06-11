@@ -20,7 +20,7 @@ where
 {
     /// The OpenAI API key authenticating requests, held as a [`SecretString`]
     /// so it is redacted from logs and never printed by [`Debug`].
-    pub apikey: SecretString,
+    pub api_key: SecretString,
     /// The base system prompt; the model appends its memory preamble to this.
     pub preamble: String,
     /// The memory backend the model reads to build its preamble and writes
@@ -36,7 +36,7 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OpenAIModelArgs")
-            .field("apikey", &"[redacted]")
+            .field("api_key", &"[redacted]")
             .field("preamble", &self.preamble)
             .field(
                 "storage",
@@ -54,7 +54,7 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            apikey: self.apikey.clone(),
+            api_key: self.api_key.clone(),
             preamble: self.preamble.clone(),
             storage: Arc::clone(&self.storage),
         }
@@ -130,9 +130,9 @@ mod tests {
     }
 
     #[test]
-    fn should_redact_apikey_in_debug_output() {
+    fn should_redact_api_key_in_debug_output() {
         let args = OpenAIModelArgs {
-            apikey: SecretString::from("sk-openai-api03-TOPSECRETVALUE"),
+            api_key: SecretString::from("sk-openai-api03-TOPSECRETVALUE"),
             preamble: "be helpful".to_string(),
             storage: Arc::new(NoStorage),
         };
@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn should_clone_args_without_requiring_storage_clone() {
         let args = OpenAIModelArgs {
-            apikey: SecretString::from("sk-openai-secret"),
+            api_key: SecretString::from("sk-openai-secret"),
             preamble: "preamble".to_string(),
             storage: Arc::new(NoStorage),
         };

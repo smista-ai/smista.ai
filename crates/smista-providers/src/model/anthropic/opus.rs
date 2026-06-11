@@ -54,7 +54,7 @@ impl Opus_4_8 {
     /// Creates a new Opus 4.8 model with the given arguments.
     pub async fn new<S>(
         AnthropicModelArgs {
-            apikey,
+            api_key,
             preamble,
             storage,
         }: AnthropicModelArgs<S>,
@@ -63,7 +63,7 @@ impl Opus_4_8 {
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating Anthropic Opus 4.8 model");
-        let client = AnthropicClient::new(apikey.expose_secret()).map_err(|e| {
+        let client = AnthropicClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
                 Provider::Anthropic,
@@ -145,7 +145,7 @@ impl Opus_4_7 {
     /// Creates a new Opus 4.7 model with the given arguments.
     pub async fn new<S>(
         AnthropicModelArgs {
-            apikey,
+            api_key,
             preamble,
             storage,
         }: AnthropicModelArgs<S>,
@@ -154,7 +154,7 @@ impl Opus_4_7 {
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating Anthropic Opus 4.7 model");
-        let client = AnthropicClient::new(apikey.expose_secret()).map_err(|e| {
+        let client = AnthropicClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
                 Provider::Anthropic,
@@ -237,7 +237,7 @@ impl Opus_4_6 {
     /// Creates a new Opus 4.6 model with the given arguments.
     pub async fn new<S>(
         AnthropicModelArgs {
-            apikey,
+            api_key,
             preamble,
             storage,
         }: AnthropicModelArgs<S>,
@@ -246,7 +246,7 @@ impl Opus_4_6 {
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating Anthropic Opus 4.6 model");
-        let client = AnthropicClient::new(apikey.expose_secret()).map_err(|e| {
+        let client = AnthropicClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
                 Provider::Anthropic,

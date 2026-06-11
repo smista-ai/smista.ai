@@ -33,7 +33,7 @@ const SESSION_VALUE: &str = "SMISTA-4242";
 
 #[tokio::test]
 async fn should_record_recall_and_forget_user_and_session_memories() {
-    // ensure the apikey is set
+    // ensure the API key is set
     let Ok(client) = anthropic::Client::from_env() else {
         panic!("ANTHROPIC_API_KEY is not set or invalid");
     };

@@ -176,7 +176,7 @@ mod tests {
 
     fn provider() -> AnthropicProvider<NoStorage> {
         AnthropicProvider::new(AnthropicModelArgs {
-            apikey: SecretString::from("sk-ant-test"),
+            api_key: SecretString::from("sk-ant-test"),
             preamble: "be helpful".to_string(),
             storage: Arc::new(NoStorage),
         })

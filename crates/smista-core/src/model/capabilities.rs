@@ -103,6 +103,24 @@ impl ModelCapabilities {
     }
 }
 
+impl From<Vec<Capability>> for ModelCapabilities {
+    fn from(capabilities: Vec<Capability>) -> Self {
+        let mut caps = Self::default();
+        for capability in capabilities {
+            match capability {
+                Capability::Streaming => caps.streaming = true,
+                Capability::Tools => caps.tools = true,
+                Capability::JsonOutput => caps.json_output = true,
+                Capability::SystemPrompt => caps.system_prompt = true,
+                Capability::Images => caps.images = true,
+                Capability::Reasoning => caps.reasoning = true,
+                Capability::Memory => caps.memory = true,
+            }
+        }
+        caps
+    }
+}
+
 /// A single model capability, used to report which one a task requires.
 ///
 /// Each variant serializes to its lowercase snake_case name.

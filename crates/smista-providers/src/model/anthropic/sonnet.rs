@@ -36,7 +36,7 @@ impl Sonnet_4_6 {
     /// Creates a new Sonnet 4.6 model with the given arguments.
     pub async fn new<S>(
         AnthropicModelArgs {
-            apikey,
+            api_key,
             preamble,
             storage,
         }: AnthropicModelArgs<S>,
@@ -45,7 +45,7 @@ impl Sonnet_4_6 {
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating Anthropic Sonnet 4.6 model");
-        let client = AnthropicClient::new(apikey.expose_secret()).map_err(|e| {
+        let client = AnthropicClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
                 Provider::Anthropic,

@@ -45,13 +45,13 @@ fn ping_request() -> CompletionRequest {
 
 #[tokio::test]
 async fn should_resolve_gpt_5_4_mini_and_run_complete_and_stream() {
-    // ensure the apikey is set
-    let Ok(apikey) = std::env::var("OPENAI_API_KEY").map(SecretString::from) else {
+    // ensure the API key is set
+    let Ok(api_key) = std::env::var("OPENAI_API_KEY").map(SecretString::from) else {
         panic!("OPENAI_API_KEY is not set");
     };
 
     let provider = OpenAIProvider::new(OpenAIModelArgs {
-        apikey,
+        api_key,
         preamble: "You are a terse assistant.".to_string(),
         storage: Arc::new(InMemoryStorage::default()),
     });

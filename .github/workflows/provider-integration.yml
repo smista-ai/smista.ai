@@ -24,6 +24,12 @@ jobs:
   provider-integration-test:
     needs: toolchain
     runs-on: ubuntu-latest
+    env:
+      # A local Ollama daemon stands in for the (subscription-only) cloud: the
+      # tiny 0.5B model keeps the pull and CPU inference cheap, and the suite
+      # only asserts transport, not answer quality.
+      OLLAMA_BASE_URL: http://localhost:11434
+      OLLAMA_MODEL: qwen2.5:0.5b
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -41,6 +47,19 @@ jobs:
           toolchain: ${{ needs.toolchain.outputs.channel }}
       - name: Install just
         uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Start Ollama and pull the test model
+        run: |
+          nohup ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &
+          # Wait for the daemon to accept connections before pulling.
+          for _ in $(seq 1 30); do
+            if curl -fsS "$OLLAMA_BASE_URL/api/version" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          ollama pull "$OLLAMA_MODEL"
       - name: Provider integration test
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
