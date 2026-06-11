@@ -27,26 +27,6 @@ pub enum Cached<T> {
     Miss,
 }
 
-impl<T> Cached<T> {
-    /// Returns `true` if this is a [`Hit`](Cached::Hit).
-    pub fn is_hit(&self) -> bool {
-        matches!(self, Cached::Hit(_))
-    }
-
-    /// Returns `true` if this is a [`Miss`](Cached::Miss).
-    pub fn is_miss(&self) -> bool {
-        matches!(self, Cached::Miss)
-    }
-
-    /// Converts the lookup into an [`Option`], discarding the miss reason.
-    pub fn hit(self) -> Option<T> {
-        match self {
-            Cached::Hit(value) => Some(value),
-            Cached::Miss => None,
-        }
-    }
-}
-
 /// A stored value together with the instant it was written.
 #[derive(Debug)]
 struct Entry<T> {
@@ -99,12 +79,6 @@ impl<T> TtlCache<T> {
     /// Any previously cached value is overwritten.
     pub fn set(&self, value: T) {
         self.store(value, Instant::now());
-    }
-
-    /// Drops the cached value, so the next [`get`](TtlCache::get) reports
-    /// [`Cached::Miss`].
-    pub fn invalidate(&self) {
-        *self.entry.write().expect("TtlCache lock poisoned") = None;
     }
 
     /// Looks up the cached value as of `now`.
@@ -210,14 +184,6 @@ mod tests {
     }
 
     #[test]
-    fn should_miss_after_invalidate() {
-        let cache = TtlCache::new(TTL);
-        cache.set(42);
-        cache.invalidate();
-        assert_eq!(cache.get(), Cached::Miss);
-    }
-
-    #[test]
     fn should_cache_non_copy_values() {
         let cache = TtlCache::new(TTL);
         cache.set(vec!["llama3".to_string(), "qwen".to_string()]);
@@ -234,19 +200,5 @@ mod tests {
         let writer = Arc::clone(&cache);
         writer.set(99);
         assert_eq!(cache.get(), Cached::Hit(99));
-    }
-
-    #[test]
-    fn cached_reports_hit_and_miss() {
-        assert!(Cached::Hit(1).is_hit());
-        assert!(!Cached::Hit(1).is_miss());
-        assert!(Cached::<u32>::Miss.is_miss());
-        assert!(!Cached::<u32>::Miss.is_hit());
-    }
-
-    #[test]
-    fn cached_converts_to_option() {
-        assert_eq!(Cached::Hit(5).hit(), Some(5));
-        assert_eq!(Cached::<u32>::Miss.hit(), None);
     }
 }

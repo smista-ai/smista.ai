@@ -24,6 +24,7 @@ use secrecy::SecretString;
 use smista_core::model::{ModelParameters, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
+use smista_providers::auth::Authentication;
 use smista_providers::model::anthropic::{AnthropicModelArgs, haiku_4_5};
 use smista_providers::provider::Provider;
 use smista_providers::provider::anthropic::AnthropicProvider;
@@ -51,17 +52,17 @@ async fn should_resolve_haiku_and_run_complete_and_stream() {
     };
 
     let provider = AnthropicProvider::new(AnthropicModelArgs {
-        api_key,
         preamble: "You are a terse assistant.".to_string(),
         storage: Arc::new(InMemoryStorage::default()),
     });
+    let authentication = Authentication::ApiKey(api_key);
 
     // Step 1: resolving the Haiku reference yields the Haiku model — assert on
     // its stable identity and descriptor, not on a concrete type.
     let reference = haiku_4_5();
 
     let model = provider
-        .resolve(&reference)
+        .resolve(&reference, &authentication)
         .await
         .expect("resolving the Haiku reference must succeed");
 

@@ -12,6 +12,7 @@ use smista_core::model::{
 use crate::ProviderResult;
 use crate::agent::{Agent, AgentArgs};
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
+use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
 use crate::model::anthropic::AnthropicModelArgs;
@@ -33,18 +34,24 @@ pub struct Sonnet_4_6 {
 }
 
 impl Sonnet_4_6 {
-    /// Creates a new Sonnet 4.6 model with the given arguments.
+    /// Creates a new Sonnet 4.6 model with the given arguments, authenticating
+    /// with the supplied [`Authentication`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ProviderError`] with category
+    /// [`MissingCredentials`](smista_core::error::ProviderErrorCategory::MissingCredentials)
+    /// when `authentication` carries no API key, or if the underlying client
+    /// cannot be built or the agent fails to load its memory preamble.
     pub async fn new<S>(
-        AnthropicModelArgs {
-            api_key,
-            preamble,
-            storage,
-        }: AnthropicModelArgs<S>,
+        AnthropicModelArgs { preamble, storage }: AnthropicModelArgs<S>,
+        authentication: &Authentication,
     ) -> Result<Self, ProviderError>
     where
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating Anthropic Sonnet 4.6 model");
+        let api_key = authentication.require_api_key(Provider::Anthropic, CLAUDE_SONNET_4_6)?;
         let client = AnthropicClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),

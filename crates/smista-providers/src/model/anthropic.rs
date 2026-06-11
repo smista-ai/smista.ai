@@ -6,8 +6,6 @@ mod sonnet;
 
 use std::sync::Arc;
 
-use secrecy::SecretString;
-
 #[doc(inline)]
 pub use self::haiku::{Haiku_4_5, haiku_4_5};
 #[doc(inline)]
@@ -18,15 +16,14 @@ use crate::memory::MemoryStorage;
 
 /// Arguments for creating a new Anthropic model.
 ///
-/// Carries the credential, base system prompt and memory backend every Anthropic
-/// model needs to construct its underlying agent.
+/// Carries the base system prompt and memory backend every Anthropic model needs
+/// to construct its underlying agent. The credential is not held here: it is
+/// supplied per request as an [`Authentication`](crate::auth::Authentication)
+/// when the model is resolved.
 pub struct AnthropicModelArgs<S>
 where
     S: MemoryStorage + 'static,
 {
-    /// The Anthropic API key authenticating requests, held as a [`SecretString`]
-    /// so it is redacted from logs and never printed by [`Debug`].
-    pub api_key: SecretString,
     /// The base system prompt; the model appends its memory preamble to this.
     pub preamble: String,
     /// The memory backend the model reads to build its preamble and writes
@@ -34,15 +31,14 @@ where
     pub storage: Arc<S>,
 }
 
-// Holds a credential, so `Debug` is implemented by hand to redact the API key
-// rather than derived. A derive would also add a spurious `S: Debug` bound.
+// `#[derive(Debug)]` would add a spurious `S: Debug` bound; render the storage
+// type name by hand instead.
 impl<S> std::fmt::Debug for AnthropicModelArgs<S>
 where
     S: MemoryStorage + 'static,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AnthropicModelArgs")
-            .field("api_key", &"[redacted]")
             .field("preamble", &self.preamble)
             .field(
                 "storage",
@@ -60,7 +56,6 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            api_key: self.api_key.clone(),
             preamble: self.preamble.clone(),
             storage: Arc::clone(&self.storage),
         }
@@ -136,23 +131,20 @@ mod tests {
     }
 
     #[test]
-    fn should_redact_api_key_in_debug_output() {
+    fn should_render_storage_type_in_debug_without_an_s_debug_bound() {
         let args = AnthropicModelArgs {
-            api_key: SecretString::from("sk-ant-api03-TOPSECRETVALUE"),
             preamble: "be helpful".to_string(),
             storage: Arc::new(NoStorage),
         };
 
         let rendered = format!("{args:?}");
-        assert!(!rendered.contains("sk-ant-api03-TOPSECRETVALUE"));
-        assert!(rendered.contains("[redacted]"));
+        assert!(rendered.contains("AnthropicModelArgs"));
         assert!(rendered.contains("be helpful"));
     }
 
     #[test]
     fn should_clone_args_without_requiring_storage_clone() {
         let args = AnthropicModelArgs {
-            api_key: SecretString::from("sk-ant-secret"),
             preamble: "preamble".to_string(),
             storage: Arc::new(NoStorage),
         };

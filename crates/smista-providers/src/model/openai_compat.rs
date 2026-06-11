@@ -3,22 +3,25 @@
 //!
 //! Unlike the built-in [`openai`](crate::model::openai) adapter — which targets
 //! OpenAI's own hosted API and ships a fixed catalog of GPT models — this
-//! adapter is driven entirely by configuration: the base URL, optional
-//! credential and per-model facts all come from a named instance declared by the
-//! user. A single instance's connection lives in one [`OpenAICompatEndpoint`],
-//! and the non-connection runtime (preamble + memory backend) in one
-//! [`OpenAICompatRuntime`], so the two concerns never drift out of sync.
+//! adapter is driven entirely by configuration: the base URL and per-model
+//! facts all come from a named instance declared by the user. A single
+//! instance's connection lives in one [`OpenAICompatEndpoint`], and the
+//! non-connection runtime (preamble + memory backend) in one
+//! [`OpenAICompatRuntime`], so the two concerns never drift out of sync. The
+//! credential is not part of the instance: it is supplied per request as an
+//! [`Authentication`] when a model is resolved.
 
 use std::sync::Arc;
 
 use rig_core::client::BearerAuth;
 use rig_core::providers::openai::client::Client as OpenAIClient;
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use smista_core::model::{ModelDescriptor, ModelReference};
 
 use crate::ProviderResult;
 use crate::agent::{Agent, AgentArgs};
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
+use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
 
@@ -33,72 +36,33 @@ use crate::model::Model;
 /// authenticated endpoints, which always receive the configured key instead.
 const PLACEHOLDER_API_KEY: &str = "no-key";
 
-/// Where an OpenAI-compatible provider sends requests, and how it authenticates.
+/// Where an OpenAI-compatible provider sends requests.
 ///
 /// This is the **single source of truth** for an instance's connection: the
-/// base URL and, optionally, the bearer credential. A keyless endpoint
-/// ([`api_key`](OpenAICompatEndpoint::api_key) returns [`None`]) is for local or
-/// self-hosted runtimes that ignore the `Authorization` header; a keyed endpoint
-/// carries the token sent as `Authorization: Bearer <api_key>`.
+/// base URL. Credentials are not held here; they are supplied per request as an
+/// [`Authentication`] when a model is resolved. A keyless endpoint is given
+/// [`Authentication::None`] and sends the keyless placeholder token a keyless
+/// server ignores; a keyed endpoint is given an [`Authentication::ApiKey`] sent
+/// as `Authorization: Bearer <api_key>`.
 ///
 /// # Examples
 ///
 /// ```
-/// use secrecy::SecretString;
 /// use smista_providers::model::openai_compat::OpenAICompatEndpoint;
 ///
-/// // A local vLLM server that needs no credential.
-/// let local = OpenAICompatEndpoint::keyless("http://localhost:8000/v1");
-/// assert!(local.api_key().is_none());
-///
-/// // A gateway behind a bearer token.
-/// let gateway =
-///     OpenAICompatEndpoint::keyed("https://gateway.internal/v1", SecretString::from("sk-x"));
-/// assert!(gateway.api_key().is_some());
+/// let endpoint = OpenAICompatEndpoint::new("http://localhost:8000/v1");
+/// assert_eq!(endpoint.base_url(), "http://localhost:8000/v1");
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct OpenAICompatEndpoint {
     base_url: String,
-    api_key: Option<SecretString>,
-}
-
-// Holds a credential, so `Debug` is implemented by hand to redact the API key
-// rather than derived. A leak test in this module's `tests` guards the
-// redaction (M-PUBLIC-DEBUG).
-impl std::fmt::Debug for OpenAICompatEndpoint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OpenAICompatEndpoint")
-            .field("base_url", &self.base_url)
-            .field(
-                "api_key",
-                match self.api_key {
-                    Some(_) => &"[redacted]",
-                    None => &"None",
-                },
-            )
-            .finish()
-    }
 }
 
 impl OpenAICompatEndpoint {
-    /// Creates a keyless endpoint for the given base URL.
-    ///
-    /// No credential is sent; intended for local or self-hosted runtimes that
-    /// ignore the `Authorization` header.
-    pub fn keyless(base_url: impl Into<String>) -> Self {
+    /// Creates an endpoint for the given base URL.
+    pub fn new(base_url: impl Into<String>) -> Self {
         Self {
             base_url: base_url.into(),
-            api_key: None,
-        }
-    }
-
-    /// Creates a keyed endpoint that authenticates with the given bearer token.
-    ///
-    /// The token is sent as `Authorization: Bearer <api_key>`.
-    pub fn keyed(base_url: impl Into<String>, api_key: SecretString) -> Self {
-        Self {
-            base_url: base_url.into(),
-            api_key: Some(api_key),
         }
     }
 
@@ -106,19 +70,14 @@ impl OpenAICompatEndpoint {
     pub fn base_url(&self) -> &str {
         &self.base_url
     }
+}
 
-    /// Returns the bearer credential, or [`None`] for a keyless endpoint.
-    pub fn api_key(&self) -> Option<&SecretString> {
-        self.api_key.as_ref()
-    }
-
-    /// Returns the bearer token to send: the configured key, or the keyless
-    /// [`PLACEHOLDER_API_KEY`] when none is set.
-    fn bearer_token(&self) -> &str {
-        self.api_key
-            .as_ref()
-            .map_or(PLACEHOLDER_API_KEY, ExposeSecret::expose_secret)
-    }
+/// Returns the bearer token to send for `authentication`: the supplied API key,
+/// or the keyless [`PLACEHOLDER_API_KEY`] when none was supplied.
+fn bearer_token(authentication: &Authentication) -> &str {
+    authentication
+        .api_key()
+        .map_or(PLACEHOLDER_API_KEY, ExposeSecret::expose_secret)
 }
 
 /// The non-connection runtime an [`OpenAICompatModel`] needs to serve completions.
@@ -183,13 +142,15 @@ pub struct OpenAICompatModel {
 }
 
 impl OpenAICompatModel {
-    /// Creates a new OpenAI-compatible model from an endpoint, runtime and descriptor.
+    /// Creates a new OpenAI-compatible model from an endpoint, runtime,
+    /// authentication and descriptor.
     ///
-    /// The connection facts — base URL and credential — are read from
-    /// `endpoint`, the single source of truth for the instance, so the resolved
-    /// model always talks to the instance its `descriptor` was stamped against.
-    /// The preamble and memory backend come from `runtime`, and the model's
-    /// stable identity is derived from `descriptor`.
+    /// The base URL is read from `endpoint`, the single source of truth for the
+    /// instance, so the resolved model always talks to the instance its
+    /// `descriptor` was stamped against. The bearer credential comes from
+    /// `authentication` (or the keyless placeholder when none is supplied). The
+    /// preamble and memory backend come from `runtime`, and the model's stable
+    /// identity is derived from `descriptor`.
     ///
     /// # Errors
     ///
@@ -198,6 +159,7 @@ impl OpenAICompatModel {
     pub async fn new<S>(
         endpoint: &OpenAICompatEndpoint,
         runtime: &OpenAICompatRuntime<S>,
+        authentication: &Authentication,
         descriptor: ModelDescriptor,
     ) -> ProviderResult<Self>
     where
@@ -208,7 +170,7 @@ impl OpenAICompatModel {
 
         let client = OpenAIClient::builder()
             .base_url(endpoint.base_url())
-            .api_key(BearerAuth::from(endpoint.bearer_token()))
+            .api_key(BearerAuth::from(bearer_token(authentication)))
             .build()
             .map_err(|e| {
                 crate::error::provider_error(
@@ -261,7 +223,7 @@ impl Model for OpenAICompatModel {
 mod tests {
     use std::sync::Arc;
 
-    use secrecy::{ExposeSecret, SecretString};
+    use secrecy::SecretString;
 
     use super::*;
     use crate::memory::{MemoryRecord, MemoryStorage};
@@ -326,68 +288,34 @@ mod tests {
     }
 
     #[test]
-    fn keyless_endpoint_sends_the_placeholder_token() {
-        let endpoint = OpenAICompatEndpoint::keyless("http://localhost:8000/v1");
-
-        assert_eq!(endpoint.base_url(), "http://localhost:8000/v1");
-        assert!(endpoint.api_key().is_none());
-        assert_eq!(endpoint.bearer_token(), PLACEHOLDER_API_KEY);
+    fn keyless_authentication_sends_the_placeholder_token() {
+        assert_eq!(bearer_token(&Authentication::None), PLACEHOLDER_API_KEY);
     }
 
     #[test]
-    fn keyed_endpoint_sends_the_configured_token() {
-        let endpoint = OpenAICompatEndpoint::keyed(
-            "https://gateway.internal/v1",
-            SecretString::from("sk-abc"),
-        );
+    fn keyed_authentication_sends_the_configured_token() {
+        let authentication = Authentication::ApiKey(SecretString::from("sk-abc"));
 
-        assert_eq!(endpoint.base_url(), "https://gateway.internal/v1");
-        assert_eq!(
-            endpoint.api_key().map(ExposeSecret::expose_secret),
-            Some("sk-abc")
-        );
-        assert_eq!(endpoint.bearer_token(), "sk-abc");
+        assert_eq!(bearer_token(&authentication), "sk-abc");
     }
 
     #[test]
-    fn debug_redacts_the_endpoint_api_key() {
-        let secret = "sk-compat-9f8e7d6c5b4a";
-        let endpoint =
-            OpenAICompatEndpoint::keyed("https://gateway.internal/v1", SecretString::from(secret));
+    fn header_authentication_falls_back_to_the_placeholder_token() {
+        // The OpenAI-compatible adapter only understands a bearer key; a headers
+        // variant carries no key, so the keyless placeholder is sent.
+        let authentication =
+            Authentication::Headers(vec![("X-Token".to_string(), SecretString::from("shhh"))]);
 
-        let rendered = format!("{endpoint:?}");
-
-        assert!(rendered.contains("[redacted]"));
-        assert!(
-            !rendered.contains(secret),
-            "the API key leaked into Debug output"
-        );
+        assert_eq!(bearer_token(&authentication), PLACEHOLDER_API_KEY);
     }
 
     #[test]
-    fn debug_marks_a_keyless_endpoint_as_none() {
-        let endpoint = OpenAICompatEndpoint::keyless("http://localhost:8000/v1");
-
-        let rendered = format!("{endpoint:?}");
-
-        assert!(rendered.contains("None"));
-        assert!(!rendered.contains("[redacted]"));
-    }
-
-    #[test]
-    fn endpoint_clone_preserves_base_url_and_key() {
-        let endpoint = OpenAICompatEndpoint::keyed(
-            "https://gateway.internal/v1",
-            SecretString::from("sk-abc"),
-        );
+    fn endpoint_clone_preserves_base_url() {
+        let endpoint = OpenAICompatEndpoint::new("https://gateway.internal/v1");
 
         let cloned = endpoint.clone();
 
         assert_eq!(cloned.base_url(), "https://gateway.internal/v1");
-        assert_eq!(
-            cloned.api_key().map(ExposeSecret::expose_secret),
-            Some("sk-abc")
-        );
     }
 
     #[test]

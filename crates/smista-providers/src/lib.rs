@@ -14,6 +14,7 @@
 
 mod agent;
 pub mod api;
+pub mod auth;
 mod error;
 pub mod memory;
 pub mod model;

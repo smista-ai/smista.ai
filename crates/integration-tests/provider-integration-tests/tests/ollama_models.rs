@@ -22,24 +22,16 @@
 //! only under `just provider_integration_test`.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use futures::StreamExt;
 use provider_integration_tests::InMemoryStorage;
 use smista_core::model::{ModelParameters, ModelReference, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
+use smista_providers::auth::Authentication;
 use smista_providers::model::ollama::{OllamaEndpoint, OllamaModelRuntime};
 use smista_providers::provider::Provider;
 use smista_providers::provider::ollama::OllamaProvider;
-use smista_providers::provider::ollama::cache::TtlCache;
-
-/// How long the provider's model list stays fresh.
-///
-/// The test resolves once against a stable daemon, so any non-zero TTL serves;
-/// a minute keeps the single lookup off a cold path without mattering to the
-/// outcome.
-const MODELS_CACHE_TTL: Duration = Duration::from_secs(60);
 
 /// Builds the deterministic, single-turn request both flows send.
 fn ping_request() -> CompletionRequest {
@@ -73,8 +65,9 @@ async fn should_resolve_installed_model_and_run_complete_and_stream() {
             preamble: "You are a terse assistant.".to_string(),
             storage: Arc::new(InMemoryStorage::default()),
         },
-        Arc::new(TtlCache::new(MODELS_CACHE_TTL)),
     );
+    // A local daemon is keyless.
+    let authentication = Authentication::None;
 
     // Step 1: resolving the configured reference yields that model — assert on
     // its stable identity and descriptor, not on a concrete type. The daemon
@@ -85,7 +78,7 @@ async fn should_resolve_installed_model_and_run_complete_and_stream() {
     };
 
     let model = provider
-        .resolve(&reference)
+        .resolve(&reference, &authentication)
         .await
         .expect("resolving the configured Ollama model must succeed");
 
