@@ -31,7 +31,8 @@ use super::glob::compile_globs;
 /// assert_eq!(policy.remote.mode(), PermissionMode::Ask);
 /// assert_eq!(policy.local.mode(), PermissionMode::Allow);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PrivacyPolicy {
     /// Paths treated as sensitive across all model classes.
     #[serde(default)]
@@ -80,10 +81,12 @@ impl PrivacyPolicy {
 /// The effective [`mode`](Self::mode) defaults to [`PermissionMode::Ask`] when
 /// unset: disclosing context to a remote provider requires approval unless
 /// explicitly allowed.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RemotePrivacy {
     /// How sending context to remote providers is mediated, if set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub mode: Option<PermissionMode>,
     /// Paths that must never be sent to remote providers.
     #[serde(default)]
@@ -102,10 +105,12 @@ impl RemotePrivacy {
 ///
 /// The effective [`mode`](Self::mode) defaults to [`PermissionMode::Allow`] when
 /// unset: local models may receive context without prompting.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct LocalPrivacy {
     /// How sending context to local models is mediated, if set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub mode: Option<PermissionMode>,
 }
 

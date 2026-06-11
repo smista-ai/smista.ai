@@ -47,20 +47,20 @@ model = "ollama/qwen2.5-coder"
 Every routing rule supports the keys below. Match conditions are all optional; a
 rule with none matches every task.
 
-| Key                     | Type            | Purpose                                                       |
-| ----------------------- | --------------- | ------------------------------------------------------------- |
-| `name`                  | string          | Human-readable rule name (required).                          |
-| `priority`              | integer         | Lower value wins; defaults to `1000`.                         |
-| `effort`                | string          | Reasoning effort for the matched model; defaults to `medium`. |
-| `intent`                | string          | Match only this task intent.                                  |
-| `skill`                 | string          | Match only this invoked skill.                                |
-| `paths`                 | list of globs   | Match when a relevant path matches any glob.                  |
-| `local_only`            | bool            | Restrict the fallback chain to local models.                  |
-| `requires_capabilities` | table           | Capability gate; the model must satisfy each `true` flag.     |
-| `model`                 | string          | Model selected on match, as `provider/model` (required).      |
-| `fallbacks`             | list of strings | Models tried in order when the selected model is unavailable. |
-| `required_permissions`  | table           | Tool permissions the route requires (see below).              |
-| `cost_limit`            | string          | Per-task cost ceiling, as a decimal string (e.g. `"0.50"`).   |
+| Key                     | Type            | Purpose                                                                                               |
+| ----------------------- | --------------- | ----------------------------------------------------------------------------------------------------- |
+| `name`                  | string          | Human-readable rule name (required).                                                                  |
+| `priority`              | integer         | Lower value wins; defaults to `1000`.                                                                 |
+| `effort`                | string          | Reasoning effort for the matched model; defaults to `medium`.                                         |
+| `intent`                | string          | Match only this task intent.                                                                          |
+| `skill`                 | string          | Match only this invoked skill.                                                                        |
+| `paths`                 | list of globs   | Match when a relevant path matches any glob.                                                          |
+| `local_only`            | bool            | Pin the route to local models; an `ollama/` model resolves to the local instance, never Ollama Cloud. |
+| `requires_capabilities` | table           | Capability gate; the model must satisfy each `true` flag.                                             |
+| `model`                 | string          | Model selected on match, as `provider/model` (required).                                              |
+| `fallbacks`             | list of strings | Models tried in order when the selected model is unavailable.                                         |
+| `required_permissions`  | table           | Tool permissions the route requires (see below).                                                      |
+| `cost_limit`            | string          | Per-task cost ceiling, as a decimal string (e.g. `"0.50"`).                                           |
 
 `requires_capabilities` gates a rule on what the model can do. Each flag defaults
 to `false`; set the ones a matched model must support: `streaming`, `tools`,
@@ -325,6 +325,15 @@ Each `[providers.<id>]` table accepts:
 > For local models through Ollama, see
 > [Using Local Models with Ollama](ollama.md).
 
+> [!WARNING]
+> An `ollama/<model>` reference is **not** treated as local by default. Unless
+> the matched route enforces `local_only` — a rule's `local_only = true` or the
+> [`local_only`](#local-preferences) local preference — the router may resolve it
+> against the **public Ollama Cloud**, not your local instance. That is a remote,
+> billed, non-private endpoint, and your [`[privacy.remote]`](#privacy) rules
+> apply to it like any other remote provider. Set `local_only` whenever a rule
+> must run on the local Ollama instance.
+
 ## Provider credentials
 
 Never write an API key directly into `config.toml`. A provider reads its key
@@ -402,12 +411,12 @@ local_only = false
 no_network = false
 ```
 
-| Field        | Effect                                             |
-| ------------ | -------------------------------------------------- |
-| `auto_apply` | Apply file writes without prompting for each diff. |
-| `stream`     | Stream model output when the provider supports it. |
-| `local_only` | Use only local models for this session.            |
-| `no_network` | Forbid network access for this session.            |
+| Field        | Effect                                                                                        |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| `auto_apply` | Apply file writes without prompting for each diff.                                            |
+| `stream`     | Stream model output when the provider supports it.                                            |
+| `local_only` | Use only local models this session; pins `ollama/` to the local instance, never Ollama Cloud. |
+| `no_network` | Forbid network access for this session.                                                       |
 
 > [!IMPORTANT]
 > Local preferences may tighten safety, never loosen it. Enabling `local_only`

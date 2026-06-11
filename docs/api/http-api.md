@@ -150,9 +150,123 @@ Authorization: Bearer <session-token>
 X-Smista-Provider-{provider}-Api-Key: <api-key>
 ```
 
-The body carries the user input, workspace context, the merged policy and the
-selected context. The router classifies the task, applies the policy, selects a
-model, builds the request and returns the result with a routing explanation:
+The body carries everything the router needs to make a deterministic decision:
+the user input, a workspace snapshot, the merged policy, local preferences, the
+available providers with their credential status, and the assembled context. The
+`policy` block is the same routing, tool-permission and privacy vocabulary the
+CLI loads from `config.toml` — sent verbatim, not a separate, lossy shape:
+
+```json
+{
+  "input": {
+    "text": "refactor the auth middleware",
+    "command": "edit",
+    "explicit_model": null
+  },
+  "workspace": {
+    "root": "/Users/christian/project",
+    "git_branch": "main",
+    "git_diff": "...",
+    "referenced_paths": ["src/auth/middleware.rs"],
+    "active_file": null
+  },
+  "policy": {
+    "version": 1,
+    "source": "merged",
+    "routing": {
+      "default": {
+        "model": "anthropic/claude-sonnet",
+        "fallbacks": ["openai/gpt-5.5-thinking", "ollama/qwen2.5-coder"]
+      },
+      "rules": [
+        {
+          "name": "auth edits use Claude",
+          "priority": 30,
+          "effort": "high",
+          "intent": "edit",
+          "paths": ["src/auth/**"],
+          "local_only": false,
+          "model": "anthropic/claude-sonnet",
+          "fallbacks": ["openai/gpt-5.5-thinking"],
+          "required_permissions": { "permissions": { "file_write": "ask" } },
+          "cost_limit": "0.50"
+        }
+      ]
+    },
+    "tools": {
+      "permissions": { "file_read": "allow", "file_write": "ask", "shell": "ask", "network": "deny" }
+    },
+    "privacy": {
+      "restricted_paths": [".env", "secrets/**", "target/**"],
+      "remote": { "mode": "ask", "blocked_paths": [] },
+      "local": { "mode": "allow" }
+    }
+  },
+  "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
+  "providers": [
+    { "id": "anthropic", "models": [{ "model": "claude-sonnet", "requires_api_key": true, "credential_available": true }] },
+    { "id": "ollama", "models": [{ "model": "qwen2.5-coder", "requires_api_key": false, "credential_available": true }] }
+  ],
+  "context": {
+    "messages": [{ "role": "user", "content": "Previous relevant message..." }],
+    "files": [{ "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:..." }],
+    "instructions": [{ "source": "SMISTA.md", "content": "..." }],
+    "skills": [],
+    "prompt_template": null
+  }
+}
+```
+
+The top-level fields are:
+
+| Field               | Purpose                                                                         |
+| ------------------- | ------------------------------------------------------------------------------- |
+| `input`             | The prompt `text`, an optional `command` and an optional `explicit_model`.      |
+| `workspace`         | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced/active files. |
+| `policy`            | The deterministic `routing`, `tools` and `privacy` policy (see below).          |
+| `local_preferences` | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.    |
+| `providers`         | Providers offered for this request and per-model credential status.             |
+| `context`           | Assembled context: prior `messages`, `files`, `instructions` and `skills`.      |
+
+`input.command` forces a task type (`edit`, `review`, …) and `input.explicit_model`
+forces a `provider/model`, bypassing routing entirely; both may be `null`.
+
+### Policy
+
+`policy.version` is the snapshot schema version and `policy.source` records how
+it was assembled (e.g. `merged`). The three sub-blocks mirror the CLI's
+`[routing]`, `[tools]` and `[privacy]` config sections exactly.
+
+`routing` holds ordered `rules` plus an optional `default` route (`model` and
+ordered `fallbacks`) used when no rule matches. Each rule:
+
+| Field                   | Type            | Purpose                                                                 |
+| ----------------------- | --------------- | ----------------------------------------------------------------------- |
+| `name`                  | string          | Human-readable rule name.                                               |
+| `priority`              | integer         | Evaluation order, ascending; first match wins. Defaults to `1000`.      |
+| `effort`                | string          | Reasoning effort for the matched model (`low`/`medium`/`high`/`xhigh`). |
+| `intent`                | task type, null | Required task intent, if scoped.                                        |
+| `skill`                 | string, null    | Required invoked skill, if scoped.                                      |
+| `paths`                 | list of strings | Path globs; a relevant path must match one when non-empty.              |
+| `local_only`            | bool            | Restrict the fallback chain to local models.                            |
+| `requires_capabilities` | object          | Capability gate the matched model must satisfy; omitted if none.        |
+| `model`                 | reference       | Model selected when the rule matches.                                   |
+| `fallbacks`             | list of refs    | Models tried, in order, when `model` is unavailable.                    |
+| `required_permissions`  | object          | Tool permissions the matched route requires.                            |
+| `cost_limit`            | string, omitted | Per-task cost ceiling as a decimal string; omitted if unset.            |
+
+`tools.permissions` is a flat map of tool name to mode (`allow`, `ask` or
+`deny`). `privacy` carries `restricted_paths` globs plus a `remote` and `local`
+sub-policy, each with an optional `mode` (`remote` defaults to `ask`, `local` to
+`allow`) and the `remote` block adds `blocked_paths` never sent to remote models.
+
+Each entry in `providers` carries the provider `id` and its `models`, where each
+model reports `requires_api_key` and whether a `credential_available` for it was
+supplied. The credentials themselves never appear in the body — they travel as
+`X-Smista-Provider-<Provider>-Api-Key` headers.
+
+The router classifies the task, applies the policy, selects a model, builds the
+request and returns the result with a routing explanation:
 
 ```json
 {
