@@ -3,6 +3,11 @@
 /**
  * The identifier of a provider, used for configuration and routing.
  *
- * Each variant serializes to its lowercase name.
+ * The three built-in providers render as their bare lowercase name. A generic
+ * OpenAI-compatible endpoint is a named instance that renders as
+ * `openai-compat:<name>`, so several such endpoints can be configured and
+ * routed to independently.
+ *
+ * The type is intentionally not `Copy`: the named variant owns a `String`.
  */
-export type Provider = "anthropic" | "openai" | "ollama";
+export type Provider = string;

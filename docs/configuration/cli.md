@@ -279,8 +279,14 @@ everything after it is the model name, which may itself contain `/` (e.g.
 one of the identifiers below — otherwise the reference is rejected during
 validation.
 
-Enable a provider by adding a `[providers.<id>]` table with its `type` and, for
-remote providers, an `api_key`:
+A generic OpenAI-compatible endpoint (a local vLLM or LM Studio server, a
+gateway, …) is a *named instance*, and its identifier takes the form
+`openai-compat:<name>` — for example `openai-compat:my-vllm/llama-3.1-70b`.
+Instance names use lowercase letters, digits, `-` and `_`. You can configure as
+many such instances as you like, each with its own name.
+
+Enable a provider by adding a `[providers.<id>]` table, keyed by the provider
+identity, and, for remote providers, an `api_key`:
 
 ```toml
 [providers.openai]
@@ -293,25 +299,32 @@ api_key = "${secret:ANTHROPIC_API_KEY}"
 
 [providers.ollama]
 type = "ollama"
+
+# A named OpenAI-compatible instance. The key is its full identity, quoted
+# because it contains a colon; `type` is omitted.
+[providers."openai-compat:my-vllm"]
+api_key = "${secret:MY_VLLM_KEY}"
 ```
 
-The `type` field selects the provider backend. It is case-insensitive and must
-be one of the supported identifiers:
+The optional `type` field names the provider backend. When present it is
+case-insensitive and must be one of the supported identifiers:
 
-| Identifier  | Backend                               |
-| ----------- | ------------------------------------- |
-| `anthropic` | Anthropic, serving the Claude models. |
-| `openai`    | OpenAI, serving the GPT models.       |
-| `ollama`    | Ollama, serving local models.         |
+| Identifier             | Backend                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| `anthropic`            | Anthropic, serving the Claude models.                                                    |
+| `openai`               | OpenAI, serving the GPT models.                                                          |
+| `ollama`               | Ollama, serving local models.                                                            |
+| `openai-compat:<name>` | A generic OpenAI-compatible endpoint; normally set by the table key with `type` omitted. |
 
-An unknown identifier is rejected during validation.
+An unknown identifier is rejected during validation. The endpoint URL for a
+named instance lives on the router — see [Running the Router](router.md).
 
 Each `[providers.<id>]` table accepts:
 
-| Key       | Type   | Default  | Purpose                                             |
-| --------- | ------ | -------- | --------------------------------------------------- |
-| `type`    | string | required | Provider kind: `anthropic`, `openai`, or `ollama`.  |
-| `api_key` | string | none     | A `${secret:NAME}` reference resolving the API key. |
+| Key       | Type   | Default | Purpose                                                                                                 |
+| --------- | ------ | ------- | ------------------------------------------------------------------------------------------------------- |
+| `type`    | string | none    | Provider kind. Optional and redundant with the table key; omit it for `openai-compat:<name>` instances. |
+| `api_key` | string | none    | A `${secret:NAME}` reference resolving the API key.                                                     |
 
 > [!NOTE]
 > A model's facts — its capabilities, context window, costs, whether it runs

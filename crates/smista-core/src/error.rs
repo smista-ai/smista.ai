@@ -84,6 +84,9 @@ pub enum ParseError {
     /// A model reference was not in the expected `provider/model` form.
     #[error("invalid model reference: {0}")]
     InvalidModelReference(String),
+    /// An OpenAI-compatible instance name contained unsupported characters.
+    #[error("invalid provider instance name: {0}")]
+    InvalidProviderName(String),
     /// A reasoning effort name was not recognized.
     #[error("unknown effort: {0}")]
     UnknownEffort(String),

@@ -32,16 +32,20 @@ pub struct Config {
 
 /// How a provider is configured client-side.
 ///
-/// Mirrors a `[providers.<id>]` table. The `type` key names the provider kind.
-/// The credential lives in `api_key`, which holds a `${secret:NAME}` reference
-/// resolved against the secret sources (see `super::secrets`) — an environment
-/// variable named `NAME` first, then the `.smista/secrets` files — or, where
-/// allowed, an inline literal.
+/// Mirrors a `[providers.<id>]` table, keyed by the provider identity (e.g.
+/// `openai`, or `openai-compat:my-vllm` for a named OpenAI-compatible instance).
+/// The optional `type` key names the provider kind; it is redundant with the
+/// table key and may be omitted, which is the norm for `openai-compat:<name>`
+/// instances. The credential lives in `api_key`, which holds a `${secret:NAME}`
+/// reference resolved against the secret sources (see `super::secrets`) — an
+/// environment variable named `NAME` first, then the `.smista/secrets` files —
+/// or, where allowed, an inline literal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderConfig {
-    /// Provider kind (serialized as `type`).
-    #[serde(rename = "type")]
-    pub kind: Provider,
+    /// Provider kind (serialized as `type`). Optional and redundant with the
+    /// table key; omit it for `openai-compat:<name>` instances.
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
+    pub kind: Option<Provider>,
     /// API key value: a `${secret:NAME}` reference or, where allowed, a literal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
@@ -123,11 +127,25 @@ mod tests {
         "#;
         let config: Config = toml::from_str(toml).unwrap();
         let openai = config.providers.get(&Provider::OpenAI).unwrap();
-        assert_eq!(openai.kind, Provider::OpenAI);
+        assert_eq!(openai.kind, Some(Provider::OpenAI));
         assert_eq!(
             SecretRef::parse(openai.api_key.as_deref().unwrap()),
             Some(SecretRef::new("openai_api_key"))
         );
+    }
+
+    #[test]
+    fn should_parse_openai_compatible_instance_keyed_by_identity() {
+        // A named instance is keyed by its full identity; `type` is omitted.
+        let toml = r#"
+            [providers."openai-compat:my-vllm"]
+            api_key = "${secret:my_vllm_key}"
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        let key = Provider::OpenAICompatible("my-vllm".to_string());
+        let instance = config.providers.get(&key).unwrap();
+        assert!(instance.kind.is_none());
+        assert_eq!(instance.api_key.as_deref(), Some("${secret:my_vllm_key}"));
     }
 
     #[test]

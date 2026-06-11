@@ -1,5 +1,7 @@
 //! Provider reference resolution checks.
 
+use smista_sdk::core::model::Provider;
+
 use super::report::{Severity, ValidationCode, ValidationError, ValidationReport};
 use crate::config::Config;
 
@@ -16,8 +18,8 @@ pub fn check_references(config: &Config, report: &mut ValidationReport) {
         references.provider_count = config.providers.len(),
         "checking provider references across {{references.rule_count}} rules"
     );
-    let mut visit = |provider, location: String| {
-        if !config.providers.contains_key(&provider) {
+    let mut visit = |provider: &Provider, location: String| {
+        if !config.providers.contains_key(provider) {
             tracing::warn!(
                 references.provider = %provider,
                 references.location = %location,
@@ -27,7 +29,7 @@ pub fn check_references(config: &Config, report: &mut ValidationReport) {
                 code: ValidationCode::UnknownProvider,
                 severity: Severity::Error,
                 message: format!(
-                    "provider `{provider}` is not configured; add a [providers.{provider}] table"
+                    "provider `{provider}` is not configured; add a [providers.\"{provider}\"] table"
                 ),
                 location: Some(location),
             });
@@ -35,18 +37,24 @@ pub fn check_references(config: &Config, report: &mut ValidationReport) {
     };
 
     for (index, rule) in config.routing.rules.iter().enumerate() {
-        visit(rule.model.provider, format!("routing.rules[{index}].model"));
+        visit(
+            &rule.model.provider,
+            format!("routing.rules[{index}].model"),
+        );
         for (f, fallback) in rule.fallbacks.iter().enumerate() {
             visit(
-                fallback.provider,
+                &fallback.provider,
                 format!("routing.rules[{index}].fallbacks[{f}]"),
             );
         }
     }
     if let Some(default) = &config.routing.default {
-        visit(default.model.provider, "routing.default.model".to_string());
+        visit(&default.model.provider, "routing.default.model".to_string());
         for (f, fallback) in default.fallbacks.iter().enumerate() {
-            visit(fallback.provider, format!("routing.default.fallbacks[{f}]"));
+            visit(
+                &fallback.provider,
+                format!("routing.default.fallbacks[{f}]"),
+            );
         }
     }
 }
@@ -85,6 +93,27 @@ mod tests {
 
             [routing.default]
             model = "openai/gpt-5.5-mini"
+            "#,
+            "test",
+        )
+        .unwrap();
+        let mut report = ValidationReport::default();
+        check_references(&config, &mut report);
+        assert!(report.is_ok());
+    }
+
+    #[test]
+    fn should_pass_when_openai_compatible_instance_declared_in_cli_table_only() {
+        // Declaring the instance in the CLI `[providers]` table is sufficient to
+        // resolve a route. The router's `[router.providers]` endpoint table is a
+        // separate concern in a separate file; CLI validation neither sees it nor
+        // requires it, so a route resolves without it being declared there too.
+        let config = parse(
+            r#"
+            [providers."openai-compat:my-vllm"]
+
+            [routing.default]
+            model = "openai-compat:my-vllm/llama-3.1-70b"
             "#,
             "test",
         )

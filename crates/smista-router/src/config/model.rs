@@ -115,6 +115,14 @@ pub struct RouterProviderConfig {
     /// Base URL for the provider endpoint, if non-default.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+    /// Models advertised for a generic OpenAI-compatible endpoint that exposes
+    /// no model-listing API.
+    ///
+    /// Only consulted for an `openai-compat:<name>` provider, and only as a
+    /// fallback when the endpoint reports no models of its own. The built-in
+    /// providers and Ollama discover their models at runtime and ignore this.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<String>,
 }
 
 /// Storage engine identity.
@@ -481,6 +489,22 @@ mod tests {
             config.providers[&Provider::OpenAI].base_url.as_deref(),
             Some("https://proxy.internal/v1")
         );
+    }
+
+    #[test]
+    fn should_parse_openai_compatible_provider_with_models() {
+        let toml = r#"
+            [providers."openai-compat:my-vllm"]
+            base_url = "http://localhost:8000/v1"
+            models = ["llama-3.1-70b"]
+        "#;
+        let config: RouterConfig = toml::from_str(toml).unwrap();
+        let key = Provider::OpenAICompatible("my-vllm".to_string());
+        assert_eq!(
+            config.providers[&key].base_url.as_deref(),
+            Some("http://localhost:8000/v1")
+        );
+        assert_eq!(config.providers[&key].models, vec!["llama-3.1-70b"]);
     }
 
     #[test]
