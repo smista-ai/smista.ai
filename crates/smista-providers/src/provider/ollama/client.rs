@@ -3,82 +3,63 @@
 use std::sync::Arc;
 
 use reqwest::{Method, Request};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use smista_core::error::ProviderError;
 use smista_core::model::Provider;
 
 use crate::ProviderResult;
+use crate::auth::Authentication;
 use crate::model::ollama::OllamaEndpoint;
 
 pub mod api;
 
 /// Trait for the Ollama API client.
 pub trait OllamaClient: Send + Sync {
-    /// Get the available models and their parameters.
-    fn tags(&self) -> impl Future<Output = ProviderResult<api::TagsResponse>> + Send;
+    /// Get the available models and their parameters, authenticating with the
+    /// supplied [`Authentication`].
+    fn tags(
+        &self,
+        authentication: &Authentication,
+    ) -> impl Future<Output = ProviderResult<api::TagsResponse>> + Send;
 }
 
 /// HTTP client implementation of the Ollama API client.
+///
+/// Holds only the connection: credentials are supplied per request as an
+/// [`Authentication`] and applied when the request is built.
 #[derive(Debug, Clone)]
 pub struct HttpOllamaClient {
-    /// Api key for authentication, required for cloud. Passed as `Authorization: Bearer <api_key>` header.
-    api_key: Option<SecretString>,
     /// Base URL for the Ollama API, e.g. `http://localhost:11434` for local or `https://ollama.com` for cloud.
     base_url: String,
     /// HTTP client for making requests to the Ollama API.
     client: Arc<reqwest::Client>,
-    /// Extra headers for authentication for custom proxies. Each tuple is (header name, header value).
-    extra_headers: Vec<(String, SecretString)>,
 }
 
 impl HttpOllamaClient {
     /// Instantiates a new [`HttpOllamaClient`] with the given base URL.
     pub fn new(base_url: String) -> Self {
         Self {
-            api_key: None,
             base_url,
             client: Arc::new(reqwest::Client::new()),
-            extra_headers: Vec::new(),
         }
     }
 
-    /// Instantiates a new [`HttpOllamaClient`] configured for Ollama Cloud with the given API key.
-    pub fn cloud(api_key: SecretString) -> Self {
-        Self::new("https://ollama.com".to_string()).with_api_key(api_key)
-    }
-
-    /// Builds a client for an [`OllamaEndpoint`], the single source of truth.
+    /// Builds a client for an [`OllamaEndpoint`], the single source of truth for
+    /// the connection.
     ///
-    /// Base URL, API key and proxy headers are taken from `endpoint`, so the
-    /// management client and the completion path always target the same
-    /// instance. This is the production constructor; prefer it over assembling
-    /// the connection facts by hand.
+    /// The base URL is taken from `endpoint`, so the management client and the
+    /// completion path always target the same instance. Credentials are not
+    /// baked in: they are supplied per request when calling [`OllamaClient::tags`].
     pub fn from_endpoint(endpoint: &OllamaEndpoint) -> Self {
-        let mut client = Self::new(endpoint.base_url().to_string());
-        if let Some(api_key) = endpoint.api_key() {
-            client = client.with_api_key(api_key.clone());
-        }
-        endpoint
-            .extra_headers()
-            .iter()
-            .fold(client, |client, (key, value)| {
-                client.with_extra_header(key.clone(), value.clone())
-            })
+        Self::new(endpoint.base_url().to_string())
     }
 
-    /// Sets the API key for authentication, required for cloud. Passed as `Authorization: Bearer <api_key>` header.
-    pub fn with_api_key(mut self, api_key: SecretString) -> Self {
-        self.api_key = Some(api_key);
-        self
-    }
-
-    /// Adds an extra header for authentication, useful for custom proxies.
-    pub fn with_extra_header(mut self, key: String, value: SecretString) -> Self {
-        self.extra_headers.push((key, value));
-        self
-    }
-
-    fn request<S>(&self, method: Method, url: S) -> ProviderResult<Request>
+    fn request<S>(
+        &self,
+        method: Method,
+        url: S,
+        authentication: &Authentication,
+    ) -> ProviderResult<Request>
     where
         S: Into<String>,
     {
@@ -87,13 +68,13 @@ impl HttpOllamaClient {
             format!("{base}{url}", base = self.base_url, url = url.into()),
         );
 
-        // Add API key for authentication if present.
-        if let Some(api_key) = &self.api_key {
+        // Add the bearer API key for authentication if one was supplied.
+        if let Some(api_key) = authentication.api_key() {
             req = req.bearer_auth(api_key.expose_secret());
         }
 
         // Add extra headers for authentication, useful for custom proxies.
-        for (key, value) in &self.extra_headers {
+        for (key, value) in authentication.headers() {
             req = req.header(key, value.expose_secret());
         }
 
@@ -102,9 +83,9 @@ impl HttpOllamaClient {
 }
 
 impl OllamaClient for HttpOllamaClient {
-    async fn tags(&self) -> ProviderResult<api::TagsResponse> {
+    async fn tags(&self, authentication: &Authentication) -> ProviderResult<api::TagsResponse> {
         tracing::debug!("Building request for Ollama API /api/tags endpoint");
-        let request = self.request(Method::GET, "/api/tags")?;
+        let request = self.request(Method::GET, "/api/tags", authentication)?;
 
         tracing::debug!("Fetching available models from Ollama API");
         self.client
@@ -156,7 +137,7 @@ impl MockOllamaClient {
 
 #[cfg(test)]
 impl OllamaClient for MockOllamaClient {
-    async fn tags(&self) -> ProviderResult<api::TagsResponse> {
+    async fn tags(&self, _authentication: &Authentication) -> ProviderResult<api::TagsResponse> {
         self.tags_calls
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.tags_response.clone()

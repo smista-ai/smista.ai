@@ -1,12 +1,14 @@
 //! The [`Provider`] trait: the interface the router uses to discover models and
 //! resolve a reference into an executable [`Model`].
 //!
-//! A provider represents a single upstream account or endpoint (an OpenAI key,
-//! an Anthropic key, a local Ollama daemon, …). It is the entry point into the
-//! adapter layer: the router asks a provider which models it offers and turns a
-//! [`ModelReference`] into an `Arc<dyn Model>` it can execute. Provider
-//! implementations own credentials and connection details; everything beyond
-//! resolution happens through the [`Model`] abstraction.
+//! A provider represents a single upstream account or endpoint (an OpenAI
+//! account, an Anthropic account, a local Ollama daemon, …). It is the entry
+//! point into the adapter layer: the router asks a provider which models it
+//! offers and turns a [`ModelReference`] into an `Arc<dyn Model>` it can
+//! execute. Provider implementations own connection and configuration details
+//! only; credentials are not held by the provider but supplied per request as an
+//! [`Authentication`], so a single long-lived provider can serve many callers.
+//! Everything beyond resolution happens through the [`Model`] abstraction.
 //!
 //! Available providers include:
 //!
@@ -26,6 +28,7 @@ use std::sync::Arc;
 use smista_core::model::{ModelReference, Provider as ProviderId};
 
 use crate::ProviderResult;
+use crate::auth::Authentication;
 use crate::model::Model;
 
 /// A provider account or endpoint: discovers models and resolves them for
@@ -46,12 +49,14 @@ pub trait Provider: Send + Sync {
     /// upstream (`openai`, `anthropic`, …) the provider speaks to.
     fn id(&self) -> ProviderId;
 
-    /// Resolves a reference into an executable model offered by this provider.
+    /// Resolves a reference into an executable model offered by this provider,
+    /// authenticating with the supplied [`Authentication`].
     ///
     /// On success the returned `Arc<dyn Model>` is ready to serve completions
     /// and exposes the model's facts via [`Model::descriptor`]. The handle is
     /// reference-counted so the router can share one model across concurrent
-    /// tasks.
+    /// tasks. The credentials are read from `authentication` rather than held by
+    /// the provider, so the same provider can resolve for different callers.
     ///
     /// # Errors
     ///
@@ -59,21 +64,35 @@ pub trait Provider: Send + Sync {
     /// [`category`](smista_core::error::ProviderError::category) classifies the failure.
     ///
     /// In particular, a reference this provider does not offer yields
-    /// [`smista_core::error::ProviderErrorCategory::ModelNotFound`].
+    /// [`smista_core::error::ProviderErrorCategory::ModelNotFound`], and an
+    /// [`Authentication`] variant the provider cannot use (for example
+    /// [`None`](Authentication::None) where a key is required) yields
+    /// [`smista_core::error::ProviderErrorCategory::MissingCredentials`].
     ///
     /// Authentication, credential and connectivity problems surfaced while resolving map to their respective categories.
-    async fn resolve(&self, reference: &ModelReference) -> ProviderResult<Arc<dyn Model>>;
+    async fn resolve(
+        &self,
+        reference: &ModelReference,
+        authentication: &Authentication,
+    ) -> ProviderResult<Arc<dyn Model>>;
 
-    /// Lists every model this provider currently offers.
+    /// Lists every model this provider currently offers, authenticating with the
+    /// supplied [`Authentication`].
     ///
     /// Each returned [`ModelReference`] is resolvable through
     /// [`Self::resolve`]. The router uses this to populate its catalog and to
     /// validate configured routes against what the provider actually exposes.
+    /// Discovery can reach the upstream (Ollama and OpenAI-compatible endpoints
+    /// query the live instance), so the credentials are taken per call rather
+    /// than held by the provider.
     ///
     /// # Errors
     ///
     /// Returns a [`smista_core::error::ProviderError`] when the provider cannot be reached or
     /// rejects the request — for example, missing or invalid credentials, or an
     /// unavailable upstream.
-    async fn list_models(&self) -> ProviderResult<Vec<ModelReference>>;
+    async fn list_models(
+        &self,
+        authentication: &Authentication,
+    ) -> ProviderResult<Vec<ModelReference>>;
 }

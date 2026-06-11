@@ -12,6 +12,7 @@ use smista_core::model::{
 use crate::ProviderResult;
 use crate::agent::{Agent, AgentArgs};
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
+use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
 use crate::model::openai::OpenAIModelArgs;
@@ -52,18 +53,24 @@ pub struct Gpt_5_4_Mini {
 }
 
 impl Gpt_5_4_Mini {
-    /// Creates a new GPT-5.4-mini model with the given arguments.
+    /// Creates a new GPT-5.4-mini model with the given arguments, authenticating
+    /// with the supplied [`Authentication`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ProviderError`] with category
+    /// [`MissingCredentials`](smista_core::error::ProviderErrorCategory::MissingCredentials)
+    /// when `authentication` carries no API key, or if the underlying client
+    /// cannot be built or the agent fails to load its memory preamble.
     pub async fn new<S>(
-        OpenAIModelArgs {
-            api_key,
-            preamble,
-            storage,
-        }: OpenAIModelArgs<S>,
+        OpenAIModelArgs { preamble, storage }: OpenAIModelArgs<S>,
+        authentication: &Authentication,
     ) -> Result<Self, ProviderError>
     where
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating OpenAI {GPT_5_4_MINI} model");
+        let api_key = authentication.require_api_key(Provider::OpenAI, GPT_5_4_MINI)?;
         let client = OpenAIClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
@@ -143,18 +150,24 @@ pub struct Gpt_5_4 {
 }
 
 impl Gpt_5_4 {
-    /// Creates a new GPT 5.4 model with the given arguments.
+    /// Creates a new GPT 5.4 model with the given arguments, authenticating with
+    /// the supplied [`Authentication`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ProviderError`] with category
+    /// [`MissingCredentials`](smista_core::error::ProviderErrorCategory::MissingCredentials)
+    /// when `authentication` carries no API key, or if the underlying client
+    /// cannot be built or the agent fails to load its memory preamble.
     pub async fn new<S>(
-        OpenAIModelArgs {
-            api_key,
-            preamble,
-            storage,
-        }: OpenAIModelArgs<S>,
+        OpenAIModelArgs { preamble, storage }: OpenAIModelArgs<S>,
+        authentication: &Authentication,
     ) -> Result<Self, ProviderError>
     where
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating OpenAI {GPT_5_4} model");
+        let api_key = authentication.require_api_key(Provider::OpenAI, GPT_5_4)?;
         let client = OpenAIClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
@@ -235,18 +248,24 @@ pub struct Gpt_5_5 {
 }
 
 impl Gpt_5_5 {
-    /// Creates a new GPT 5.5 model with the given arguments.
+    /// Creates a new GPT 5.5 model with the given arguments, authenticating with
+    /// the supplied [`Authentication`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ProviderError`] with category
+    /// [`MissingCredentials`](smista_core::error::ProviderErrorCategory::MissingCredentials)
+    /// when `authentication` carries no API key, or if the underlying client
+    /// cannot be built or the agent fails to load its memory preamble.
     pub async fn new<S>(
-        OpenAIModelArgs {
-            api_key,
-            preamble,
-            storage,
-        }: OpenAIModelArgs<S>,
+        OpenAIModelArgs { preamble, storage }: OpenAIModelArgs<S>,
+        authentication: &Authentication,
     ) -> Result<Self, ProviderError>
     where
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating {GPT_5_5} model");
+        let api_key = authentication.require_api_key(Provider::OpenAI, GPT_5_5)?;
         let client = OpenAIClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),

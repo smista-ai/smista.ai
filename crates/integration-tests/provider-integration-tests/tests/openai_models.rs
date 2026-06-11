@@ -24,6 +24,7 @@ use secrecy::SecretString;
 use smista_core::model::{ModelParameters, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
+use smista_providers::auth::Authentication;
 use smista_providers::model::openai::{OpenAIModelArgs, gpt_5_4_mini};
 use smista_providers::provider::Provider;
 use smista_providers::provider::openai::OpenAIProvider;
@@ -51,17 +52,17 @@ async fn should_resolve_gpt_5_4_mini_and_run_complete_and_stream() {
     };
 
     let provider = OpenAIProvider::new(OpenAIModelArgs {
-        api_key,
         preamble: "You are a terse assistant.".to_string(),
         storage: Arc::new(InMemoryStorage::default()),
     });
+    let authentication = Authentication::ApiKey(api_key);
 
     // Step 1: resolving the GPT-5.4-mini reference yields the GPT-5.4-mini model
     // — assert on its stable identity and descriptor, not on a concrete type.
     let reference = gpt_5_4_mini();
 
     let model = provider
-        .resolve(&reference)
+        .resolve(&reference, &authentication)
         .await
         .expect("resolving the GPT-5.4-mini reference must succeed");
 

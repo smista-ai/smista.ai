@@ -7,6 +7,7 @@ use smista_core::model::{ModelReference, Provider as ProviderId};
 
 use super::Provider;
 use crate::ProviderResult;
+use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
 use crate::model::anthropic::{
@@ -17,8 +18,9 @@ use crate::model::anthropic::{
 ///
 /// Offers the Claude models smista.ai supports and resolves a [`ModelReference`]
 /// into an executable [`Model`] by constructing it from the shared
-/// [`AnthropicModelArgs`]. The credential and memory backend are captured once
-/// at construction and reused for every resolved model.
+/// [`AnthropicModelArgs`]. The credential is not held by the provider: it is
+/// supplied per request as an [`Authentication`] when a model is resolved, so a
+/// single long-lived provider can serve many callers.
 pub struct AnthropicProvider<S>
 where
     S: MemoryStorage + 'static,
@@ -65,22 +67,26 @@ where
         ProviderId::Anthropic
     }
 
-    async fn resolve(&self, reference: &ModelReference) -> ProviderResult<Arc<dyn Model>> {
+    async fn resolve(
+        &self,
+        reference: &ModelReference,
+        authentication: &Authentication,
+    ) -> ProviderResult<Arc<dyn Model>> {
         Ok(match reference {
             reference if reference == &anthropic::haiku_4_5() => {
-                Arc::new(Haiku_4_5::new(self.args.clone()).await?)
+                Arc::new(Haiku_4_5::new(self.args.clone(), authentication).await?)
             }
             reference if reference == &anthropic::opus_4_6() => {
-                Arc::new(Opus_4_6::new(self.args.clone()).await?)
+                Arc::new(Opus_4_6::new(self.args.clone(), authentication).await?)
             }
             reference if reference == &anthropic::opus_4_7() => {
-                Arc::new(Opus_4_7::new(self.args.clone()).await?)
+                Arc::new(Opus_4_7::new(self.args.clone(), authentication).await?)
             }
             reference if reference == &anthropic::opus_4_8() => {
-                Arc::new(Opus_4_8::new(self.args.clone()).await?)
+                Arc::new(Opus_4_8::new(self.args.clone(), authentication).await?)
             }
             reference if reference == &anthropic::sonnet_4_6() => {
-                Arc::new(Sonnet_4_6::new(self.args.clone()).await?)
+                Arc::new(Sonnet_4_6::new(self.args.clone(), authentication).await?)
             }
             _ => {
                 return Err(crate::error::provider_error(
@@ -96,7 +102,10 @@ where
         })
     }
 
-    async fn list_models(&self) -> ProviderResult<Vec<ModelReference>> {
+    async fn list_models(
+        &self,
+        _authentication: &Authentication,
+    ) -> ProviderResult<Vec<ModelReference>> {
         Ok(vec![
             anthropic::haiku_4_5(),
             anthropic::opus_4_6(),
@@ -176,10 +185,13 @@ mod tests {
 
     fn provider() -> AnthropicProvider<NoStorage> {
         AnthropicProvider::new(AnthropicModelArgs {
-            api_key: SecretString::from("sk-ant-test"),
             preamble: "be helpful".to_string(),
             storage: Arc::new(NoStorage),
         })
+    }
+
+    fn authentication() -> Authentication {
+        Authentication::ApiKey(SecretString::from("sk-ant-test"))
     }
 
     #[test]
@@ -189,7 +201,10 @@ mod tests {
 
     #[tokio::test]
     async fn should_list_every_offered_model() {
-        let listed = provider().list_models().await.expect("listing cannot fail");
+        let listed = provider()
+            .list_models(&authentication())
+            .await
+            .expect("listing cannot fail");
 
         assert_eq!(
             listed,
@@ -211,12 +226,28 @@ mod tests {
         };
 
         // `Arc<dyn Model>` is not `Debug`, so match rather than `expect_err`.
-        let Err(error) = provider().resolve(&unknown).await else {
+        let Err(error) = provider().resolve(&unknown, &authentication()).await else {
             panic!("an unoffered model must not resolve");
         };
 
         assert_eq!(error.category, ProviderErrorCategory::ModelNotFound);
         assert_eq!(error.provider, ProviderId::Anthropic);
         assert_eq!(error.model.as_deref(), Some("claude-does-not-exist"));
+    }
+
+    #[tokio::test]
+    async fn should_reject_resolution_without_an_api_key() {
+        // An offered model still cannot be built without a credential: the
+        // provider holds none, so a keyless authentication is rejected before
+        // any client is constructed.
+        let Err(error) = provider()
+            .resolve(&anthropic::haiku_4_5(), &Authentication::None)
+            .await
+        else {
+            panic!("a model must not resolve without an API key");
+        };
+
+        assert_eq!(error.category, ProviderErrorCategory::MissingCredentials);
+        assert_eq!(error.provider, ProviderId::Anthropic);
     }
 }

@@ -8,6 +8,7 @@ use smista_core::model::{ModelDescriptor, ModelReference, Provider as ProviderId
 
 use super::Provider;
 use crate::ProviderResult;
+use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
 use crate::model::openai_compat::{OpenAICompatEndpoint, OpenAICompatModel, OpenAICompatRuntime};
@@ -15,10 +16,11 @@ use crate::model::openai_compat::{OpenAICompatEndpoint, OpenAICompatModel, OpenA
 /// A [`Provider`] backed by a single OpenAI-compatible endpoint.
 ///
 /// Each instance is a named endpoint (`openai-compat:<name>`) declared in
-/// configuration: a base URL, an optional credential and a fixed set of models
-/// with hand-supplied facts. The provider offers exactly those models and
-/// resolves a [`ModelReference`] into an executable [`Model`] built from the
-/// shared [`OpenAICompatEndpoint`] and [`OpenAICompatRuntime`].
+/// configuration: a base URL and a fixed set of models with hand-supplied
+/// facts. The provider offers exactly those models and resolves a
+/// [`ModelReference`] into an executable [`Model`] built from the shared
+/// [`OpenAICompatEndpoint`] and [`OpenAICompatRuntime`]; the credential is
+/// supplied per request as an [`Authentication`].
 ///
 /// The provider's [`id`](Provider::id) is its own named identity — a
 /// [`ProviderId::OpenAICompatible`] — never the bare [`ProviderId::OpenAI`]: a
@@ -30,7 +32,7 @@ where
 {
     /// This instance's named identity, e.g. `openai-compat:my-vllm`.
     id: ProviderId,
-    /// The single source of truth for the instance's base URL and credential.
+    /// The single source of truth for the instance's base URL.
     endpoint: OpenAICompatEndpoint,
     /// Runtime (preamble + memory backend) used to construct each resolved model.
     runtime: OpenAICompatRuntime<S>,
@@ -63,9 +65,9 @@ where
     ///
     /// `id` is the instance's identity (a [`ProviderId::OpenAICompatible`]) and
     /// is returned verbatim from [`Provider::id`]. `endpoint` carries the base
-    /// URL and optional credential, `runtime` the preamble and memory backend,
-    /// and `models` the facts for every model the instance offers, keyed by the
-    /// reference each resolves under.
+    /// URL, `runtime` the preamble and memory backend, and `models` the facts
+    /// for every model the instance offers, keyed by the reference each resolves
+    /// under. The credential is supplied per request when resolving.
     pub fn new(
         id: ProviderId,
         endpoint: OpenAICompatEndpoint,
@@ -90,7 +92,11 @@ where
         self.id.clone()
     }
 
-    async fn resolve(&self, reference: &ModelReference) -> ProviderResult<Arc<dyn Model>> {
+    async fn resolve(
+        &self,
+        reference: &ModelReference,
+        authentication: &Authentication,
+    ) -> ProviderResult<Arc<dyn Model>> {
         let Some(descriptor) = self.models.get(reference).cloned() else {
             return Err(crate::error::provider_error(
                 ProviderErrorCategory::ModelNotFound,
@@ -104,11 +110,15 @@ where
         };
 
         Ok(Arc::new(
-            OpenAICompatModel::new(&self.endpoint, &self.runtime, descriptor).await?,
+            OpenAICompatModel::new(&self.endpoint, &self.runtime, authentication, descriptor)
+                .await?,
         ))
     }
 
-    async fn list_models(&self) -> ProviderResult<Vec<ModelReference>> {
+    async fn list_models(
+        &self,
+        _authentication: &Authentication,
+    ) -> ProviderResult<Vec<ModelReference>> {
         Ok(self.models.keys().cloned().collect())
     }
 }
@@ -215,13 +225,17 @@ mod tests {
             .collect();
         OpenAICompatProvider::new(
             instance_id(),
-            OpenAICompatEndpoint::keyless("http://localhost:8000/v1"),
+            OpenAICompatEndpoint::new("http://localhost:8000/v1"),
             OpenAICompatRuntime {
                 preamble: "be helpful".to_string(),
                 storage: Arc::new(NoStorage),
             },
             models,
         )
+    }
+
+    fn authentication() -> Authentication {
+        Authentication::None
     }
 
     #[test]
@@ -237,7 +251,7 @@ mod tests {
         let provider = provider_with(&["llama-3.1-70b", "qwen2.5-coder"]);
 
         let mut listed: Vec<String> = provider
-            .list_models()
+            .list_models(&authentication())
             .await
             .expect("listing cannot fail")
             .into_iter()
@@ -253,7 +267,10 @@ mod tests {
         let provider = provider_with(&["llama-3.1-70b"]);
 
         // `Arc<dyn Model>` is not `Debug`, so match rather than `expect_err`.
-        let Err(error) = provider.resolve(&reference("does-not-exist")).await else {
+        let Err(error) = provider
+            .resolve(&reference("does-not-exist"), &authentication())
+            .await
+        else {
             panic!("an unconfigured model must not resolve");
         };
 
@@ -266,7 +283,9 @@ mod tests {
     async fn should_resolve_a_configured_model() {
         let provider = provider_with(&["llama-3.1-70b"]);
 
-        let resolved = provider.resolve(&reference("llama-3.1-70b")).await;
+        let resolved = provider
+            .resolve(&reference("llama-3.1-70b"), &authentication())
+            .await;
 
         assert!(resolved.is_ok(), "a configured model must resolve");
     }
@@ -276,7 +295,7 @@ mod tests {
         let provider = provider_with(&["llama-3.1-70b"]);
 
         let model = provider
-            .resolve(&reference("llama-3.1-70b"))
+            .resolve(&reference("llama-3.1-70b"), &authentication())
             .await
             .expect("a configured model must resolve");
 

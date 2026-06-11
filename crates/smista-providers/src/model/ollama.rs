@@ -5,13 +5,14 @@ use std::sync::Arc;
 
 use reqwest::header::HeaderName;
 use rig_core::providers::ollama::{Client as OllamaClient, OllamaApiKey};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use smista_core::error::ProviderError;
 use smista_core::model::{ModelAuthRequirement, ModelDescriptor, ModelReference, Provider};
 
 use crate::ProviderResult;
 use crate::agent::{Agent, AgentArgs};
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
+use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
 
@@ -22,159 +23,80 @@ use crate::model::Model;
 /// stay in sync with Ollama's published cloud endpoint.
 const OLLAMA_CLOUD_BASE_URL: &str = "https://ollama.com";
 
-/// Where smista talks to Ollama, and how it authenticates.
+/// Where smista talks to Ollama: the connection's locality and base URL.
 ///
-/// This is the **single source of truth** for an Ollama connection's locality
-/// and credentials. Every fact the rest of the adapter derives — the base URL,
-/// the API key, the proxy headers, whether the model is `local`, and its
-/// [`ModelAuthRequirement`] — comes from this one value, so a model can never be
-/// advertised as local while its completions are routed to the cloud.
+/// This is the **single source of truth** for an Ollama connection's locality.
+/// Whether a model is `local` and its [`ModelAuthRequirement`] are derived from
+/// the variant, and the base URL the prompts actually reach is fixed here, so a
+/// model can never be advertised as local while its completions are routed to
+/// the cloud — independent of the per-request credential.
 ///
-/// Locality is encoded in the variant rather than carried as a separate flag, so
-/// the illegal "local instance with an API key" state is unrepresentable: a
-/// [`Local`](OllamaEndpoint::Local) endpoint has no credential field to set.
+/// Credentials are not part of the endpoint: they are supplied per request as an
+/// [`Authentication`] when a model is resolved. A [`Local`](OllamaEndpoint::Local)
+/// daemon is keyless, or fronted by a gateway that takes
+/// [`Authentication::Headers`] credentials; a [`Cloud`](OllamaEndpoint::Cloud)
+/// instance takes a bearer key.
 ///
 /// # Examples
 ///
 /// ```
-/// use secrecy::SecretString;
 /// use smista_providers::model::ollama::OllamaEndpoint;
 ///
-/// // A local daemon: no API key, prompts never leave the machine.
+/// // A local daemon: prompts never leave the machine.
 /// let local = OllamaEndpoint::local("http://localhost:11434");
 /// assert!(local.is_local());
 ///
-/// // Ollama Cloud: authenticated, not local.
-/// let cloud = OllamaEndpoint::cloud(SecretString::from("sk-ollama"));
+/// // Ollama Cloud: not local.
+/// let cloud = OllamaEndpoint::cloud();
 /// assert!(!cloud.is_local());
 /// ```
+#[derive(Clone, Debug)]
 pub enum OllamaEndpoint {
     /// A local or self-hosted Ollama daemon, e.g. `http://localhost:11434`.
     ///
-    /// Carries no Ollama Cloud API key and is treated as `local`: prompts sent
-    /// to it never reach Ollama Cloud. A self-hosted instance fronted by a
-    /// reverse proxy can still attach `extra_headers` (e.g. a proxy credential).
+    /// Treated as `local`: prompts sent to it never reach Ollama Cloud. A
+    /// self-hosted instance fronted by a reverse proxy can still authenticate
+    /// with header credentials supplied per request.
     Local {
         /// The base URL of the local daemon, e.g. `http://localhost:11434`.
         base_url: String,
-        /// Extra headers for a custom local proxy, as (name, value) pairs.
-        extra_headers: Vec<(String, SecretString)>,
     },
     /// Ollama Cloud: the public authenticated endpoint.
     ///
-    /// Carries the bearer API key; authentication is required and the model is
-    /// **not** treated as `local`.
+    /// Authentication is required (a bearer key supplied per request) and the
+    /// model is **not** treated as `local`.
     Cloud {
         /// The base URL of the cloud instance.
         base_url: String,
-        /// The bearer API key sent as `Authorization: Bearer <api_key>`.
-        api_key: SecretString,
     },
-}
-
-// Holds credentials (a cloud API key, or proxy header values), so `Debug` is
-// implemented by hand to redact them rather than derived. A leak test in this
-// module's `tests` guards the redaction (M-PUBLIC-DEBUG).
-impl std::fmt::Debug for OllamaEndpoint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Local {
-                base_url,
-                extra_headers,
-            } => f
-                .debug_struct("OllamaEndpoint::Local")
-                .field("base_url", base_url)
-                .field(
-                    "extra_headers",
-                    &format_args!("[{} header(s)]", extra_headers.len()),
-                )
-                .finish(),
-            Self::Cloud { base_url, .. } => f
-                .debug_struct("OllamaEndpoint::Cloud")
-                .field("base_url", base_url)
-                .field("api_key", &"[redacted]")
-                .finish(),
-        }
-    }
-}
-
-// `#[derive(Clone)]` would work here, but is spelled out alongside the hand-written
-// `Debug` to keep the credential-bearing fields' handling explicit.
-impl Clone for OllamaEndpoint {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Local {
-                base_url,
-                extra_headers,
-            } => Self::Local {
-                base_url: base_url.clone(),
-                extra_headers: extra_headers.clone(),
-            },
-            Self::Cloud { base_url, api_key } => Self::Cloud {
-                base_url: base_url.clone(),
-                api_key: api_key.clone(),
-            },
-        }
-    }
 }
 
 impl OllamaEndpoint {
     /// Creates a [`Local`](OllamaEndpoint::Local) endpoint for the given daemon URL.
     ///
-    /// The resulting endpoint carries no API key, no proxy headers, and is
-    /// treated as `local`. Use [`local_with_headers`](OllamaEndpoint::local_with_headers)
-    /// for a self-hosted instance behind a proxy that needs custom headers.
+    /// The endpoint is treated as `local`. A self-hosted instance behind a proxy
+    /// that needs custom headers authenticates per request with
+    /// [`Authentication::Headers`].
     pub fn local(base_url: impl Into<String>) -> Self {
         Self::Local {
             base_url: base_url.into(),
-            extra_headers: Vec::new(),
-        }
-    }
-
-    /// Creates a [`Local`](OllamaEndpoint::Local) endpoint with custom proxy headers.
-    ///
-    /// For a self-hosted instance fronted by a reverse proxy that requires extra
-    /// headers (for example a proxy credential). The endpoint is still `local`.
-    pub fn local_with_headers(
-        base_url: impl Into<String>,
-        extra_headers: Vec<(String, SecretString)>,
-    ) -> Self {
-        Self::Local {
-            base_url: base_url.into(),
-            extra_headers,
         }
     }
 
     /// Creates a [`Cloud`](OllamaEndpoint::Cloud) endpoint for Ollama Cloud.
     ///
-    /// Uses `https://ollama.com` as the host and the given bearer API key.
-    pub fn cloud(api_key: SecretString) -> Self {
+    /// Uses `https://ollama.com` as the host; the bearer key is supplied per
+    /// request as an [`Authentication`].
+    pub fn cloud() -> Self {
         Self::Cloud {
             base_url: OLLAMA_CLOUD_BASE_URL.to_string(),
-            api_key,
         }
     }
 
     /// Returns the base URL the endpoint connects to.
     pub fn base_url(&self) -> &str {
         match self {
-            Self::Local { base_url, .. } | Self::Cloud { base_url, .. } => base_url,
-        }
-    }
-
-    /// Returns the bearer API key, or [`None`] for a local endpoint.
-    pub fn api_key(&self) -> Option<&SecretString> {
-        match self {
-            Self::Local { .. } => None,
-            Self::Cloud { api_key, .. } => Some(api_key),
-        }
-    }
-
-    /// Returns the extra proxy headers, empty for a cloud endpoint.
-    pub fn extra_headers(&self) -> &[(String, SecretString)] {
-        match self {
-            Self::Local { extra_headers, .. } => extra_headers,
-            Self::Cloud { .. } => &[],
+            Self::Local { base_url } | Self::Cloud { base_url } => base_url,
         }
     }
 
@@ -186,7 +108,7 @@ impl OllamaEndpoint {
     /// Returns the authentication a model on this endpoint requires.
     ///
     /// [`None`](ModelAuthRequirement::None) for a local daemon,
-    /// [`ApiKey`](ModelAuthRequirement::ApiKey) for cloud or remote.
+    /// [`ApiKey`](ModelAuthRequirement::ApiKey) for cloud.
     pub fn auth_requirement(&self) -> ModelAuthRequirement {
         match self {
             Self::Local { .. } => ModelAuthRequirement::None,
@@ -256,12 +178,14 @@ pub struct OllamaModel {
 }
 
 impl OllamaModel {
-    /// Creates a new Ollama model from an endpoint, runtime and descriptor.
+    /// Creates a new Ollama model from an endpoint, runtime, authentication and
+    /// descriptor.
     ///
-    /// The connection facts — base URL, API key and proxy headers — are read
-    /// from `endpoint`, the single source of truth for locality and credentials,
-    /// so the resolved model always talks to the same instance its `descriptor`
-    /// was stamped against. The preamble and memory backend come from `runtime`.
+    /// The base URL is read from `endpoint`, the single source of truth for
+    /// locality, so the resolved model always talks to the same instance its
+    /// `descriptor` was stamped against. The credentials — a bearer key or proxy
+    /// headers — come from `authentication`. The preamble and memory backend
+    /// come from `runtime`.
     ///
     /// # Errors
     ///
@@ -270,6 +194,7 @@ impl OllamaModel {
     pub async fn new<S>(
         endpoint: &OllamaEndpoint,
         runtime: &OllamaModelRuntime<S>,
+        authentication: &Authentication,
         descriptor: ModelDescriptor,
     ) -> Result<Self, ProviderError>
     where
@@ -285,13 +210,13 @@ impl OllamaModel {
         // keyless branch feeds `Nothing`, which converts to `OllamaApiKey` via
         // `From<Nothing>`.
         let mut builder = OllamaClient::builder().base_url(endpoint.base_url());
-        let api_key = match endpoint.api_key() {
+        let api_key = match authentication.api_key() {
             Some(api_key) => OllamaApiKey::from(api_key.expose_secret()),
             None => OllamaApiKey::from(rig_core::client::Nothing),
         };
 
         // set extra headers, if any
-        let extra_headers = endpoint.extra_headers();
+        let extra_headers = authentication.headers();
         if !extra_headers.is_empty() {
             let headers = extra_headers.iter().fold(
                 rig_core::http_client::HeaderMap::new(),
@@ -433,73 +358,16 @@ mod tests {
 
         assert!(endpoint.is_local());
         assert_eq!(endpoint.base_url(), "http://localhost:11434");
-        assert!(endpoint.api_key().is_none());
-        assert!(endpoint.extra_headers().is_empty());
-        assert_eq!(endpoint.auth_requirement(), ModelAuthRequirement::None);
-    }
-
-    #[test]
-    fn local_endpoint_carries_proxy_headers_but_no_api_key() {
-        let endpoint = OllamaEndpoint::local_with_headers(
-            "http://proxy.internal:11434",
-            vec![("X-Proxy-Token".to_string(), SecretString::from("shhh"))],
-        );
-
-        assert!(endpoint.is_local());
-        assert!(endpoint.api_key().is_none());
-        assert_eq!(endpoint.extra_headers().len(), 1);
-        assert_eq!(endpoint.extra_headers()[0].0, "X-Proxy-Token");
         assert_eq!(endpoint.auth_requirement(), ModelAuthRequirement::None);
     }
 
     #[test]
     fn cloud_endpoint_is_not_local_and_requires_an_api_key() {
-        let endpoint = OllamaEndpoint::cloud(SecretString::from("sk-ollama-secret"));
+        let endpoint = OllamaEndpoint::cloud();
 
         assert!(!endpoint.is_local());
         assert_eq!(endpoint.base_url(), OLLAMA_CLOUD_BASE_URL);
-        assert_eq!(
-            endpoint.api_key().map(ExposeSecret::expose_secret),
-            Some("sk-ollama-secret")
-        );
-        assert!(endpoint.extra_headers().is_empty());
         assert_eq!(endpoint.auth_requirement(), ModelAuthRequirement::ApiKey);
-    }
-
-    #[test]
-    fn debug_redacts_the_cloud_api_key() {
-        let secret = "sk-ollama-9f8e7d6c5b4a";
-        let endpoint = OllamaEndpoint::cloud(SecretString::from(secret));
-
-        let rendered = format!("{endpoint:?}");
-
-        assert!(rendered.contains("Cloud"));
-        assert!(rendered.contains("[redacted]"));
-        assert!(
-            !rendered.contains(secret),
-            "the API key leaked into Debug output"
-        );
-    }
-
-    #[test]
-    fn debug_redacts_local_proxy_header_values() {
-        let header_secret = "proxy-bearer-1234";
-        let endpoint = OllamaEndpoint::local_with_headers(
-            "http://proxy.internal:11434",
-            vec![(
-                "X-Proxy-Token".to_string(),
-                SecretString::from(header_secret),
-            )],
-        );
-
-        let rendered = format!("{endpoint:?}");
-
-        assert!(rendered.contains("Local"));
-        assert!(rendered.contains("1 header(s)"));
-        assert!(
-            !rendered.contains(header_secret),
-            "a proxy header value leaked into Debug output"
-        );
     }
 
     #[test]
