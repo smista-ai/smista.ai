@@ -163,7 +163,7 @@ mod tests {
 
     fn provider() -> OpenAIProvider<NoStorage> {
         OpenAIProvider::new(OpenAIModelArgs {
-            apikey: SecretString::from("sk-openai-test"),
+            api_key: SecretString::from("sk-openai-test"),
             preamble: "be helpful".to_string(),
             storage: Arc::new(NoStorage),
         })

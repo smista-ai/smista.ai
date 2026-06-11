@@ -45,13 +45,13 @@ fn ping_request() -> CompletionRequest {
 
 #[tokio::test]
 async fn should_resolve_haiku_and_run_complete_and_stream() {
-    // ensure the apikey is set
-    let Ok(apikey) = std::env::var("ANTHROPIC_API_KEY").map(SecretString::from) else {
+    // ensure the API key is set
+    let Ok(api_key) = std::env::var("ANTHROPIC_API_KEY").map(SecretString::from) else {
         panic!("ANTHROPIC_API_KEY is not set");
     };
 
     let provider = AnthropicProvider::new(AnthropicModelArgs {
-        apikey,
+        api_key,
         preamble: "You are a terse assistant.".to_string(),
         storage: Arc::new(InMemoryStorage::default()),
     });

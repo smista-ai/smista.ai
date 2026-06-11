@@ -55,7 +55,7 @@ impl Gpt_5_4_Mini {
     /// Creates a new GPT-5.4-mini model with the given arguments.
     pub async fn new<S>(
         OpenAIModelArgs {
-            apikey,
+            api_key,
             preamble,
             storage,
         }: OpenAIModelArgs<S>,
@@ -64,7 +64,7 @@ impl Gpt_5_4_Mini {
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating OpenAI {GPT_5_4_MINI} model");
-        let client = OpenAIClient::new(apikey.expose_secret()).map_err(|e| {
+        let client = OpenAIClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
                 Provider::OpenAI,
@@ -146,7 +146,7 @@ impl Gpt_5_4 {
     /// Creates a new GPT 5.4 model with the given arguments.
     pub async fn new<S>(
         OpenAIModelArgs {
-            apikey,
+            api_key,
             preamble,
             storage,
         }: OpenAIModelArgs<S>,
@@ -155,7 +155,7 @@ impl Gpt_5_4 {
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating OpenAI {GPT_5_4} model");
-        let client = OpenAIClient::new(apikey.expose_secret()).map_err(|e| {
+        let client = OpenAIClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
                 Provider::OpenAI,
@@ -238,7 +238,7 @@ impl Gpt_5_5 {
     /// Creates a new GPT 5.5 model with the given arguments.
     pub async fn new<S>(
         OpenAIModelArgs {
-            apikey,
+            api_key,
             preamble,
             storage,
         }: OpenAIModelArgs<S>,
@@ -247,7 +247,7 @@ impl Gpt_5_5 {
         S: MemoryStorage + 'static,
     {
         tracing::debug!("Creating {GPT_5_5} model");
-        let client = OpenAIClient::new(apikey.expose_secret()).map_err(|e| {
+        let client = OpenAIClient::new(api_key.expose_secret()).map_err(|e| {
             crate::error::provider_error(
                 crate::error::category_from_http(&e),
                 Provider::OpenAI,
