@@ -3546,6 +3546,8 @@ dependencies = [
  "smista-providers",
  "thiserror",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

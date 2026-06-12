@@ -22,7 +22,7 @@
 use std::sync::Arc;
 
 use futures::StreamExt;
-use provider_integration_tests::InMemoryStorage;
+use provider_integration_tests::{InMemoryStorage, init_tracing};
 use secrecy::SecretString;
 use smista_core::model::{ModelParameters, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
@@ -49,6 +49,8 @@ fn ping_request() -> CompletionRequest {
 
 #[tokio::test]
 async fn should_resolve_gemini_2_5_flash_and_run_complete_and_stream() {
+    init_tracing();
+
     // ensure the API key is set
     let Ok(api_key) = std::env::var("GEMINI_API_KEY").map(SecretString::from) else {
         panic!("GEMINI_API_KEY is not set");

@@ -1,6 +1,5 @@
 //! Ollama [`Provider`] implementation.
 
-mod cache;
 pub mod client;
 
 use std::sync::Arc;
@@ -18,7 +17,7 @@ use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
 use crate::model::ollama::{OllamaEndpoint, OllamaModel, OllamaModelRuntime};
-use crate::provider::ollama::cache::{Cached, TtlCache};
+use crate::provider::cache::{Cached, TtlCache};
 
 /// Type alias for the Ollama models cache, owned privately by the provider.
 type ModelsCache = TtlCache<Vec<ModelDescriptor>>;

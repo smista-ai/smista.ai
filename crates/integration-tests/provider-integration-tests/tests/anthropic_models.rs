@@ -19,15 +19,18 @@
 use std::sync::Arc;
 
 use futures::StreamExt;
-use provider_integration_tests::InMemoryStorage;
+use provider_integration_tests::{InMemoryStorage, init_tracing};
 use secrecy::SecretString;
-use smista_core::model::{ModelParameters, Provider as ProviderId};
+use smista_core::model::{ModelParameters, ModelReference, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
 use smista_providers::auth::Authentication;
-use smista_providers::model::anthropic::{AnthropicModelArgs, haiku_4_5};
+use smista_providers::model::anthropic::AnthropicModelArgs;
 use smista_providers::provider::Provider;
 use smista_providers::provider::anthropic::AnthropicProvider;
+
+/// Model id of the Haiku variant exercised by this test.
+const HAIKU_MODEL_ID: &str = "claude-haiku-4-5-20251001";
 
 /// Builds the deterministic, single-turn request both flows send.
 fn ping_request() -> CompletionRequest {
@@ -46,6 +49,8 @@ fn ping_request() -> CompletionRequest {
 
 #[tokio::test]
 async fn should_resolve_haiku_and_run_complete_and_stream() {
+    init_tracing();
+
     // ensure the API key is set
     let Ok(api_key) = std::env::var("ANTHROPIC_API_KEY").map(SecretString::from) else {
         panic!("ANTHROPIC_API_KEY is not set");
@@ -59,7 +64,10 @@ async fn should_resolve_haiku_and_run_complete_and_stream() {
 
     // Step 1: resolving the Haiku reference yields the Haiku model — assert on
     // its stable identity and descriptor, not on a concrete type.
-    let reference = haiku_4_5().reference();
+    let reference = ModelReference {
+        provider: ProviderId::Anthropic,
+        model: HAIKU_MODEL_ID.to_string(),
+    };
 
     let model = provider
         .resolve(&reference, &authentication)
@@ -73,8 +81,7 @@ async fn should_resolve_haiku_and_run_complete_and_stream() {
     );
     let descriptor = model.descriptor();
     assert_eq!(descriptor.provider, ProviderId::Anthropic);
-    assert_eq!(descriptor.model, haiku_4_5().model);
-    assert_eq!(descriptor.display_name.as_deref(), Some("Claude Haiku 4.5"));
+    assert_eq!(descriptor.model, HAIKU_MODEL_ID);
 
     // Step 2: the blocking completion flow returns non-empty content and a
     // natural stop.

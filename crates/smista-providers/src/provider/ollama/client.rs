@@ -100,7 +100,7 @@ impl OllamaClient for HttpOllamaClient {
 
 fn normalize_reqwest_error(error: reqwest::Error) -> ProviderError {
     ProviderError {
-        message: error.to_string(),
+        message: format!("Ollama API request failed: {error:?}"),
         category: crate::error::category_from_reqwest(&error),
         provider: Provider::Ollama,
         model: None,

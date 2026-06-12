@@ -1,22 +1,13 @@
 //! Anthropic models
 
-mod haiku;
-mod opus;
-mod sonnet;
-
 use std::sync::Arc;
 
 use rig_core::providers::anthropic::client::Client as AnthropicClient;
+use rust_decimal::Decimal;
 use secrecy::ExposeSecret;
 use smista_core::error::ProviderError;
 use smista_core::model::{ModelDescriptor, ModelReference, Provider};
 
-#[doc(inline)]
-pub use self::haiku::haiku_4_5;
-#[doc(inline)]
-pub use self::opus::{opus_4_6, opus_4_7, opus_4_8};
-#[doc(inline)]
-pub use self::sonnet::sonnet_4_6;
 use crate::ProviderResult;
 use crate::agent::{Agent, AgentArgs};
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
@@ -24,18 +15,30 @@ use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
 
-/// Returns the descriptors for every Anthropic model smista.ai offers.
+/// Returns the input and output price per million tokens for `model_id`.
 ///
-/// The single catalog the provider reads to resolve and list models, so the set
-/// of offered models is declared in one place.
-pub fn catalog() -> Vec<ModelDescriptor> {
-    vec![
-        haiku_4_5(),
-        opus_4_6(),
-        opus_4_7(),
-        opus_4_8(),
-        sonnet_4_6(),
-    ]
+/// Anthropic prices per model family, and the `/v1/models` listing does not
+/// report price, so the family is inferred from the id and the prices are kept
+/// here. A model whose id matches no known family is left unpriced (`None`).
+///
+/// Family granularity is deliberate: legacy Opus ids (`claude-opus-4`,
+/// `claude-opus-4-1`) are priced at the current Opus rate rather than their
+/// historical rate, which is acceptable because they are not part of the
+/// routing set in practice.
+pub fn family_pricing(model_id: &str) -> (Option<Decimal>, Option<Decimal>) {
+    let id = model_id.to_ascii_lowercase();
+    let (input, output) = if id.contains("opus") {
+        (5, 25)
+    } else if id.contains("sonnet") {
+        (3, 15)
+    } else if id.contains("haiku") {
+        (1, 5)
+    } else if id.contains("fable") {
+        (10, 50)
+    } else {
+        return (None, None);
+    };
+    (Some(Decimal::new(input, 0)), Some(Decimal::new(output, 0)))
 }
 
 /// Arguments for creating a new Anthropic model.
@@ -89,8 +92,8 @@ where
 /// An Anthropic model.
 ///
 /// One shared adapter for every Claude model: its facts come from the
-/// [`ModelDescriptor`] it is constructed with (returned by a facts function such
-/// as [`opus_4_8`]), and its [`reference`](Model::reference) is derived from that
+/// [`ModelDescriptor`] it is constructed with (sourced from the provider's live
+/// API listing), and its [`reference`](Model::reference) is derived from that
 /// descriptor so the two can never disagree. The credential is supplied per
 /// request as an [`Authentication`] when the model is resolved.
 pub struct AnthropicModel {
@@ -168,10 +171,6 @@ impl Model for AnthropicModel {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
-    use smista_core::model::Provider;
-
     use super::*;
     use crate::memory::MemoryRecord;
 
@@ -258,19 +257,36 @@ mod tests {
         // The clone shares the same backend rather than duplicating it.
         assert!(Arc::ptr_eq(&args.storage, &cloned.storage));
     }
+}
+
+#[cfg(test)]
+mod pricing_tests {
+    use super::*;
 
     #[test]
-    fn should_expose_distinct_model_descriptors() {
-        let descriptors = catalog();
+    fn should_price_each_known_family() {
+        let cases = [
+            ("claude-opus-4-8", 5, 25),
+            ("claude-sonnet-4-6", 3, 15),
+            ("claude-haiku-4-5-20251001", 1, 5),
+            ("claude-fable-5", 10, 50),
+        ];
 
-        // Every descriptor targets the Anthropic provider...
-        assert!(
-            descriptors
-                .iter()
-                .all(|descriptor| descriptor.provider == Provider::Anthropic)
-        );
-        // ...and names a distinct model.
-        let models: BTreeSet<&str> = descriptors.iter().map(|d| d.model.as_str()).collect();
-        assert_eq!(models.len(), descriptors.len());
+        for (id, input, output) in cases {
+            let (got_in, got_out) = family_pricing(id);
+            assert_eq!(got_in, Some(Decimal::new(input, 0)), "input price for {id}");
+            assert_eq!(
+                got_out,
+                Some(Decimal::new(output, 0)),
+                "output price for {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn should_leave_an_unknown_family_unpriced() {
+        let (input, output) = family_pricing("some-future-model");
+        assert_eq!(input, None);
+        assert_eq!(output, None);
     }
 }
