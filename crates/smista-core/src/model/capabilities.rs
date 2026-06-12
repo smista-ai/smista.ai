@@ -81,11 +81,8 @@ impl ModelCapabilities {
 
     /// Returns the capabilities the model supports, in declaration order.
     ///
-    /// This is the list form used by the public catalog ([`ModelInfo`]), which
-    /// reports only the capabilities a model has rather than a flag per
-    /// capability.
-    ///
-    /// [`ModelInfo`]: crate::api::ModelInfo
+    /// This is the list form, reporting only the capabilities a model has
+    /// rather than a flag per capability.
     #[must_use]
     pub fn supported(&self) -> Vec<Capability> {
         [

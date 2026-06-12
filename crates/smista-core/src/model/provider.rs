@@ -203,11 +203,13 @@ impl SurrealValue for Provider {
     }
 }
 
-/// A provider together with its runtime configuration state.
+/// A provider that is available for routing.
 ///
-/// This is the shape returned by `GET /llm/providers`: it pairs a provider's
-/// identity and display name with whether usable credentials (or a base URL,
-/// for local providers) are currently configured.
+/// This is the shape returned by `GET /llm/providers`, which lists only the
+/// providers that are currently available — those configured with usable
+/// credentials (or a base URL, for local providers). A provider that is not
+/// available is omitted from the listing entirely, so this descriptor carries
+/// no availability flag.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ProviderDescriptor {
@@ -215,8 +217,6 @@ pub struct ProviderDescriptor {
     pub id: Provider,
     /// Human-friendly name shown to users.
     pub display_name: String,
-    /// Whether credentials or a base URL are configured for the provider.
-    pub configured: bool,
 }
 
 #[cfg(test)]
@@ -311,14 +311,12 @@ mod tests {
         let descriptor = ProviderDescriptor {
             id: Provider::Anthropic,
             display_name: "Anthropic".to_string(),
-            configured: true,
         };
         assert_eq!(
             serde_json::to_value(&descriptor).unwrap(),
             serde_json::json!({
                 "id": "anthropic",
                 "display_name": "Anthropic",
-                "configured": true,
             })
         );
     }
@@ -328,7 +326,6 @@ mod tests {
         let descriptor = ProviderDescriptor {
             id: Provider::Ollama,
             display_name: "Ollama".to_string(),
-            configured: false,
         };
         let json = serde_json::to_string(&descriptor).unwrap();
         assert_eq!(

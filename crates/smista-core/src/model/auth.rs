@@ -25,8 +25,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// Each variant serializes to its snake_case name; [`Self::Custom`] carries the
 /// scheme name as its payload (e.g. `{"custom": "aws-sigv4"}`).
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum ModelAuthRequirement {
     /// No authentication is needed, e.g. a local model.
     #[default]

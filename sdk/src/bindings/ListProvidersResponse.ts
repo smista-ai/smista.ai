@@ -6,6 +6,6 @@ import type { ProviderDescriptor } from "./ProviderDescriptor.js";
  */
 export type ListProvidersResponse = { 
 /**
- * Configured and available providers.
+ * Available providers.
  */
 providers: Array<ProviderDescriptor>, };

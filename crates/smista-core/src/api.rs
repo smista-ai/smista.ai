@@ -54,7 +54,7 @@ pub use execute::{
     ExecuteResponse, ExecutionStatus, LocalPreferences, ProviderCredentialInfo, ProviderModelInfo,
     RoutingOutcome, TaskInput, Workspace,
 };
-pub use llm::{ListModelsResponse, ListProvidersResponse, ModelInfo};
+pub use llm::{ListModelsResponse, ListProvidersResponse};
 pub use preview::{CostRange, PreviewResponse, RequiredPermission};
 pub use session::{
     CreateSessionRequest, CreateSessionResponse, DeleteSessionResponse, GetSessionResponse,
