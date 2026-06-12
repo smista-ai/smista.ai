@@ -1,5 +1,23 @@
 # Configuring the CLI
 
+- [Configuring the CLI](#configuring-the-cli)
+  - [Routing rules](#routing-rules)
+    - [Rule fields](#rule-fields)
+    - [Match semantics](#match-semantics)
+    - [Effort](#effort)
+    - [Rule precedence](#rule-precedence)
+    - [Default route](#default-route)
+  - [Task intents](#task-intents)
+  - [Privacy](#privacy)
+  - [Tool permissions](#tool-permissions)
+  - [Providers and models](#providers-and-models)
+  - [Provider credentials](#provider-credentials)
+  - [Connecting to the router](#connecting-to-the-router)
+  - [Local preferences](#local-preferences)
+  - [Where configuration lives](#where-configuration-lives)
+  - [Precedence](#precedence)
+  - [Validation](#validation)
+
 smista.ai reads TOML configuration to decide which model handles each task, what
 context may be sent where, and which tool calls require approval. Configuration
 is deterministic, versionable and inspectable — routing never depends on an LLM.

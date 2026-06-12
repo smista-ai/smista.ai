@@ -1,5 +1,14 @@
 # Memory
 
+- [Memory](#memory)
+  - [Two kinds of memory](#two-kinds-of-memory)
+  - [How memory is recorded](#how-memory-is-recorded)
+  - [How recall works](#how-recall-works)
+  - [Enabling memory on a model](#enabling-memory-on-a-model)
+  - [Where memory is stored](#where-memory-is-stored)
+    - [User memory](#user-memory)
+    - [Context memory](#context-memory)
+
 smista.ai can remember things so you don't have to repeat yourself. There are
 two kinds of memory: **user memory**, which follows you across every session,
 and **context memory**, which is scoped to a single session. Both are written

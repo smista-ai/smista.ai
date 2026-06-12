@@ -58,6 +58,9 @@ lives in `docs/`.
   to [docs/](docs/). Write for the user performing a task, not as a spec dump:
   task-oriented section names, runnable examples, no internal jargon. Whenever a
   new page is added under [docs/](docs/), register it in `docs/SUMMARY.md`.
+  Whenever a page under [docs/](docs/) is updated, also update its table of
+  contents to match the new heading structure; this does not apply to
+  `docs/SUMMARY.md`, which has no table of contents.
 - **Database schema**: any change to the database schema (tables, fields or
   indexes) must be reflected in both the migration at
   `crates/smista-storage/src/database/surreal/schema.rs` and the authoritative

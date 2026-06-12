@@ -1,5 +1,15 @@
 # CLI Commands
 
+- [CLI Commands](#cli-commands)
+  - [From your shell](#from-your-shell)
+  - [Interactive slash commands](#interactive-slash-commands)
+    - [Session](#session)
+    - [Running tasks](#running-tasks)
+    - [Routing and inspection](#routing-and-inspection)
+    - [Models and providers](#models-and-providers)
+    - [Configuration](#configuration)
+  - [Referencing files](#referencing-files)
+
 The `smista` CLI runs in two modes: a one-shot prompt from your shell, and an
 interactive session where commands are typed as slash commands.
 

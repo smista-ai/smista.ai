@@ -4,6 +4,13 @@
 > smista.ai is under active development. This guide describes the intended
 > workflow; commands land progressively as the milestones are implemented.
 
+- [Get Started](#get-started)
+  - [Installation](#installation)
+  - [The golden workflow](#the-golden-workflow)
+  - [Previewing a route](#previewing-a-route)
+  - [Inspecting a decision](#inspecting-a-decision)
+  - [Configuration](#configuration)
+
 ## Installation
 
 Once binaries are published, the official installer will be available at

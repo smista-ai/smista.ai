@@ -1,5 +1,20 @@
 # Running the Router
 
+- [Running the Router](#running-the-router)
+  - [Where configuration lives](#where-configuration-lives)
+  - [A complete example](#a-complete-example)
+  - [Server](#server)
+  - [Storage](#storage)
+  - [Authentication](#authentication)
+  - [Runtime limits](#runtime-limits)
+  - [Logging](#logging)
+  - [CORS](#cors)
+  - [Retention](#retention)
+  - [Providers](#providers)
+    - [Generic OpenAI-compatible endpoints](#generic-openai-compatible-endpoints)
+  - [Local models with Ollama](#local-models-with-ollama)
+  - [Validation](#validation)
+
 `smista-router` is the routing and orchestration service the CLI talks to. This
 page covers how the router process itself runs — the server binding, storage,
 authentication, runtime limits and logging. It is separate from the routing

@@ -1,5 +1,15 @@
 # Configuration validation
 
+- [Configuration validation](#configuration-validation)
+  - [CLI / policy configuration (`config.toml`)](#cli--policy-configuration-configtoml)
+    - [Specificity](#specificity)
+    - [Unsafe overrides and permission widening](#unsafe-overrides-and-permission-widening)
+    - [Skill references](#skill-references)
+  - [Model selection (checked at run time)](#model-selection-checked-at-run-time)
+  - [Router configuration (`router.toml`)](#router-configuration-routertoml)
+    - [Example: correcting a zero timeout](#example-correcting-a-zero-timeout)
+    - [Example: correcting unsafe CORS](#example-correcting-unsafe-cors)
+
 smista.ai validates your configuration and reports every finding as either an
 **error** or a **warning**. Errors make the configuration invalid and must be
 fixed before smista can use it. Warnings are advisory — they surface potential
