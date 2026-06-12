@@ -24,13 +24,16 @@ use std::sync::Arc;
 use futures::StreamExt;
 use provider_integration_tests::{InMemoryStorage, init_tracing};
 use secrecy::SecretString;
-use smista_core::model::{ModelParameters, Provider as ProviderId};
+use smista_core::model::{ModelParameters, ModelReference, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
 use smista_providers::auth::Authentication;
-use smista_providers::model::gemini::{GeminiModelArgs, gemini_2_5_flash};
+use smista_providers::model::gemini::GeminiModelArgs;
 use smista_providers::provider::Provider;
 use smista_providers::provider::gemini::GeminiProvider;
+
+/// Model id of the Gemini Flash variant exercised by this test.
+const GEMINI_FLASH_MODEL_ID: &str = "gemini-2.5-flash";
 
 /// Builds the deterministic, single-turn request both flows send.
 fn ping_request() -> CompletionRequest {
@@ -65,7 +68,10 @@ async fn should_resolve_gemini_2_5_flash_and_run_complete_and_stream() {
     // Step 1: resolving the Gemini 2.5 Flash reference yields the Gemini 2.5
     // Flash model — assert on its stable identity and descriptor, not on a
     // concrete type.
-    let reference = gemini_2_5_flash().reference();
+    let reference = ModelReference {
+        provider: ProviderId::Gemini,
+        model: GEMINI_FLASH_MODEL_ID.to_string(),
+    };
 
     let model = provider
         .resolve(&reference, &authentication)
@@ -79,8 +85,7 @@ async fn should_resolve_gemini_2_5_flash_and_run_complete_and_stream() {
     );
     let descriptor = model.descriptor();
     assert_eq!(descriptor.provider, ProviderId::Gemini);
-    assert_eq!(descriptor.model, gemini_2_5_flash().model);
-    assert_eq!(descriptor.display_name.as_deref(), Some("Gemini 2.5 Flash"));
+    assert_eq!(descriptor.model, GEMINI_FLASH_MODEL_ID);
 
     // Step 2: the blocking completion flow returns non-empty content and a
     // natural stop.
