@@ -1,0 +1,144 @@
+name: model review reminder
+
+on:
+  schedule:
+    # 06:00 UTC on the first day of every month.
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  open-review-issue:
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed to create the reminder issue.
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Skip when a review issue is already open
+        id: guard
+        run: |
+          set -euo pipefail
+          open=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --label "chore:model-review" \
+            --state open \
+            --json number \
+            --jq 'length')
+          if [ "$open" -gt 0 ]; then
+            echo "A model review issue is already open; nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch the Anthropic model list
+        if: steps.guard.outputs.skip == 'false'
+        id: anthropic
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/anthropic.md"
+          if response=$(curl -fsS "https://api.anthropic.com/v1/models?limit=100" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01"); then
+            {
+              echo "| Model id | Display name |"
+              echo "| -------- | ------------ |"
+              echo "$response" | jq -r '
+                .data[]
+                | "| `\(.id)` | \(.display_name // "n/a") |"'
+            } > "$out"
+          else
+            echo "_Could not fetch the model list from the API. Please check it manually._" > "$out"
+          fi
+          echo "file=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the Gemini model list
+        if: steps.guard.outputs.skip == 'false'
+        id: gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/gemini.md"
+          if response=$(curl -fsS "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000" \
+            -H "x-goog-api-key: $GEMINI_API_KEY"); then
+            {
+              echo "| Model id | Display name |"
+              echo "| -------- | ------------ |"
+              echo "$response" | jq -r '
+                .models[]
+                | select(.supportedGenerationMethods | index("generateContent"))
+                | "| `\(.name | sub("^models/"; ""))` | \(.displayName // "n/a") |"'
+            } > "$out"
+          else
+            echo "_Could not fetch the model list from the API. Please check it manually._" > "$out"
+          fi
+          echo "file=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble the issue body
+        if: steps.guard.outputs.skip == 'false'
+        id: body
+        env:
+          ANTHROPIC_FILE: ${{ steps.anthropic.outputs.file }}
+          GEMINI_FILE: ${{ steps.gemini.outputs.file }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/body.md"
+          {
+            echo "It is time for the monthly check of the provider model lists."
+            echo "Please review each provider below and update the hardcoded model"
+            echo "facts in \`smista-providers\` where anything has changed."
+            echo
+            echo "## OpenAI"
+            echo
+            echo "The OpenAI listing endpoint does not return enough to build the"
+            echo "list automatically, so this one is a manual review:"
+            echo
+            echo "1. Open the model documentation at"
+            echo "   <https://developers.openai.com/api/docs/models> and compare it"
+            echo "   with the hardcoded list."
+            echo "2. For every new model, look up its pricing at"
+            echo "   <https://platform.openai.com/docs/pricing> and add it."
+            echo "3. Mark any model that is gone as deprecated and remove it."
+            echo
+            echo "## Anthropic"
+            echo
+            echo "1. Check pricing at"
+            echo "   <https://platform.claude.com/docs/en/about-claude/pricing> and"
+            echo "   update any rate that changed."
+            echo "2. The current list fetched from the API is below. Add new models"
+            echo "   and deprecate those that are gone."
+            echo
+            cat "$ANTHROPIC_FILE"
+            echo
+            echo "## Gemini"
+            echo
+            echo "1. Check pricing at"
+            echo "   <https://ai.google.dev/gemini-api/docs/pricing> and update any"
+            echo "   rate that changed."
+            echo "2. The current list fetched from the API is below. Add new models"
+            echo "   and deprecate those that are gone."
+            echo
+            cat "$GEMINI_FILE"
+          } > "$body"
+          echo "file=$body" >> "$GITHUB_OUTPUT"
+
+      - name: Open the review issue
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          BODY_FILE: ${{ steps.body.outputs.file }}
+        run: |
+          set -euo pipefail
+          title="Monthly model review $(date -u +%Y-%m)"
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$title" \
+            --label "crate:providers" \
+            --label "chore:model-review" \
+            --body-file "$BODY_FILE"
