@@ -11,7 +11,20 @@ export type StreamEvent = { "type": "text_delta",
 /**
  * The text appended by this event.
  */
-delta: string, } | { "type": "tool_call_requested", 
+delta: string, } | { "type": "reasoning_delta", 
+/**
+ * The reasoning text appended by this event.
+ */
+delta: string, } | { "type": "tool_call_started", 
+/**
+ * Identifier correlating this event with its later
+ * [`Self::ToolCallRequested`].
+ */
+call_id: string, 
+/**
+ * Name of the tool being called.
+ */
+name: string, } | { "type": "tool_call_requested", 
 /**
  * Identifier correlating this call with its later [`Self::ToolResult`].
  */

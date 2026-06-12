@@ -254,9 +254,8 @@ impl OllamaModel {
         tracing::debug!("Creating agent for Ollama {} model", reference.model);
         let agent = Agent::new(AgentArgs {
             completion_model: client,
-            model: reference.model.clone(),
+            descriptor: descriptor.clone(),
             preamble: runtime.preamble.clone(),
-            provider: Provider::Ollama,
             storage: Arc::clone(&runtime.storage),
         })
         .await?;

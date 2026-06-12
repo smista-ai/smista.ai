@@ -165,6 +165,13 @@ where
             },
         );
 
+        // A locally served model costs nothing per token; the pricing of a
+        // remote Ollama endpoint is unknown, so it stays unreported there.
+        let token_cost = self
+            .endpoint
+            .is_local()
+            .then_some(rust_decimal::Decimal::ZERO);
+
         ModelDescriptor {
             provider: smista_core::model::Provider::Ollama,
             model: model.model,
@@ -174,8 +181,8 @@ where
             capabilities,
             max_context_tokens: model.details.context_length,
             max_output_tokens: None,
-            input_cost_per_million_tokens: None,
-            output_cost_per_million_tokens: None,
+            input_cost_per_million_tokens: token_cost,
+            output_cost_per_million_tokens: token_cost,
             default_parameters: ModelParameters::default(),
             provider_options: None,
         }

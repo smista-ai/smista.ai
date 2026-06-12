@@ -80,12 +80,36 @@ impl Gpt_5_4_Mini {
             )
         })?;
 
+        let descriptor = ModelDescriptor {
+            provider: Provider::OpenAI,
+            model: GPT_5_4_MINI.to_string(),
+            display_name: Some("GPT-5.4 mini".to_string()),
+            local: false,
+            auth: ModelAuthRequirement::ApiKey,
+            capabilities: ModelCapabilities {
+                streaming: true,
+                tools: true,
+                json_output: true,
+                system_prompt: true,
+                images: true,
+                reasoning: true,
+                memory: true,
+            },
+            max_context_tokens: 400_000,
+            max_output_tokens: Some(128_000),
+            input_cost_per_million_tokens: Some(rust_decimal::Decimal::new(75, 2)), // $0.75 per million input tokens
+            output_cost_per_million_tokens: Some(rust_decimal::Decimal::new(45, 1)), // $4.50 per million output tokens
+            // `temperature` / `top_p` are removed on GPT-5.4-mini (400 if
+            // sent), so the default parameters stay empty.
+            default_parameters: ModelParameters::default(),
+            provider_options: None,
+        };
+
         tracing::debug!("Creating agent for {GPT_5_4_MINI} model");
         let agent = Agent::new(AgentArgs {
             completion_model: client,
-            model: GPT_5_4_MINI.to_string(),
+            descriptor: descriptor.clone(),
             preamble,
-            provider: Provider::OpenAI,
             storage,
         })
         .await?;
@@ -93,30 +117,7 @@ impl Gpt_5_4_Mini {
         tracing::debug!("Successfully created {GPT_5_4_MINI} model");
         Ok(Self {
             agent,
-            descriptor: ModelDescriptor {
-                provider: Provider::OpenAI,
-                model: GPT_5_4_MINI.to_string(),
-                display_name: Some("GPT-5.4 mini".to_string()),
-                local: false,
-                auth: ModelAuthRequirement::ApiKey,
-                capabilities: ModelCapabilities {
-                    streaming: true,
-                    tools: true,
-                    json_output: true,
-                    system_prompt: true,
-                    images: true,
-                    reasoning: true,
-                    memory: true,
-                },
-                max_context_tokens: 400_000,
-                max_output_tokens: Some(128_000),
-                input_cost_per_million_tokens: Some(rust_decimal::Decimal::new(75, 2)), // $0.75 per million input tokens
-                output_cost_per_million_tokens: Some(rust_decimal::Decimal::new(45, 1)), // $4.50 per million output tokens
-                // `temperature` / `top_p` are removed on GPT-5.4-mini (400 if
-                // sent), so the default parameters stay empty.
-                default_parameters: ModelParameters::default(),
-                provider_options: None,
-            },
+            descriptor,
             reference: gpt_5_4_mini(),
         })
     }
@@ -177,12 +178,37 @@ impl Gpt_5_4 {
             )
         })?;
 
+        let descriptor = ModelDescriptor {
+            provider: Provider::OpenAI,
+            model: GPT_5_4.to_string(),
+            display_name: Some("GPT-5.4".to_string()),
+            local: false,
+            auth: ModelAuthRequirement::ApiKey,
+            capabilities: ModelCapabilities {
+                streaming: true,
+                tools: true,
+                // Native structured outputs are not supported on GPT-5.4.
+                json_output: true,
+                system_prompt: true,
+                images: true,
+                reasoning: true,
+                memory: true,
+            },
+            max_context_tokens: 1_000_000,
+            max_output_tokens: Some(128_000),
+            input_cost_per_million_tokens: Some(rust_decimal::Decimal::new(25, 1)), // $2.50 per million input tokens
+            output_cost_per_million_tokens: Some(rust_decimal::Decimal::new(15, 0)), // $15.00 per million output tokens
+            // `temperature` / `top_p` are removed on GPT-5.4 (400 if sent),
+            // so the default parameters stay empty.
+            default_parameters: ModelParameters::default(),
+            provider_options: None,
+        };
+
         tracing::debug!("Creating agent for OpenAI {GPT_5_4} model");
         let agent = Agent::new(AgentArgs {
             completion_model: client,
-            model: GPT_5_4.to_string(),
+            descriptor: descriptor.clone(),
             preamble,
-            provider: Provider::OpenAI,
             storage,
         })
         .await?;
@@ -190,31 +216,7 @@ impl Gpt_5_4 {
         tracing::debug!("Successfully created OpenAI {GPT_5_4} model");
         Ok(Self {
             agent,
-            descriptor: ModelDescriptor {
-                provider: Provider::OpenAI,
-                model: GPT_5_4.to_string(),
-                display_name: Some("GPT-5.4".to_string()),
-                local: false,
-                auth: ModelAuthRequirement::ApiKey,
-                capabilities: ModelCapabilities {
-                    streaming: true,
-                    tools: true,
-                    // Native structured outputs are not supported on GPT-5.4.
-                    json_output: true,
-                    system_prompt: true,
-                    images: true,
-                    reasoning: true,
-                    memory: true,
-                },
-                max_context_tokens: 1_000_000,
-                max_output_tokens: Some(128_000),
-                input_cost_per_million_tokens: Some(rust_decimal::Decimal::new(25, 1)), // $2.50 per million input tokens
-                output_cost_per_million_tokens: Some(rust_decimal::Decimal::new(15, 0)), // $15.00 per million output tokens
-                // `temperature` / `top_p` are removed on GPT-5.4 (400 if sent),
-                // so the default parameters stay empty.
-                default_parameters: ModelParameters::default(),
-                provider_options: None,
-            },
+            descriptor,
             reference: gpt_5_4(),
         })
     }
@@ -275,12 +277,35 @@ impl Gpt_5_5 {
             )
         })?;
 
+        let descriptor = ModelDescriptor {
+            provider: Provider::OpenAI,
+            model: GPT_5_5.to_string(),
+            display_name: Some("GPT-5.5".to_string()),
+            local: false,
+            auth: ModelAuthRequirement::ApiKey,
+            capabilities: ModelCapabilities {
+                streaming: true,
+                tools: true,
+                // Native structured outputs are not supported on GPT-5.5.
+                json_output: true,
+                system_prompt: true,
+                images: true,
+                reasoning: true,
+                memory: true,
+            },
+            max_context_tokens: 1_000_000,
+            max_output_tokens: Some(128_000),
+            input_cost_per_million_tokens: Some(rust_decimal::Decimal::new(5, 0)), // $5.00 per million input tokens
+            output_cost_per_million_tokens: Some(rust_decimal::Decimal::new(30, 0)), // $30.00 per million output tokens
+            default_parameters: ModelParameters::default(),
+            provider_options: None,
+        };
+
         tracing::debug!("Creating agent for {GPT_5_5} model");
         let agent = Agent::new(AgentArgs {
             completion_model: client,
-            model: GPT_5_5.to_string(),
+            descriptor: descriptor.clone(),
             preamble,
-            provider: Provider::OpenAI,
             storage,
         })
         .await?;
@@ -288,29 +313,7 @@ impl Gpt_5_5 {
         tracing::debug!("Successfully created {GPT_5_5} model");
         Ok(Self {
             agent,
-            descriptor: ModelDescriptor {
-                provider: Provider::OpenAI,
-                model: GPT_5_5.to_string(),
-                display_name: Some("GPT-5.5".to_string()),
-                local: false,
-                auth: ModelAuthRequirement::ApiKey,
-                capabilities: ModelCapabilities {
-                    streaming: true,
-                    tools: true,
-                    // Native structured outputs are not supported on GPT-5.5.
-                    json_output: true,
-                    system_prompt: true,
-                    images: true,
-                    reasoning: true,
-                    memory: true,
-                },
-                max_context_tokens: 1_000_000,
-                max_output_tokens: Some(128_000),
-                input_cost_per_million_tokens: Some(rust_decimal::Decimal::new(5, 0)), // $5.00 per million input tokens
-                output_cost_per_million_tokens: Some(rust_decimal::Decimal::new(30, 0)), // $30.00 per million output tokens
-                default_parameters: ModelParameters::default(),
-                provider_options: None,
-            },
+            descriptor,
             reference: gpt_5_5(),
         })
     }

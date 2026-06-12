@@ -37,6 +37,22 @@ pub enum StreamEvent {
         /// The text appended by this event.
         delta: String,
     },
+    /// An incremental chunk of reasoning/thinking text, for models that
+    /// stream it.
+    ReasoningDelta {
+        /// The reasoning text appended by this event.
+        delta: String,
+    },
+    /// A tool call is forming: its name is known but its arguments are still
+    /// streaming. Emitted at most once per call, before the corresponding
+    /// [`Self::ToolCallRequested`], so a UI can show the call live.
+    ToolCallStarted {
+        /// Identifier correlating this event with its later
+        /// [`Self::ToolCallRequested`].
+        call_id: String,
+        /// Name of the tool being called.
+        name: String,
+    },
     /// The model requested a tool call.
     ToolCallRequested {
         /// Identifier correlating this call with its later [`Self::ToolResult`].
@@ -87,6 +103,31 @@ mod tests {
             serde_json::to_value(&event).unwrap(),
             serde_json::json!({ "type": "text_delta", "delta": "Hello" })
         );
+    }
+
+    #[test]
+    fn should_tag_reasoning_delta() {
+        let event = StreamEvent::ReasoningDelta {
+            delta: "thinking".to_string(),
+        };
+        assert_eq!(
+            serde_json::to_value(&event).unwrap(),
+            serde_json::json!({ "type": "reasoning_delta", "delta": "thinking" })
+        );
+    }
+
+    #[test]
+    fn should_roundtrip_tool_call_started() {
+        let event = StreamEvent::ToolCallStarted {
+            call_id: "c1".to_string(),
+            name: "search".to_string(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"tool_call_started","call_id":"c1","name":"search"}"#
+        );
+        assert_eq!(serde_json::from_str::<StreamEvent>(&json).unwrap(), event);
     }
 
     #[test]
