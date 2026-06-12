@@ -48,6 +48,8 @@ use crate::error::{CoreError, ParseError};
 pub enum Provider {
     /// Anthropic, serving the Claude family of models.
     Anthropic,
+    /// Google Gemini, serving the Gemini family of models.
+    Gemini,
     /// OpenAI, serving the GPT family of models.
     OpenAI,
     /// Ollama, serving local models.
@@ -94,6 +96,7 @@ impl Provider {
     fn from_canonical(s: &str) -> Result<Self, CoreError> {
         match s {
             "anthropic" => Ok(Self::Anthropic),
+            "gemini" => Ok(Self::Gemini),
             "openai" => Ok(Self::OpenAI),
             "ollama" => Ok(Self::Ollama),
             other => match other.split_once(TAG_SEPARATOR) {
@@ -113,6 +116,7 @@ impl Display for Provider {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Anthropic => f.write_str("anthropic"),
+            Self::Gemini => f.write_str("gemini"),
             Self::OpenAI => f.write_str("openai"),
             Self::Ollama => f.write_str("ollama"),
             Self::OpenAICompatible(name) => {
@@ -219,7 +223,12 @@ pub struct ProviderDescriptor {
 mod tests {
     use super::*;
 
-    const ALL: [Provider; 3] = [Provider::Anthropic, Provider::OpenAI, Provider::Ollama];
+    const ALL: [Provider; 4] = [
+        Provider::Anthropic,
+        Provider::Gemini,
+        Provider::OpenAI,
+        Provider::Ollama,
+    ];
 
     #[test]
     fn should_serialize_to_lowercase_name() {
@@ -261,6 +270,16 @@ mod tests {
         for provider in ALL {
             assert_eq!(Provider::from_str(&provider.to_string()), Ok(provider));
         }
+    }
+
+    #[test]
+    fn should_parse_and_render_gemini() {
+        assert_eq!(Provider::from_str("gemini"), Ok(Provider::Gemini));
+        assert_eq!(Provider::Gemini.to_string(), "gemini");
+        assert_eq!(
+            serde_json::to_string(&Provider::Gemini).unwrap(),
+            "\"gemini\""
+        );
     }
 
     #[test]

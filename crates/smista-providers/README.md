@@ -16,8 +16,9 @@ The provider integration layer for [smista.ai](https://smista.ai). It exposes
 one common model interface so the router can run a request against any provider
 without coupling routing logic to a provider's API.
 
-Out of the box it targets OpenAI, Anthropic, Ollama and OpenAI-compatible
-endpoints, integrated through [`rig`](https://crates.io/crates/rig-core) where
+Out of the box it targets OpenAI, Anthropic, Gemini, Ollama and
+OpenAI-compatible endpoints, integrated through
+[`rig`](https://crates.io/crates/rig-core) where
 practical. `rig` stays an implementation detail behind this boundary.
 
 ## When you need this crate

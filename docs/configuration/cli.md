@@ -297,6 +297,10 @@ api_key = "${secret:OPENAI_API_KEY}"
 type = "anthropic"
 api_key = "${secret:ANTHROPIC_API_KEY}"
 
+[providers.gemini]
+type = "gemini"
+api_key = "${secret:GEMINI_API_KEY}"
+
 [providers.ollama]
 type = "ollama"
 
@@ -312,6 +316,7 @@ case-insensitive and must be one of the supported identifiers:
 | Identifier             | Backend                                                                                  |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
 | `anthropic`            | Anthropic, serving the Claude models.                                                    |
+| `gemini`               | Google Gemini, serving the Gemini models.                                                |
 | `openai`               | OpenAI, serving the GPT models.                                                          |
 | `ollama`               | Ollama, serving local models.                                                            |
 | `openai-compat:<name>` | A generic OpenAI-compatible endpoint; normally set by the table key with `type` omitted. |
@@ -360,6 +365,10 @@ api_key = "${secret:OPENAI_API_KEY}"
 [providers.anthropic]
 type = "anthropic"
 api_key = "${secret:ANTHROPIC_API_KEY}"
+
+[providers.gemini]
+type = "gemini"
+api_key = "${secret:GEMINI_API_KEY}"
 ```
 
 A `${secret:NAME}` reference is resolved against the following sources, from
@@ -382,6 +391,7 @@ of version control.
 # .smista/secrets
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=...
 ```
 
 ## Connecting to the router

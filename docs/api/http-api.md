@@ -20,8 +20,8 @@ logic stays in the router — clients never reimplement it.
 ## Authentication
 
 smista.ai separates **router authentication** (who you are) from **provider
-credentials** (keys for OpenAI, Anthropic, Ollama, …). They travel in different
-headers and are never mixed.
+credentials** (keys for OpenAI, Anthropic, Gemini, Ollama, …). They travel in
+different headers and are never mixed.
 
 | Header                                        | Used for                                    |
 | --------------------------------------------- | ------------------------------------------- |
