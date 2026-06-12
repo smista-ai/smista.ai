@@ -1,5 +1,12 @@
 # Using Local Models with Ollama
 
+- [Using Local Models with Ollama](#using-local-models-with-ollama)
+  - [1. Install and start Ollama](#1-install-and-start-ollama)
+  - [2. Point the router at Ollama](#2-point-the-router-at-ollama)
+  - [3. Enable the provider in your policy](#3-enable-the-provider-in-your-policy)
+  - [4. Route tasks to the local model](#4-route-tasks-to-the-local-model)
+  - [Capability checks](#capability-checks)
+
 Local models are first-class in smista.ai. Use them to cut costs on simple tasks
 and to keep sensitive code off remote providers. smista.ai runs local models
 through [Ollama](https://ollama.com).

@@ -1,5 +1,22 @@
 # HTTP API
 
+- [HTTP API](#http-api)
+  - [Conventions](#conventions)
+  - [Authentication](#authentication)
+    - [Auth endpoints](#auth-endpoints)
+  - [Sessions](#sessions)
+  - [Executing a task](#executing-a-task)
+    - [Policy](#policy)
+    - [Streaming](#streaming)
+  - [Previewing a route](#previewing-a-route)
+  - [Approvals](#approvals)
+  - [Traces](#traces)
+  - [Providers, models and usage](#providers-models-and-usage)
+  - [Errors](#errors)
+    - [Status codes](#status-codes)
+    - [Error codes](#error-codes)
+
+
 `smista-router` exposes a JSON REST API. The CLI uses it, and so can your own
 tools, scripts, editors or web clients. The API authenticates users, manages
 sessions, previews routes, executes tasks, and reports traces and usage. Routing

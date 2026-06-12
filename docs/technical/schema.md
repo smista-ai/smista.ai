@@ -1,5 +1,33 @@
 # Database schema
 
+- [Database schema](#database-schema)
+  - [Design invariants](#design-invariants)
+  - [Entity relations](#entity-relations)
+  - [Metadata and content split](#metadata-and-content-split)
+  - [Tables](#tables)
+    - [user](#user)
+    - [auth\_token](#auth_token)
+    - [session](#session)
+    - [session\_message](#session_message)
+    - [session\_message\_content](#session_message_content)
+    - [session\_routing\_decision](#session_routing_decision)
+    - [session\_context\_reference](#session_context_reference)
+    - [session\_tool\_call](#session_tool_call)
+    - [session\_tool\_call\_content](#session_tool_call_content)
+    - [session\_approval](#session_approval)
+    - [session\_plan](#session_plan)
+    - [session\_plan\_content](#session_plan_content)
+    - [session\_diff](#session_diff)
+    - [session\_diff\_content](#session_diff_content)
+    - [trace\_event](#trace_event)
+    - [trace\_event\_content](#trace_event_content)
+    - [user\_memory](#user_memory)
+    - [user\_memory\_content](#user_memory_content)
+    - [context\_memory](#context_memory)
+    - [context\_memory\_content](#context_memory_content)
+  - [Indexes](#indexes)
+  - [Cascade and retention](#cascade-and-retention)
+
 This document specifies the smista.ai storage schema as landed by issue #8
 (storage domain entities and traits). It is the authoritative reference for the
 SurrealDB tables, their fields, and the relations between them.

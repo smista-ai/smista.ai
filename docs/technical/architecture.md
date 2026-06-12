@@ -1,5 +1,14 @@
 # Architecture
 
+- [Architecture](#architecture)
+  - [Components](#components)
+  - [Principles](#principles)
+  - [How the pieces talk](#how-the-pieces-talk)
+  - [Sign-in and session start](#sign-in-and-session-start)
+  - [Executing a task](#executing-a-task)
+  - [Tool calls and approvals](#tool-calls-and-approvals)
+  - [Route preview](#route-preview)
+
 smista.ai is composed of a small set of clearly separated components. The goal
 is to keep the CLI experience simple while providing an easy-to-run router as
 its backend.

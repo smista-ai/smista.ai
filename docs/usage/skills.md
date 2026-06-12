@@ -1,5 +1,11 @@
 # Skills
 
+- [Skills](#skills)
+  - [Where skills live](#where-skills-live)
+  - [Project skills win over global skills](#project-skills-win-over-global-skills)
+  - [Writing a `SKILL.md`](#writing-a-skillmd)
+  - [Warnings](#warnings)
+
 A **skill** is a reusable set of instructions you can attach to a task — for
 example a code-review checklist or your project's Rust conventions. smista.ai
 discovers skills from disk so routing rules can target them and the CLI can send

@@ -1,5 +1,10 @@
 # Rust SDK
 
+- [Rust SDK](#rust-sdk)
+  - [Add it to your project](#add-it-to-your-project)
+  - [Use the domain types](#use-the-domain-types)
+  - [What's coming](#whats-coming)
+
 The `smista-sdk` crate is the single dependency you reach for when building a
 Rust program on top of smista.ai — a companion tool, an automation, or your own
 frontend. It re-exports everything you need from one place so you don't have to
