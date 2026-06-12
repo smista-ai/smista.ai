@@ -310,8 +310,19 @@ structured events:
 { "type": "text_delta", "delta": "The first step is..." }
 ```
 
-Event types: `text_delta`, `tool_call_requested`, `approval_required`,
-`tool_result`, `usage`, `error`, `done`.
+Event types: `text_delta`, `reasoning_delta`, `tool_call_started`,
+`tool_call_requested`, `approval_required`, `tool_result`, `usage`, `error`,
+`done`.
+
+Models that expose their reasoning stream it as `reasoning_delta` chunks.
+When the model starts calling a tool, a `tool_call_started` event announces
+the call's name as soon as it is known; the matching `tool_call_requested`
+event follows once the arguments are complete, correlated by `call_id`.
+
+The `usage` event reports token counts and, when the model declares prices,
+the actual cost of the invocation. Local models report a zero cost. Models
+that cannot stream still answer on this endpoint: the full response is
+replayed as a short stream of the same events.
 
 ## Previewing a route
 

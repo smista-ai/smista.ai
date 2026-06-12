@@ -61,12 +61,34 @@ impl Haiku_4_5 {
             )
         })?;
 
+        let descriptor = ModelDescriptor {
+            provider: Provider::Anthropic,
+            model: CLAUDE_HAIKU_4_5.to_string(),
+            display_name: Some("Claude Haiku 4.5".to_string()),
+            local: false,
+            auth: ModelAuthRequirement::ApiKey,
+            capabilities: ModelCapabilities {
+                streaming: true,
+                tools: true,
+                json_output: true,
+                system_prompt: true,
+                images: true,
+                reasoning: true,
+                memory: true,
+            },
+            max_context_tokens: 200_000,
+            max_output_tokens: Some(64_000),
+            input_cost_per_million_tokens: Some(rust_decimal::Decimal::new(1, 0)), // $1.00 per million input tokens
+            output_cost_per_million_tokens: Some(rust_decimal::Decimal::new(5, 0)), // $5.00 per million output tokens
+            default_parameters: ModelParameters::default(),
+            provider_options: None,
+        };
+
         tracing::debug!("Creating agent for Anthropic Haiku 4.5 model");
         let agent = Agent::new(AgentArgs {
             completion_model: client,
-            model: CLAUDE_HAIKU_4_5.to_string(),
+            descriptor: descriptor.clone(),
             preamble,
-            provider: Provider::Anthropic,
             storage,
         })
         .await?;
@@ -74,28 +96,7 @@ impl Haiku_4_5 {
         tracing::debug!("Successfully created Anthropic Haiku 4.5 model");
         Ok(Self {
             agent,
-            descriptor: ModelDescriptor {
-                provider: Provider::Anthropic,
-                model: CLAUDE_HAIKU_4_5.to_string(),
-                display_name: Some("Claude Haiku 4.5".to_string()),
-                local: false,
-                auth: ModelAuthRequirement::ApiKey,
-                capabilities: ModelCapabilities {
-                    streaming: true,
-                    tools: true,
-                    json_output: true,
-                    system_prompt: true,
-                    images: true,
-                    reasoning: true,
-                    memory: true,
-                },
-                max_context_tokens: 200_000,
-                max_output_tokens: Some(64_000),
-                input_cost_per_million_tokens: Some(rust_decimal::Decimal::new(1, 0)), // $1.00 per million input tokens
-                output_cost_per_million_tokens: Some(rust_decimal::Decimal::new(5, 0)), // $5.00 per million output tokens
-                default_parameters: ModelParameters::default(),
-                provider_options: None,
-            },
+            descriptor,
             reference: haiku_4_5(),
         })
     }

@@ -184,9 +184,8 @@ impl OpenAICompatModel {
         tracing::debug!("Creating agent for OpenAI-compatible {reference} model");
         let agent = Agent::new(AgentArgs {
             completion_model: client,
-            model: reference.model.clone(),
+            descriptor: descriptor.clone(),
             preamble: runtime.preamble.clone(),
-            provider: reference.provider.clone(),
             storage: Arc::clone(&runtime.storage),
         })
         .await?;

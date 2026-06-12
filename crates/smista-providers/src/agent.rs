@@ -17,14 +17,15 @@ use rig_core::completion::request::{
     ToolDefinition as RigToolDefinition, Usage as RigUsage,
 };
 use rig_core::message::{
-    AssistantContent, Message as RigMessage, Text, ToolCall as RigToolCall,
-    ToolChoice as RigToolChoice, ToolFunction, ToolResult as RigToolResult, ToolResultContent,
-    UserContent,
+    AssistantContent, Message as RigMessage, Reasoning, ReasoningContent, Text,
+    ToolCall as RigToolCall, ToolChoice as RigToolChoice, ToolFunction,
+    ToolResult as RigToolResult, ToolResultContent, UserContent,
 };
-use rig_core::streaming::StreamedAssistantContent;
+use rig_core::streaming::{StreamedAssistantContent, ToolCallDeltaContent};
+use rust_decimal::Decimal;
 use serde::Serialize;
 use smista_core::error::{ProviderError, ProviderErrorCategory};
-use smista_core::model::{ModelParameters, Provider};
+use smista_core::model::{ModelDescriptor, ModelParameters, Provider};
 use smista_core::stream::StreamEvent;
 use smista_core::usage::Usage;
 
@@ -54,12 +55,11 @@ where
 {
     /// The completion client to use for the agent's reasoning and tool execution.
     pub completion_model: C,
-    /// The name of the model to use for the agent's reasoning and tool execution.
-    pub model: String,
+    /// The descriptor of the model the agent drives: the single source of the
+    /// model name, provider, pricing and streaming capability.
+    pub descriptor: ModelDescriptor,
     /// A preamble to inject to give instructions to the agent about what it should do.
     pub preamble: String,
-    /// The provider configuration for the agent.
-    pub provider: Provider,
     /// The memory storage to use for the agent's memory operations.
     pub storage: Arc<S>,
 }
@@ -75,11 +75,12 @@ where
     C: CompletionClient,
 {
     agent: RigAgent<C::CompletionModel>,
+    /// The driven model's descriptor: source of the model name, provider,
+    /// pricing and streaming capability.
+    descriptor: ModelDescriptor,
     /// Names of the tools the agent executes itself (the memory tool); calls to
     /// any other tool are returned to the caller for router mediation.
     internal_tools: BTreeSet<String>,
-    model: String,
-    provider: Provider,
 }
 
 impl<C> Agent<C>
@@ -92,18 +93,22 @@ where
     pub async fn new<S>(
         AgentArgs {
             completion_model,
-            model,
+            descriptor,
             preamble,
-            provider,
             storage,
         }: AgentArgs<C, S>,
     ) -> ProviderResult<Self>
     where
         S: MemoryStorage + 'static,
     {
+        let model = descriptor.model.clone();
+        let provider = descriptor.provider.clone();
+
         // load preamble from memory storage
         tracing::debug!(
-            "loading preamble from memory storage for {model} with provider {provider}"
+            model.provider = %provider,
+            model.name = %model,
+            "loading preamble from memory storage for {{model.provider}}/{{model.name}}"
         );
         let memory_preamble =
             load_memories_preamble(storage.as_ref(), provider.clone(), &model).await?;
@@ -112,7 +117,11 @@ where
         let memory_tool = MemoryTool::new(storage.clone());
 
         // build agent
-        tracing::debug!("Creating agent with provider: {provider}, model: {model}",);
+        tracing::debug!(
+            model.provider = %provider,
+            model.name = %model,
+            "creating agent for {{model.provider}}/{{model.name}}"
+        );
         let builder = completion_model
             .agent(model.clone())
             .preamble(&preamble)
@@ -142,13 +151,16 @@ where
             .into_iter()
             .map(|tool| tool.name)
             .collect();
-        tracing::debug!("Agent created successfully");
+        tracing::debug!(
+            model.provider = %provider,
+            model.name = %model,
+            "agent for {{model.provider}}/{{model.name}} created successfully"
+        );
 
         Ok(Self {
             agent,
+            descriptor,
             internal_tools,
-            model,
-            provider,
         })
     }
 
@@ -169,6 +181,13 @@ where
             tools,
             tool_choice,
         } = request;
+        tracing::debug!(
+            model.provider = %self.descriptor.provider,
+            model.name = %self.descriptor.model,
+            request.messages = messages.len(),
+            request.tools = tools.len(),
+            "starting completion with {{request.messages}} messages and {{request.tools}} tools"
+        );
 
         let mut history: Vec<RigMessage> = messages.into_iter().map(into_rig_message).collect();
         let Some(mut prompt) = history.pop() else {
@@ -217,16 +236,30 @@ where
                     .iter()
                     .all(|call| self.internal_tools.contains(&call.function.name));
             if !all_internal {
+                tracing::debug!(
+                    model.provider = %self.descriptor.provider,
+                    model.name = %self.descriptor.model,
+                    response.tool_calls = tool_calls.len(),
+                    usage.input_tokens = usage.input_tokens,
+                    usage.output_tokens = usage.output_tokens,
+                    "completion finished with {{response.tool_calls}} tool calls to mediate"
+                );
                 return Ok(CompletionResponse {
                     finish_reason: finish_reason(&response.raw_response, !tool_calls.is_empty()),
                     content,
                     tool_calls: tool_calls.into_iter().map(api_tool_call).collect(),
-                    usage: api_usage(usage),
+                    usage: api_usage(usage, self.pricing()),
                 });
             }
 
             // every call in this turn is agent-internal: execute them and feed
             // the results back to the model as the next turn
+            tracing::debug!(
+                model.provider = %self.descriptor.provider,
+                model.name = %self.descriptor.model,
+                turn.tool_calls = tool_calls.len(),
+                "executing {{turn.tool_calls}} agent-internal tool calls"
+            );
             let mut results = Vec::with_capacity(tool_calls.len());
             for call in &tool_calls {
                 results.push(self.execute_internal_tool(call).await?);
@@ -258,16 +291,37 @@ where
     /// as a single `Err` item and ends the stream. Unlike [`Self::complete`],
     /// no tool call is executed here — every tool call, internal or not, is
     /// emitted as [`StreamEvent::ToolCallRequested`].
+    ///
+    /// Models without the `streaming` capability fall back to
+    /// [`Self::complete`], whose response is replayed as a short stream:
+    /// the full text, any tool calls, the usage totals and the terminal
+    /// marker.
     pub async fn stream(&self, request: CompletionRequest) -> ProviderResult<ResponseStream>
     where
         C::CompletionModel: 'static,
     {
+        if !self.descriptor.capabilities.streaming {
+            tracing::debug!(
+                model.provider = %self.descriptor.provider,
+                model.name = %self.descriptor.model,
+                "model lacks the streaming capability; falling back to a buffered completion"
+            );
+            return self.complete(request).await.map(completion_events);
+        }
+
         let CompletionRequest {
             messages,
             parameters,
             tools,
             tool_choice,
         } = request;
+        tracing::debug!(
+            model.provider = %self.descriptor.provider,
+            model.name = %self.descriptor.model,
+            request.messages = messages.len(),
+            request.tools = tools.len(),
+            "starting streaming completion with {{request.messages}} messages and {{request.tools}} tools"
+        );
 
         let mut history: Vec<RigMessage> = messages.into_iter().map(into_rig_message).collect();
         let Some(prompt) = history.pop() else {
@@ -289,11 +343,21 @@ where
                 )
             })?;
 
-        let provider = self.provider.clone();
-        let model = self.model.clone();
+        let provider = self.descriptor.provider.clone();
+        let model = self.descriptor.model.clone();
+        let pricing = self.pricing();
+        // tool calls whose start has been signalled (or that arrived already
+        // complete), keyed by rig's internal call id
+        let mut started_calls = BTreeSet::new();
         let events = stream
             .filter_map(move |item| {
-                futures::future::ready(map_stream_item(item, provider.clone(), &model))
+                futures::future::ready(map_stream_item(
+                    item,
+                    &mut started_calls,
+                    pricing,
+                    provider.clone(),
+                    &model,
+                ))
             })
             .chain(futures::stream::once(futures::future::ready(Ok(
                 StreamEvent::Done,
@@ -352,9 +416,12 @@ where
             self.error(crate::error::category_from_serde(&error), error.to_string())
         })?;
 
+        // log only the tool name: arguments and output can carry user data
         tracing::debug!(
-            "executing internal tool call `{name}`",
-            name = call.function.name
+            model.provider = %self.descriptor.provider,
+            model.name = %self.descriptor.model,
+            tool.name = %call.function.name,
+            "executing internal tool call `{{tool.name}}`"
         );
         let output = self
             .agent
@@ -375,14 +442,57 @@ where
         }))
     }
 
+    /// Returns the per-million-token prices from the model descriptor.
+    fn pricing(&self) -> Pricing {
+        Pricing {
+            input_cost_per_million_tokens: self.descriptor.input_cost_per_million_tokens,
+            output_cost_per_million_tokens: self.descriptor.output_cost_per_million_tokens,
+        }
+    }
+
     /// Builds a [`ProviderError`] carrying this agent's provider and model context.
     fn error(&self, category: ProviderErrorCategory, message: impl Into<String>) -> ProviderError {
         crate::error::provider_error(
             category,
-            self.provider.clone(),
-            Some(self.model.clone()),
+            self.descriptor.provider.clone(),
+            Some(self.descriptor.model.clone()),
             message,
         )
+    }
+}
+
+/// Per-million-token prices read from the model descriptor, used to turn
+/// reported token usage into an actual cost.
+///
+/// A small `Copy` snapshot so the stream mapping can carry it without
+/// borrowing the agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Pricing {
+    /// Input price per million tokens, when the descriptor declares one.
+    input_cost_per_million_tokens: Option<Decimal>,
+    /// Output price per million tokens, when the descriptor declares one.
+    output_cost_per_million_tokens: Option<Decimal>,
+}
+
+impl Pricing {
+    /// Computes the actual cost of an invocation from reported token counts.
+    ///
+    /// Each side contributes `tokens × price ÷ 1_000_000` when both its price
+    /// and its token count are known. Returns `None` when nothing can be
+    /// priced — no prices declared or no token counts reported — so an
+    /// unknown cost is never conflated with a zero cost (a local model with
+    /// zero prices reports `Some(0)`).
+    fn actual_cost(self, input_tokens: Option<u64>, output_tokens: Option<u64>) -> Option<Decimal> {
+        let tokens_per_price_unit = Decimal::from(1_000_000u32);
+        let side = |tokens: Option<u64>, price: Option<Decimal>| {
+            Some(Decimal::from(tokens?) * price? / tokens_per_price_unit)
+        };
+        let input = side(input_tokens, self.input_cost_per_million_tokens);
+        let output = side(output_tokens, self.output_cost_per_million_tokens);
+        match (input, output) {
+            (None, None) => None,
+            (input, output) => Some(input.unwrap_or_default() + output.unwrap_or_default()),
+        }
     }
 }
 
@@ -464,15 +574,21 @@ fn api_tool_call(call: RigToolCall) -> ToolCall {
 /// Converts `rig` usage totals into the internal [`Usage`].
 ///
 /// `rig` reports `0` when a provider supplied no figure for a counter, so
-/// zeroes map to `None`. Costs are not computed here (#14).
-fn api_usage(usage: RigUsage) -> Usage {
+/// zeroes map to `None`. The actual cost is derived from the reported input
+/// and output tokens and the descriptor's `pricing`; the estimated cost is
+/// not set here — up-front estimation belongs to the router, which owns the
+/// token estimator.
+fn api_usage(usage: RigUsage, pricing: Pricing) -> Usage {
     let reported = |value: u64| (value != 0).then_some(value);
+    let input_tokens = reported(usage.input_tokens);
+    let output_tokens = reported(usage.output_tokens);
     Usage {
-        input_tokens: reported(usage.input_tokens),
-        output_tokens: reported(usage.output_tokens),
+        input_tokens,
+        output_tokens,
         cached_tokens: reported(usage.cached_input_tokens),
         reasoning_tokens: reported(usage.reasoning_tokens),
         total_tokens: reported(usage.total_tokens),
+        actual_cost: pricing.actual_cost(input_tokens, output_tokens),
         ..Default::default()
     }
 }
@@ -529,13 +645,20 @@ fn additional_params(parameters: &ModelParameters) -> Option<serde_json::Value> 
 
 /// Maps one `rig` stream item onto the internal [`StreamEvent`] vocabulary.
 ///
-/// Text chunks become [`StreamEvent::TextDelta`], complete tool calls become
-/// [`StreamEvent::ToolCallRequested`], and the provider's final payload yields
-/// [`StreamEvent::Usage`] when it reports token usage. Partial tool-call and
-/// reasoning fragments are dropped: tool-call arguments are only valid once
-/// complete, and reasoning deltas have no core event yet (#14).
+/// Text and reasoning chunks become [`StreamEvent::TextDelta`] and
+/// [`StreamEvent::ReasoningDelta`]; a complete reasoning block is replayed as
+/// a single reasoning delta. A tool call surfaces twice: a
+/// [`StreamEvent::ToolCallStarted`] as soon as `rig` reports its name, and a
+/// [`StreamEvent::ToolCallRequested`] once `rig` has buffered the complete
+/// call — argument fragments are dropped because partial JSON is unusable
+/// until complete. `started_calls` tracks which calls (by `rig`'s internal
+/// id) already signalled their start, so each call starts at most once. The
+/// provider's final payload yields [`StreamEvent::Usage`], priced via
+/// `pricing`, when it reports token usage.
 fn map_stream_item<R>(
     item: Result<StreamedAssistantContent<R>, CompletionError>,
+    started_calls: &mut BTreeSet<String>,
+    pricing: Pricing,
     provider: Provider,
     model: &str,
 ) -> Option<Result<StreamEvent, ProviderError>>
@@ -546,22 +669,48 @@ where
         Ok(StreamedAssistantContent::Text(text)) => {
             Some(Ok(StreamEvent::TextDelta { delta: text.text }))
         }
-        Ok(StreamedAssistantContent::ToolCall { tool_call, .. }) => {
+        Ok(StreamedAssistantContent::ToolCall {
+            tool_call,
+            internal_call_id,
+        }) => {
+            // a call that arrives complete must not signal a (re)start later
+            started_calls.insert(internal_call_id);
             let call = api_tool_call(tool_call);
+            tracing::debug!(
+                model.provider = %provider,
+                model.name = %model,
+                tool.name = %call.name,
+                "model requested tool call `{{tool.name}}`"
+            );
             Some(Ok(StreamEvent::ToolCallRequested {
                 call_id: call.call_id,
                 name: call.name,
                 arguments: call.arguments,
             }))
         }
+        Ok(StreamedAssistantContent::ToolCallDelta {
+            id,
+            internal_call_id,
+            content: ToolCallDeltaContent::Name(name),
+        }) => started_calls
+            .insert(internal_call_id)
+            .then_some(Ok(StreamEvent::ToolCallStarted { call_id: id, name })),
+        // argument fragments are buffered by `rig` and surface as the
+        // complete `ToolCall` above; partial JSON is unusable on its own
+        Ok(StreamedAssistantContent::ToolCallDelta {
+            content: ToolCallDeltaContent::Delta(_),
+            ..
+        }) => None,
+        Ok(StreamedAssistantContent::Reasoning(reasoning)) => {
+            let text = reasoning_text(&reasoning);
+            (!text.is_empty()).then_some(Ok(StreamEvent::ReasoningDelta { delta: text }))
+        }
+        Ok(StreamedAssistantContent::ReasoningDelta { reasoning, .. }) => {
+            Some(Ok(StreamEvent::ReasoningDelta { delta: reasoning }))
+        }
         Ok(StreamedAssistantContent::Final(raw)) => raw
             .token_usage()
-            .map(|usage| Ok(StreamEvent::Usage(api_usage(usage)))),
-        Ok(
-            StreamedAssistantContent::ToolCallDelta { .. }
-            | StreamedAssistantContent::Reasoning(_)
-            | StreamedAssistantContent::ReasoningDelta { .. },
-        ) => None,
+            .map(|usage| Ok(StreamEvent::Usage(api_usage(usage, pricing)))),
         Err(error) => Some(Err(crate::error::provider_error(
             crate::error::category_from_completion(&error),
             provider,
@@ -569,6 +718,56 @@ where
             error.to_string(),
         ))),
     }
+}
+
+/// Joins the readable parts of a complete reasoning block into one string.
+///
+/// Encrypted and redacted parts are skipped: they are provider-opaque
+/// payloads, not text a consumer can render.
+fn reasoning_text(reasoning: &Reasoning) -> String {
+    reasoning
+        .content
+        .iter()
+        .filter_map(|part| match part {
+            ReasoningContent::Text { text, .. } => Some(text.as_str()),
+            ReasoningContent::Summary(text) => Some(text.as_str()),
+            // encrypted/redacted payloads are provider-opaque, and the enum is
+            // non-exhaustive: any future kind is unreadable until mapped here
+            _ => None,
+        })
+        .collect()
+}
+
+/// Replays a finished completion as a [`ResponseStream`].
+///
+/// The fallback for models without the `streaming` capability: the full text
+/// (when non-empty), each tool call, the usage totals (when reported) and the
+/// terminal [`StreamEvent::Done`], in that order.
+fn completion_events(response: CompletionResponse) -> ResponseStream {
+    let CompletionResponse {
+        content,
+        tool_calls,
+        usage,
+        finish_reason: _,
+    } = response;
+
+    let text = (!content.is_empty()).then_some(StreamEvent::TextDelta { delta: content });
+    let calls = tool_calls
+        .into_iter()
+        .map(|call| StreamEvent::ToolCallRequested {
+            call_id: call.call_id,
+            name: call.name,
+            arguments: call.arguments,
+        });
+    let usage = (usage != Usage::default()).then_some(StreamEvent::Usage(usage));
+
+    let events = text
+        .into_iter()
+        .chain(calls)
+        .chain(usage)
+        .chain(std::iter::once(StreamEvent::Done))
+        .map(Ok);
+    ResponseStream::new(futures::stream::iter(events))
 }
 
 /// Loads the preamble for the agent by fetching user and session memories from the storage, normalizing the results, and building the preamble string.
@@ -613,11 +812,20 @@ where
 {
     match result {
         Ok(memories) => {
-            tracing::debug!("loaded {} memory records from storage", memories.len());
+            tracing::debug!(
+                model.provider = %provider,
+                model.name = %model,
+                memory.records = memories.len(),
+                "loaded {{memory.records}} memory records from storage"
+            );
             Ok(memories)
         }
         Err(err) => {
-            tracing::error!("failed to load memory records from storage: {err}");
+            tracing::error!(
+                model.provider = %provider,
+                model.name = %model,
+                "failed to load memory records from storage: {err}"
+            );
             Err(ProviderError {
                 category: ProviderErrorCategory::Storage,
                 message: err.to_string(),
@@ -631,6 +839,22 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Pricing with no declared prices, for tests not exercising costs.
+    fn no_pricing() -> Pricing {
+        Pricing {
+            input_cost_per_million_tokens: None,
+            output_cost_per_million_tokens: None,
+        }
+    }
+
+    /// Pricing at $3/Mtok input and $15/Mtok output.
+    fn dollar_pricing() -> Pricing {
+        Pricing {
+            input_cost_per_million_tokens: Some(Decimal::new(3, 0)),
+            output_cost_per_million_tokens: Some(Decimal::new(15, 0)),
+        }
+    }
 
     #[test]
     fn should_map_system_and_user_messages() {
@@ -745,22 +969,76 @@ mod tests {
 
     #[test]
     fn should_map_zero_usage_counters_to_none() {
-        assert_eq!(api_usage(RigUsage::new()), Usage::default());
+        assert_eq!(api_usage(RigUsage::new(), no_pricing()), Usage::default());
 
-        let usage = api_usage(RigUsage {
-            input_tokens: 10,
-            output_tokens: 5,
-            total_tokens: 15,
-            cached_input_tokens: 3,
-            reasoning_tokens: 2,
-            ..RigUsage::new()
-        });
+        let usage = api_usage(
+            RigUsage {
+                input_tokens: 10,
+                output_tokens: 5,
+                total_tokens: 15,
+                cached_input_tokens: 3,
+                reasoning_tokens: 2,
+                ..RigUsage::new()
+            },
+            no_pricing(),
+        );
         assert_eq!(usage.input_tokens, Some(10));
         assert_eq!(usage.output_tokens, Some(5));
         assert_eq!(usage.total_tokens, Some(15));
         assert_eq!(usage.cached_tokens, Some(3));
         assert_eq!(usage.reasoning_tokens, Some(2));
         assert_eq!(usage.actual_cost, None);
+    }
+
+    #[test]
+    fn should_price_usage_from_token_counts() {
+        let usage = api_usage(
+            RigUsage {
+                input_tokens: 1_000_000,
+                output_tokens: 200_000,
+                ..RigUsage::new()
+            },
+            dollar_pricing(),
+        );
+        // 1M input × $3/Mtok + 0.2M output × $15/Mtok = $6
+        assert_eq!(usage.actual_cost, Some(Decimal::new(6, 0)));
+        assert_eq!(usage.estimated_cost, None);
+    }
+
+    #[test]
+    fn should_not_price_usage_without_token_counts() {
+        assert_eq!(dollar_pricing().actual_cost(None, None), None);
+    }
+
+    #[test]
+    fn should_not_price_usage_without_prices() {
+        assert_eq!(no_pricing().actual_cost(Some(10), Some(5)), None);
+    }
+
+    #[test]
+    fn should_price_partially_reported_usage() {
+        // only the side with both a price and a token count contributes
+        assert_eq!(
+            dollar_pricing().actual_cost(None, Some(1_000_000)),
+            Some(Decimal::new(15, 0))
+        );
+        let input_only = Pricing {
+            output_cost_per_million_tokens: None,
+            ..dollar_pricing()
+        };
+        assert_eq!(
+            input_only.actual_cost(Some(2_000_000), Some(1_000_000)),
+            Some(Decimal::new(6, 0))
+        );
+    }
+
+    #[test]
+    fn should_price_local_models_at_zero() {
+        let free = Pricing {
+            input_cost_per_million_tokens: Some(Decimal::ZERO),
+            output_cost_per_million_tokens: Some(Decimal::ZERO),
+        };
+        assert_eq!(free.actual_cost(Some(10), Some(5)), Some(Decimal::ZERO));
     }
 
     #[test]
@@ -821,13 +1099,22 @@ mod tests {
         }
     }
 
-    #[test]
-    fn should_map_stream_text_to_text_delta() {
-        let item = map_stream_item::<RawWithUsage>(
-            Ok(StreamedAssistantContent::text("Hello")),
+    /// Maps one item with fresh tool-call state and no pricing.
+    fn map_item(
+        item: Result<StreamedAssistantContent<RawWithUsage>, CompletionError>,
+    ) -> Option<Result<StreamEvent, ProviderError>> {
+        map_stream_item(
+            item,
+            &mut BTreeSet::new(),
+            no_pricing(),
             Provider::Anthropic,
             "model",
-        );
+        )
+    }
+
+    #[test]
+    fn should_map_stream_text_to_text_delta() {
+        let item = map_item(Ok(StreamedAssistantContent::text("Hello")));
         assert_eq!(
             item,
             Some(Ok(StreamEvent::TextDelta {
@@ -842,14 +1129,10 @@ mod tests {
             "call-1".to_string(),
             ToolFunction::new("search".to_string(), serde_json::json!({ "query": "rust" })),
         );
-        let item = map_stream_item::<RawWithUsage>(
-            Ok(StreamedAssistantContent::ToolCall {
-                tool_call,
-                internal_call_id: "internal".to_string(),
-            }),
-            Provider::Anthropic,
-            "model",
-        );
+        let item = map_item(Ok(StreamedAssistantContent::ToolCall {
+            tool_call,
+            internal_call_id: "internal".to_string(),
+        }));
         assert_eq!(
             item,
             Some(Ok(StreamEvent::ToolCallRequested {
@@ -861,29 +1144,166 @@ mod tests {
     }
 
     #[test]
-    fn should_map_stream_final_to_usage_event() {
-        let item = map_stream_item(
-            Ok(StreamedAssistantContent::Final(RawWithUsage)),
+    fn should_emit_tool_call_started_once_per_call() {
+        let mut started_calls = BTreeSet::new();
+        let name_delta = || {
+            Ok(StreamedAssistantContent::<RawWithUsage>::ToolCallDelta {
+                id: "call-1".to_string(),
+                internal_call_id: "internal".to_string(),
+                content: ToolCallDeltaContent::Name("search".to_string()),
+            })
+        };
+
+        let first = map_stream_item(
+            name_delta(),
+            &mut started_calls,
+            no_pricing(),
             Provider::Anthropic,
             "model",
         );
+        assert_eq!(
+            first,
+            Some(Ok(StreamEvent::ToolCallStarted {
+                call_id: "call-1".to_string(),
+                name: "search".to_string(),
+            }))
+        );
+
+        let repeated = map_stream_item(
+            name_delta(),
+            &mut started_calls,
+            no_pricing(),
+            Provider::Anthropic,
+            "model",
+        );
+        assert_eq!(repeated, None);
+    }
+
+    #[test]
+    fn should_not_start_a_tool_call_that_arrived_complete() {
+        let mut started_calls = BTreeSet::new();
+        let tool_call = RigToolCall::new(
+            "call-1".to_string(),
+            ToolFunction::new("search".to_string(), serde_json::json!({})),
+        );
+        let complete = map_stream_item::<RawWithUsage>(
+            Ok(StreamedAssistantContent::ToolCall {
+                tool_call,
+                internal_call_id: "internal".to_string(),
+            }),
+            &mut started_calls,
+            no_pricing(),
+            Provider::Anthropic,
+            "model",
+        );
+        assert!(matches!(
+            complete,
+            Some(Ok(StreamEvent::ToolCallRequested { .. }))
+        ));
+
+        // a stray name fragment for the same call must not signal a start
+        let late_name = map_stream_item::<RawWithUsage>(
+            Ok(StreamedAssistantContent::ToolCallDelta {
+                id: "call-1".to_string(),
+                internal_call_id: "internal".to_string(),
+                content: ToolCallDeltaContent::Name("search".to_string()),
+            }),
+            &mut started_calls,
+            no_pricing(),
+            Provider::Anthropic,
+            "model",
+        );
+        assert_eq!(late_name, None);
+    }
+
+    #[test]
+    fn should_drop_tool_call_argument_fragments() {
+        let item = map_item(Ok(StreamedAssistantContent::ToolCallDelta {
+            id: "call-1".to_string(),
+            internal_call_id: "internal".to_string(),
+            content: ToolCallDeltaContent::Delta(r#"{"que"#.to_string()),
+        }));
+        assert_eq!(item, None);
+    }
+
+    #[test]
+    fn should_map_stream_reasoning_delta() {
+        let item = map_item(Ok(StreamedAssistantContent::ReasoningDelta {
+            id: None,
+            reasoning: "thinking".to_string(),
+        }));
+        assert_eq!(
+            item,
+            Some(Ok(StreamEvent::ReasoningDelta {
+                delta: "thinking".to_string(),
+            }))
+        );
+    }
+
+    #[test]
+    fn should_map_reasoning_block_to_single_delta_of_readable_parts() {
+        // `Reasoning` is non-exhaustive: build via `new` and replace the parts
+        let mut reasoning = Reasoning::new("");
+        reasoning.content = vec![
+            ReasoningContent::Text {
+                text: "step one; ".to_string(),
+                signature: None,
+            },
+            ReasoningContent::Encrypted("opaque".to_string()),
+            ReasoningContent::Summary("step two".to_string()),
+        ];
+        let item = map_item(Ok(StreamedAssistantContent::Reasoning(reasoning)));
+        assert_eq!(
+            item,
+            Some(Ok(StreamEvent::ReasoningDelta {
+                delta: "step one; step two".to_string(),
+            }))
+        );
+    }
+
+    #[test]
+    fn should_drop_reasoning_block_without_readable_parts() {
+        let mut reasoning = Reasoning::new("");
+        reasoning.content = vec![ReasoningContent::Redacted {
+            data: "opaque".to_string(),
+        }];
+        let item = map_item(Ok(StreamedAssistantContent::Reasoning(reasoning)));
+        assert_eq!(item, None);
+    }
+
+    #[test]
+    fn should_map_stream_final_to_usage_event() {
+        let item = map_item(Ok(StreamedAssistantContent::Final(RawWithUsage)));
         let Some(Ok(StreamEvent::Usage(usage))) = item else {
             panic!("expected a usage event");
         };
         assert_eq!(usage.input_tokens, Some(5));
         assert_eq!(usage.output_tokens, Some(7));
         assert_eq!(usage.total_tokens, Some(12));
+        assert_eq!(usage.actual_cost, None);
+    }
+
+    #[test]
+    fn should_price_stream_usage_event() {
+        let item = map_stream_item(
+            Ok(StreamedAssistantContent::Final(RawWithUsage)),
+            &mut BTreeSet::new(),
+            dollar_pricing(),
+            Provider::Anthropic,
+            "model",
+        );
+        let Some(Ok(StreamEvent::Usage(usage))) = item else {
+            panic!("expected a usage event");
+        };
+        // 5 input × $3/Mtok + 7 output × $15/Mtok = $0.00012
+        assert_eq!(usage.actual_cost, Some(Decimal::new(12, 5)));
     }
 
     #[test]
     fn should_map_stream_error_to_provider_error() {
-        let item = map_stream_item::<RawWithUsage>(
-            Err(CompletionError::ProviderError(
-                "rate limit reached".to_string(),
-            )),
-            Provider::Anthropic,
-            "model",
-        );
+        let item = map_item(Err(CompletionError::ProviderError(
+            "rate limit reached".to_string(),
+        )));
         let Some(Err(error)) = item else {
             panic!("expected an error item");
         };
@@ -892,16 +1312,57 @@ mod tests {
         assert_eq!(error.model.as_deref(), Some("model"));
     }
 
-    #[test]
-    fn should_drop_stream_fragments_without_core_events() {
-        let item = map_stream_item::<RawWithUsage>(
-            Ok(StreamedAssistantContent::ReasoningDelta {
-                id: None,
-                reasoning: "thinking".to_string(),
-            }),
-            Provider::Anthropic,
-            "model",
+    #[tokio::test]
+    async fn should_replay_completion_as_stream() {
+        use futures::StreamExt as _;
+
+        let response = CompletionResponse {
+            content: "Hello".to_string(),
+            tool_calls: vec![ToolCall {
+                call_id: "call-1".to_string(),
+                name: "search".to_string(),
+                arguments: serde_json::json!({ "query": "rust" }),
+            }],
+            usage: Usage {
+                input_tokens: Some(5),
+                ..Default::default()
+            },
+            finish_reason: FinishReason::Stop,
+        };
+
+        let events: Vec<_> = completion_events(response).collect().await;
+        assert_eq!(
+            events,
+            vec![
+                Ok(StreamEvent::TextDelta {
+                    delta: "Hello".to_string(),
+                }),
+                Ok(StreamEvent::ToolCallRequested {
+                    call_id: "call-1".to_string(),
+                    name: "search".to_string(),
+                    arguments: serde_json::json!({ "query": "rust" }),
+                }),
+                Ok(StreamEvent::Usage(Usage {
+                    input_tokens: Some(5),
+                    ..Default::default()
+                })),
+                Ok(StreamEvent::Done),
+            ]
         );
-        assert_eq!(item, None);
+    }
+
+    #[tokio::test]
+    async fn should_omit_empty_text_and_usage_when_replaying_completion() {
+        use futures::StreamExt as _;
+
+        let response = CompletionResponse {
+            content: String::new(),
+            tool_calls: Vec::new(),
+            usage: Usage::default(),
+            finish_reason: FinishReason::Stop,
+        };
+
+        let events: Vec<_> = completion_events(response).collect().await;
+        assert_eq!(events, vec![Ok(StreamEvent::Done)]);
     }
 }
