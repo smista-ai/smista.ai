@@ -347,6 +347,14 @@ Each `[providers.<id>]` table accepts:
 > a model from an unrecognised family the cost is reported as unknown.
 
 > [!NOTE]
+> The Gemini model list is fetched live from Google, so new Gemini models become
+> available without updating smista.ai. The list is filtered to the chat models
+> smista.ai routes to — Google's embedding, image, audio and other specialised
+> models are left out — and refreshed about once an hour. Google does not report
+> prices over its API, so per-token costs are maintained inside smista.ai per
+> model; a model with no recorded price has its cost reported as unknown.
+
+> [!NOTE]
 > For local models through Ollama, see
 > [Using Local Models with Ollama](ollama.md).
 

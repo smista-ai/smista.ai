@@ -1,19 +1,13 @@
 //! Google Gemini models.
 
-mod flash;
-mod pro;
-
 use std::sync::Arc;
 
 use rig_core::providers::gemini::client::Client as GeminiClient;
+use rust_decimal::Decimal;
 use secrecy::ExposeSecret;
 use smista_core::error::ProviderError;
 use smista_core::model::{ModelDescriptor, ModelReference, Provider};
 
-#[doc(inline)]
-pub use self::flash::{gemini_2_5_flash, gemini_3_5_flash};
-#[doc(inline)]
-pub use self::pro::{gemini_2_5_pro, gemini_3_1_pro_preview};
 use crate::ProviderResult;
 use crate::agent::{Agent, AgentArgs};
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
@@ -21,17 +15,43 @@ use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
 
-/// Returns the descriptors for every Gemini model smista.ai offers.
+/// Returns the input and output price per million tokens for `model_id`.
 ///
-/// The single catalog the provider reads to resolve and list models, so the set
-/// of offered models is declared in one place.
-pub fn catalog() -> Vec<ModelDescriptor> {
-    vec![
-        gemini_2_5_pro(),
-        gemini_2_5_flash(),
-        gemini_3_1_pro_preview(),
-        gemini_3_5_flash(),
-    ]
+/// The `v1beta/models` listing does not report price, so the per-token costs are
+/// kept here in a hand-maintained census. Unlike Anthropic, Gemini has no public
+/// per-family rate, so each model is priced individually and an id matching no
+/// entry is left unpriced (`None`).
+///
+/// The match is longest-prefix first so that more specific ids (`gemini-2.5-pro`,
+/// `gemini-2.5-flash-lite`) win over the broader families they share a stem with.
+/// The `default text tier` rate is stored; modality-specific input pricing, the
+/// higher tier above the 200k-token prompt breakpoint, and the batch/flex/priority
+/// tiers are intentionally not modelled.
+///
+/// Sources (per million tokens, standard text tier):
+/// - `gemini-2.5-pro`: $1.25 in / $10.00 out
+/// - `gemini-2.5-flash`: $0.30 in / $2.50 out
+/// - `gemini-2.5-flash-lite`: $0.10 in / $0.40 out
+///   (Google AI for Developers pricing, <https://ai.google.dev/gemini-api/docs/pricing>)
+/// - `gemini-3.1-pro-preview`: $2.00 in / $12.00 out
+/// - `gemini-3.5-flash`: $1.50 in / $9.00 out
+///   (current smista.ai census for the 3.x generation)
+pub fn pricing(model_id: &str) -> (Option<Decimal>, Option<Decimal>) {
+    // Decimal::new(mantissa, scale): scale 2 reads as cents, scale 0 as dollars.
+    let (input, output) = if model_id.starts_with("gemini-3.5-flash") {
+        (Decimal::new(150, 2), Decimal::new(9, 0))
+    } else if model_id.starts_with("gemini-3.1-pro") {
+        (Decimal::new(2, 0), Decimal::new(12, 0))
+    } else if model_id.starts_with("gemini-2.5-pro") {
+        (Decimal::new(125, 2), Decimal::new(10, 0))
+    } else if model_id.starts_with("gemini-2.5-flash-lite") {
+        (Decimal::new(10, 2), Decimal::new(40, 2))
+    } else if model_id.starts_with("gemini-2.5-flash") {
+        (Decimal::new(30, 2), Decimal::new(250, 2))
+    } else {
+        return (None, None);
+    };
+    (Some(input), Some(output))
 }
 
 /// Arguments for creating a new Gemini model.
@@ -85,10 +105,10 @@ where
 /// A Gemini model.
 ///
 /// One shared adapter for every Gemini model: its facts come from the
-/// [`ModelDescriptor`] it is constructed with (returned by a facts function such
-/// as [`gemini_2_5_pro`]), and its [`reference`](Model::reference) is derived
-/// from that descriptor so the two can never disagree. The credential is
-/// supplied per request as an [`Authentication`] when the model is resolved.
+/// [`ModelDescriptor`] it is constructed with (sourced from the provider's live
+/// API listing), and its [`reference`](Model::reference) is derived from that
+/// descriptor so the two can never disagree. The credential is supplied per
+/// request as an [`Authentication`] when the model is resolved.
 pub struct GeminiModel {
     agent: Agent<GeminiClient>,
     descriptor: ModelDescriptor,
@@ -164,10 +184,6 @@ impl Model for GeminiModel {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
-    use smista_core::model::Provider;
-
     use super::*;
     use crate::memory::MemoryRecord;
 
@@ -254,19 +270,54 @@ mod tests {
         // The clone shares the same backend rather than duplicating it.
         assert!(Arc::ptr_eq(&args.storage, &cloned.storage));
     }
+}
+
+#[cfg(test)]
+mod pricing_tests {
+    use super::*;
 
     #[test]
-    fn should_expose_distinct_model_descriptors() {
-        let descriptors = catalog();
+    fn should_price_each_known_model() {
+        let cases = [
+            ("gemini-2.5-pro", Decimal::new(125, 2), Decimal::new(10, 0)),
+            (
+                "gemini-2.5-flash",
+                Decimal::new(30, 2),
+                Decimal::new(250, 2),
+            ),
+            (
+                "gemini-2.5-flash-lite",
+                Decimal::new(10, 2),
+                Decimal::new(40, 2),
+            ),
+            (
+                "gemini-3.1-pro-preview",
+                Decimal::new(2, 0),
+                Decimal::new(12, 0),
+            ),
+            ("gemini-3.5-flash", Decimal::new(150, 2), Decimal::new(9, 0)),
+        ];
 
-        // Every descriptor targets the Gemini provider...
-        assert!(
-            descriptors
-                .iter()
-                .all(|descriptor| descriptor.provider == Provider::Gemini)
-        );
-        // ...and names a distinct model.
-        let models: BTreeSet<&str> = descriptors.iter().map(|d| d.model.as_str()).collect();
-        assert_eq!(models.len(), descriptors.len());
+        for (id, input, output) in cases {
+            let (got_in, got_out) = pricing(id);
+            assert_eq!(got_in, Some(input), "input price for {id}");
+            assert_eq!(got_out, Some(output), "output price for {id}");
+        }
+    }
+
+    #[test]
+    fn should_prefer_the_more_specific_flash_lite_over_flash() {
+        // `gemini-2.5-flash-lite` shares the `gemini-2.5-flash` stem, so the
+        // longest-prefix order must price it at the lite rate, not the flash one.
+        let (input, output) = pricing("gemini-2.5-flash-lite");
+        assert_eq!(input, Some(Decimal::new(10, 2)));
+        assert_eq!(output, Some(Decimal::new(40, 2)));
+    }
+
+    #[test]
+    fn should_leave_an_unknown_model_unpriced() {
+        let (input, output) = pricing("gemini-1.0-ultra");
+        assert_eq!(input, None);
+        assert_eq!(output, None);
     }
 }
