@@ -427,27 +427,37 @@ per-type `payload` shapes are listed under `trace_event_content` in the
 ## Providers, models and usage
 
 ```http
-GET /api/v1/llm/providers              # configured providers
-GET /api/v1/llm/models                 # models with capabilities
+GET /api/v1/llm/providers              # available providers
+GET /api/v1/llm/models                 # available models with capabilities
 GET /api/v1/sessions/{session_id}/usage  # token and cost breakdown
 ```
 
-`GET /llm/providers` lists the providers the router knows about and whether each
-one is configured with credentials:
+`GET /llm/providers` lists the providers that are currently **available** —
+those configured with usable credentials (or a base URL, for local providers).
+A provider that is not available is omitted entirely, so every entry returned is
+ready to route to:
 
 ```json
 {
   "providers": [
-    { "id": "anthropic", "display_name": "Anthropic", "configured": true },
-    { "id": "ollama", "display_name": "Ollama", "configured": true }
+    { "id": "anthropic", "display_name": "Anthropic" },
+    { "id": "ollama", "display_name": "Ollama" }
   ]
 }
 ```
 
-`GET /llm/models` lists the available models and their capabilities. Each
-model reports `capabilities` as a list; a capability absent from the list is
-not supported. Possible values are `streaming`, `tools`, `json_output`,
-`system_prompt`, `images`, `reasoning` and `memory`:
+`GET /llm/models` lists the available models, returning each one as a full model
+descriptor. Like `/execute`, it accepts `X-Smista-Provider-<Provider>-Api-Key`
+headers and needs them: the router queries each provider's `list_models`, and
+remote providers such as Anthropic and Gemini reject that call without an API
+key. Providers whose credentials are missing are omitted from the result.
+`capabilities` is a nested object of boolean flags — `streaming`,
+`tools`, `json_output`, `system_prompt`, `images`, `reasoning` and `memory` —
+where an absent or `false` flag means the capability is not supported. `auth`
+records how the model authenticates (`none`, `api_key`, `optional_api_key` or a
+`{ "custom": "<scheme>" }` object); `display_name`, `max_output_tokens` and the
+cost fields are present only when known, and the cost fields are decimal
+strings:
 
 ```json
 {
@@ -455,18 +465,26 @@ not supported. Possible values are `streaming`, `tools`, `json_output`,
     {
       "provider": "anthropic",
       "model": "claude-sonnet",
+      "display_name": "Claude Sonnet",
       "local": false,
-      "requires_api_key": true,
-      "capabilities": ["streaming", "tools", "json_output"],
-      "max_context_tokens": 200000
+      "auth": "api_key",
+      "capabilities": { "streaming": true, "tools": true, "json_output": true },
+      "max_context_tokens": 200000,
+      "max_output_tokens": 8192,
+      "input_cost_per_million_tokens": "3",
+      "output_cost_per_million_tokens": "15",
+      "default_parameters": {}
     },
     {
       "provider": "ollama",
       "model": "qwen2.5-coder",
+      "display_name": null,
       "local": true,
-      "requires_api_key": false,
-      "capabilities": ["streaming"],
-      "max_context_tokens": 32768
+      "auth": "none",
+      "capabilities": { "streaming": true },
+      "max_context_tokens": 32768,
+      "max_output_tokens": null,
+      "default_parameters": {}
     }
   ]
 }

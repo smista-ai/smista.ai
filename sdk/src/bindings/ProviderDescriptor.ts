@@ -2,11 +2,13 @@
 import type { Provider } from "./Provider.js";
 
 /**
- * A provider together with its runtime configuration state.
+ * A provider that is available for routing.
  *
- * This is the shape returned by `GET /llm/providers`: it pairs a provider's
- * identity and display name with whether usable credentials (or a base URL,
- * for local providers) are currently configured.
+ * This is the shape returned by `GET /llm/providers`, which lists only the
+ * providers that are currently available — those configured with usable
+ * credentials (or a base URL, for local providers). A provider that is not
+ * available is omitted from the listing entirely, so this descriptor carries
+ * no availability flag.
  */
 export type ProviderDescriptor = { 
 /**
@@ -16,8 +18,4 @@ id: Provider,
 /**
  * Human-friendly name shown to users.
  */
-display_name: string, 
-/**
- * Whether credentials or a base URL are configured for the provider.
- */
-configured: boolean, };
+display_name: string, };

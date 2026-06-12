@@ -27,7 +27,8 @@ use serde_json::{Map, Value};
 /// The typed fields are omitted from serialization when unset. Any keys not
 /// matching a typed field are collected into [`Self::extra`] and re-emitted as
 /// they were, so provider-specific options pass through untouched.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelParameters {
     /// Sampling temperature.
     #[serde(skip_serializing_if = "Option::is_none")]
