@@ -59,7 +59,7 @@ async fn should_resolve_haiku_and_run_complete_and_stream() {
 
     // Step 1: resolving the Haiku reference yields the Haiku model — assert on
     // its stable identity and descriptor, not on a concrete type.
-    let reference = haiku_4_5();
+    let reference = haiku_4_5().reference();
 
     let model = provider
         .resolve(&reference, &authentication)

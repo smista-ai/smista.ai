@@ -3,16 +3,14 @@
 use std::sync::Arc;
 
 use smista_core::error::ProviderErrorCategory;
-use smista_core::model::{ModelReference, Provider as ProviderId};
+use smista_core::model::{ModelDescriptor, ModelReference, Provider as ProviderId};
 
 use super::Provider;
 use crate::ProviderResult;
 use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
-use crate::model::anthropic::{
-    self, AnthropicModelArgs, Haiku_4_5, Opus_4_6, Opus_4_7, Opus_4_8, Sonnet_4_6,
-};
+use crate::model::anthropic::{self, AnthropicModel, AnthropicModelArgs};
 
 /// A [`Provider`] backed by a single Anthropic account.
 ///
@@ -72,24 +70,11 @@ where
         reference: &ModelReference,
         authentication: &Authentication,
     ) -> ProviderResult<Arc<dyn Model>> {
-        Ok(match reference {
-            reference if reference == &anthropic::haiku_4_5() => {
-                Arc::new(Haiku_4_5::new(self.args.clone(), authentication).await?)
-            }
-            reference if reference == &anthropic::opus_4_6() => {
-                Arc::new(Opus_4_6::new(self.args.clone(), authentication).await?)
-            }
-            reference if reference == &anthropic::opus_4_7() => {
-                Arc::new(Opus_4_7::new(self.args.clone(), authentication).await?)
-            }
-            reference if reference == &anthropic::opus_4_8() => {
-                Arc::new(Opus_4_8::new(self.args.clone(), authentication).await?)
-            }
-            reference if reference == &anthropic::sonnet_4_6() => {
-                Arc::new(Sonnet_4_6::new(self.args.clone(), authentication).await?)
-            }
-            _ => {
-                return Err(crate::error::provider_error(
+        let descriptor = anthropic::catalog()
+            .into_iter()
+            .find(|descriptor| &descriptor.reference() == reference)
+            .ok_or_else(|| {
+                crate::error::provider_error(
                     ProviderErrorCategory::ModelNotFound,
                     self.id(),
                     Some(reference.model.clone()),
@@ -97,22 +82,22 @@ where
                         "model `{}` not found in Anthropic provider",
                         reference.model
                     ),
-                ));
-            }
-        })
+                )
+            })?;
+
+        Ok(Arc::new(
+            AnthropicModel::new(self.args.clone(), authentication, descriptor).await?,
+        ))
     }
 
     async fn list_models(
         &self,
         _authentication: &Authentication,
     ) -> ProviderResult<Vec<ModelReference>> {
-        Ok(vec![
-            anthropic::haiku_4_5(),
-            anthropic::opus_4_6(),
-            anthropic::opus_4_7(),
-            anthropic::opus_4_8(),
-            anthropic::sonnet_4_6(),
-        ])
+        Ok(anthropic::catalog()
+            .iter()
+            .map(ModelDescriptor::reference)
+            .collect())
     }
 }
 
@@ -209,11 +194,11 @@ mod tests {
         assert_eq!(
             listed,
             vec![
-                anthropic::haiku_4_5(),
-                anthropic::opus_4_6(),
-                anthropic::opus_4_7(),
-                anthropic::opus_4_8(),
-                anthropic::sonnet_4_6(),
+                anthropic::haiku_4_5().reference(),
+                anthropic::opus_4_6().reference(),
+                anthropic::opus_4_7().reference(),
+                anthropic::opus_4_8().reference(),
+                anthropic::sonnet_4_6().reference(),
             ]
         );
     }
@@ -241,7 +226,7 @@ mod tests {
         // provider holds none, so a keyless authentication is rejected before
         // any client is constructed.
         let Err(error) = provider()
-            .resolve(&anthropic::haiku_4_5(), &Authentication::None)
+            .resolve(&anthropic::haiku_4_5().reference(), &Authentication::None)
             .await
         else {
             panic!("a model must not resolve without an API key");

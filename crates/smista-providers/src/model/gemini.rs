@@ -5,19 +5,40 @@ mod pro;
 
 use std::sync::Arc;
 
+use rig_core::providers::gemini::client::Client as GeminiClient;
+use secrecy::ExposeSecret;
+use smista_core::error::ProviderError;
+use smista_core::model::{ModelDescriptor, ModelReference, Provider};
+
 #[doc(inline)]
-pub use self::flash::{Gemini_2_5_Flash, Gemini_3_5_Flash, gemini_2_5_flash, gemini_3_5_flash};
+pub use self::flash::{gemini_2_5_flash, gemini_3_5_flash};
 #[doc(inline)]
-pub use self::pro::{
-    Gemini_2_5_Pro, Gemini_3_1_Pro_Preview, gemini_2_5_pro, gemini_3_1_pro_preview,
-};
+pub use self::pro::{gemini_2_5_pro, gemini_3_1_pro_preview};
+use crate::ProviderResult;
+use crate::agent::{Agent, AgentArgs};
+use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
+use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
+use crate::model::Model;
+
+/// Returns the descriptors for every Gemini model smista.ai offers.
+///
+/// The single catalog the provider reads to resolve and list models, so the set
+/// of offered models is declared in one place.
+pub fn catalog() -> Vec<ModelDescriptor> {
+    vec![
+        gemini_2_5_pro(),
+        gemini_2_5_flash(),
+        gemini_3_1_pro_preview(),
+        gemini_3_5_flash(),
+    ]
+}
 
 /// Arguments for creating a new Gemini model.
 ///
 /// Carries the base system prompt and memory backend every Gemini model needs to
 /// construct its underlying agent. The credential is not held here: it is
-/// supplied per request as an [`Authentication`](crate::auth::Authentication)
+/// supplied per request as an [`Authentication`]
 /// when the model is resolved.
 pub struct GeminiModelArgs<S>
 where
@@ -58,6 +79,86 @@ where
             preamble: self.preamble.clone(),
             storage: Arc::clone(&self.storage),
         }
+    }
+}
+
+/// A Gemini model.
+///
+/// One shared adapter for every Gemini model: its facts come from the
+/// [`ModelDescriptor`] it is constructed with (returned by a facts function such
+/// as [`gemini_2_5_pro`]), and its [`reference`](Model::reference) is derived
+/// from that descriptor so the two can never disagree. The credential is
+/// supplied per request as an [`Authentication`] when the model is resolved.
+pub struct GeminiModel {
+    agent: Agent<GeminiClient>,
+    descriptor: ModelDescriptor,
+    reference: ModelReference,
+}
+
+impl GeminiModel {
+    /// Creates a new Gemini model from the given arguments and descriptor,
+    /// authenticating with the supplied [`Authentication`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ProviderError`] with category
+    /// [`MissingCredentials`](smista_core::error::ProviderErrorCategory::MissingCredentials)
+    /// when `authentication` carries no API key, or if the underlying client
+    /// cannot be built or the agent fails to load its memory preamble.
+    pub async fn new<S>(
+        GeminiModelArgs { preamble, storage }: GeminiModelArgs<S>,
+        authentication: &Authentication,
+        descriptor: ModelDescriptor,
+    ) -> Result<Self, ProviderError>
+    where
+        S: MemoryStorage + 'static,
+    {
+        let reference = descriptor.reference();
+        tracing::debug!("Creating Gemini {} model", reference.model);
+        let api_key = authentication.require_api_key(Provider::Gemini, &reference.model)?;
+        let client = GeminiClient::new(api_key.expose_secret()).map_err(|e| {
+            crate::error::provider_error(
+                crate::error::category_from_http(&e),
+                Provider::Gemini,
+                Some(reference.model.clone()),
+                "Failed to create Gemini client",
+            )
+        })?;
+
+        tracing::debug!("Creating agent for Gemini {} model", reference.model);
+        let agent = Agent::new(AgentArgs {
+            completion_model: client,
+            descriptor: descriptor.clone(),
+            preamble,
+            storage,
+        })
+        .await?;
+
+        tracing::debug!("Successfully created Gemini {} model", reference.model);
+        Ok(Self {
+            agent,
+            descriptor,
+            reference,
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl Model for GeminiModel {
+    fn reference(&self) -> &ModelReference {
+        &self.reference
+    }
+
+    fn descriptor(&self) -> &ModelDescriptor {
+        &self.descriptor
+    }
+
+    async fn complete(&self, request: CompletionRequest) -> ProviderResult<CompletionResponse> {
+        self.agent.complete(request).await
+    }
+
+    async fn stream(&self, request: CompletionRequest) -> ProviderResult<ResponseStream> {
+        self.agent.stream(request).await
     }
 }
 
@@ -155,22 +256,17 @@ mod tests {
     }
 
     #[test]
-    fn should_expose_distinct_model_references() {
-        let references = [
-            gemini_2_5_pro(),
-            gemini_2_5_flash(),
-            gemini_3_1_pro_preview(),
-            gemini_3_5_flash(),
-        ];
+    fn should_expose_distinct_model_descriptors() {
+        let descriptors = catalog();
 
-        // Every reference targets the Gemini provider...
+        // Every descriptor targets the Gemini provider...
         assert!(
-            references
+            descriptors
                 .iter()
-                .all(|reference| reference.provider == Provider::Gemini)
+                .all(|descriptor| descriptor.provider == Provider::Gemini)
         );
         // ...and names a distinct model.
-        let models: BTreeSet<&str> = references.iter().map(|r| r.model.as_str()).collect();
-        assert_eq!(models.len(), references.len());
+        let models: BTreeSet<&str> = descriptors.iter().map(|d| d.model.as_str()).collect();
+        assert_eq!(models.len(), descriptors.len());
     }
 }

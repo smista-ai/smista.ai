@@ -59,7 +59,7 @@ async fn should_resolve_gpt_5_4_mini_and_run_complete_and_stream() {
 
     // Step 1: resolving the GPT-5.4-mini reference yields the GPT-5.4-mini model
     // — assert on its stable identity and descriptor, not on a concrete type.
-    let reference = gpt_5_4_mini();
+    let reference = gpt_5_4_mini().reference();
 
     let model = provider
         .resolve(&reference, &authentication)

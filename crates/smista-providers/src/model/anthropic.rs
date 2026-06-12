@@ -6,19 +6,43 @@ mod sonnet;
 
 use std::sync::Arc;
 
+use rig_core::providers::anthropic::client::Client as AnthropicClient;
+use secrecy::ExposeSecret;
+use smista_core::error::ProviderError;
+use smista_core::model::{ModelDescriptor, ModelReference, Provider};
+
 #[doc(inline)]
-pub use self::haiku::{Haiku_4_5, haiku_4_5};
+pub use self::haiku::haiku_4_5;
 #[doc(inline)]
-pub use self::opus::{Opus_4_6, Opus_4_7, Opus_4_8, opus_4_6, opus_4_7, opus_4_8};
+pub use self::opus::{opus_4_6, opus_4_7, opus_4_8};
 #[doc(inline)]
-pub use self::sonnet::{Sonnet_4_6, sonnet_4_6};
+pub use self::sonnet::sonnet_4_6;
+use crate::ProviderResult;
+use crate::agent::{Agent, AgentArgs};
+use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
+use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
+use crate::model::Model;
+
+/// Returns the descriptors for every Anthropic model smista.ai offers.
+///
+/// The single catalog the provider reads to resolve and list models, so the set
+/// of offered models is declared in one place.
+pub fn catalog() -> Vec<ModelDescriptor> {
+    vec![
+        haiku_4_5(),
+        opus_4_6(),
+        opus_4_7(),
+        opus_4_8(),
+        sonnet_4_6(),
+    ]
+}
 
 /// Arguments for creating a new Anthropic model.
 ///
 /// Carries the base system prompt and memory backend every Anthropic model needs
 /// to construct its underlying agent. The credential is not held here: it is
-/// supplied per request as an [`Authentication`](crate::auth::Authentication)
+/// supplied per request as an [`Authentication`]
 /// when the model is resolved.
 pub struct AnthropicModelArgs<S>
 where
@@ -59,6 +83,86 @@ where
             preamble: self.preamble.clone(),
             storage: Arc::clone(&self.storage),
         }
+    }
+}
+
+/// An Anthropic model.
+///
+/// One shared adapter for every Claude model: its facts come from the
+/// [`ModelDescriptor`] it is constructed with (returned by a facts function such
+/// as [`opus_4_8`]), and its [`reference`](Model::reference) is derived from that
+/// descriptor so the two can never disagree. The credential is supplied per
+/// request as an [`Authentication`] when the model is resolved.
+pub struct AnthropicModel {
+    agent: Agent<AnthropicClient>,
+    descriptor: ModelDescriptor,
+    reference: ModelReference,
+}
+
+impl AnthropicModel {
+    /// Creates a new Anthropic model from the given arguments and descriptor,
+    /// authenticating with the supplied [`Authentication`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ProviderError`] with category
+    /// [`MissingCredentials`](smista_core::error::ProviderErrorCategory::MissingCredentials)
+    /// when `authentication` carries no API key, or if the underlying client
+    /// cannot be built or the agent fails to load its memory preamble.
+    pub async fn new<S>(
+        AnthropicModelArgs { preamble, storage }: AnthropicModelArgs<S>,
+        authentication: &Authentication,
+        descriptor: ModelDescriptor,
+    ) -> Result<Self, ProviderError>
+    where
+        S: MemoryStorage + 'static,
+    {
+        let reference = descriptor.reference();
+        tracing::debug!("Creating Anthropic {} model", reference.model);
+        let api_key = authentication.require_api_key(Provider::Anthropic, &reference.model)?;
+        let client = AnthropicClient::new(api_key.expose_secret()).map_err(|e| {
+            crate::error::provider_error(
+                crate::error::category_from_http(&e),
+                Provider::Anthropic,
+                Some(reference.model.clone()),
+                "Failed to create Anthropic client",
+            )
+        })?;
+
+        tracing::debug!("Creating agent for Anthropic {} model", reference.model);
+        let agent = Agent::new(AgentArgs {
+            completion_model: client,
+            descriptor: descriptor.clone(),
+            preamble,
+            storage,
+        })
+        .await?;
+
+        tracing::debug!("Successfully created Anthropic {} model", reference.model);
+        Ok(Self {
+            agent,
+            descriptor,
+            reference,
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl Model for AnthropicModel {
+    fn reference(&self) -> &ModelReference {
+        &self.reference
+    }
+
+    fn descriptor(&self) -> &ModelDescriptor {
+        &self.descriptor
+    }
+
+    async fn complete(&self, request: CompletionRequest) -> ProviderResult<CompletionResponse> {
+        self.agent.complete(request).await
+    }
+
+    async fn stream(&self, request: CompletionRequest) -> ProviderResult<ResponseStream> {
+        self.agent.stream(request).await
     }
 }
 
@@ -156,23 +260,17 @@ mod tests {
     }
 
     #[test]
-    fn should_expose_distinct_model_references() {
-        let references = [
-            haiku_4_5(),
-            opus_4_6(),
-            opus_4_7(),
-            opus_4_8(),
-            sonnet_4_6(),
-        ];
+    fn should_expose_distinct_model_descriptors() {
+        let descriptors = catalog();
 
-        // Every reference targets the Anthropic provider...
+        // Every descriptor targets the Anthropic provider...
         assert!(
-            references
+            descriptors
                 .iter()
-                .all(|reference| reference.provider == Provider::Anthropic)
+                .all(|descriptor| descriptor.provider == Provider::Anthropic)
         );
         // ...and names a distinct model.
-        let models: BTreeSet<&str> = references.iter().map(|r| r.model.as_str()).collect();
-        assert_eq!(models.len(), references.len());
+        let models: BTreeSet<&str> = descriptors.iter().map(|d| d.model.as_str()).collect();
+        assert_eq!(models.len(), descriptors.len());
     }
 }
