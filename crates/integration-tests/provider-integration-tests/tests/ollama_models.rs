@@ -24,7 +24,7 @@
 use std::sync::Arc;
 
 use futures::StreamExt;
-use provider_integration_tests::InMemoryStorage;
+use provider_integration_tests::{InMemoryStorage, init_tracing};
 use smista_core::model::{ModelParameters, ModelReference, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
@@ -50,6 +50,8 @@ fn ping_request() -> CompletionRequest {
 
 #[tokio::test]
 async fn should_resolve_installed_model_and_run_complete_and_stream() {
+    init_tracing();
+
     // The daemon location and the model to exercise both come from the
     // environment; absent either, fail loudly like the remote suites.
     let Ok(base_url) = std::env::var("OLLAMA_BASE_URL") else {

@@ -11,3 +11,20 @@
 mod memory_storage;
 
 pub use self::memory_storage::InMemoryStorage;
+
+/// Installs a `DEBUG`-level tracing subscriber for the current test binary.
+///
+/// Each integration test calls this first so the provider request and response
+/// tracing is captured and printed alongside the test output (run with
+/// `--nocapture` to see it). The subscriber writes through the test writer, so
+/// lines are attributed to the test that emitted them.
+///
+/// The call is idempotent: only the first installation in a test binary takes
+/// effect, and later calls are silently ignored, so every test may call it
+/// without coordinating with the others.
+pub fn init_tracing() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_test_writer()
+        .try_init();
+}

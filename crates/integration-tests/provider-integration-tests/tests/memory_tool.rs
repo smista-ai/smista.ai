@@ -17,7 +17,7 @@
 
 use std::sync::Arc;
 
-use provider_integration_tests::InMemoryStorage;
+use provider_integration_tests::{InMemoryStorage, init_tracing};
 use rig_core::completion::Prompt;
 use rig_core::prelude::{CompletionClient, ProviderClient};
 use rig_core::providers::anthropic;
@@ -33,6 +33,8 @@ const SESSION_VALUE: &str = "SMISTA-4242";
 
 #[tokio::test]
 async fn should_record_recall_and_forget_user_and_session_memories() {
+    init_tracing();
+
     // ensure the API key is set
     let Ok(client) = anthropic::Client::from_env() else {
         panic!("ANTHROPIC_API_KEY is not set or invalid");

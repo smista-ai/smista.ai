@@ -340,6 +340,13 @@ Each `[providers.<id>]` table accepts:
 > belong to the router — see [Running the Router](router.md).
 
 > [!NOTE]
+> The Anthropic model list is fetched live from Anthropic, so new Claude models
+> become available without updating smista.ai. The list is refreshed about once
+> an hour. Anthropic does not report prices over its API, so per-token costs are
+> maintained inside smista.ai by model family (Opus, Sonnet, Haiku, Fable); for
+> a model from an unrecognised family the cost is reported as unknown.
+
+> [!NOTE]
 > For local models through Ollama, see
 > [Using Local Models with Ollama](ollama.md).
 

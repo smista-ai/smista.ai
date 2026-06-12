@@ -19,7 +19,7 @@
 use std::sync::Arc;
 
 use futures::StreamExt;
-use provider_integration_tests::InMemoryStorage;
+use provider_integration_tests::{InMemoryStorage, init_tracing};
 use secrecy::SecretString;
 use smista_core::model::{ModelParameters, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
@@ -46,6 +46,8 @@ fn ping_request() -> CompletionRequest {
 
 #[tokio::test]
 async fn should_resolve_gpt_5_4_mini_and_run_complete_and_stream() {
+    init_tracing();
+
     // ensure the API key is set
     let Ok(api_key) = std::env::var("OPENAI_API_KEY").map(SecretString::from) else {
         panic!("OPENAI_API_KEY is not set");

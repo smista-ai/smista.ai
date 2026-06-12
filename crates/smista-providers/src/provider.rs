@@ -20,6 +20,7 @@
 //! - [`ollama::OllamaProvider`] for a local or self-hosted Ollama instance.
 
 pub mod anthropic;
+mod cache;
 pub mod gemini;
 pub mod ollama;
 pub mod openai;

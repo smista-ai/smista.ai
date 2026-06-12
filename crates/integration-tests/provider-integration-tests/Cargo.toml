@@ -9,6 +9,8 @@ publish = false
 [dependencies]
 smista-providers = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
