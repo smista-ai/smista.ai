@@ -63,7 +63,7 @@ async fn should_resolve_gemini_2_5_flash_and_run_complete_and_stream() {
     // Step 1: resolving the Gemini 2.5 Flash reference yields the Gemini 2.5
     // Flash model — assert on its stable identity and descriptor, not on a
     // concrete type.
-    let reference = gemini_2_5_flash();
+    let reference = gemini_2_5_flash().reference();
 
     let model = provider
         .resolve(&reference, &authentication)

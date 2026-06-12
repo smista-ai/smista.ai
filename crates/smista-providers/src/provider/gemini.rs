@@ -3,17 +3,14 @@
 use std::sync::Arc;
 
 use smista_core::error::ProviderErrorCategory;
-use smista_core::model::{ModelReference, Provider as ProviderId};
+use smista_core::model::{ModelDescriptor, ModelReference, Provider as ProviderId};
 
 use super::Provider;
 use crate::ProviderResult;
 use crate::auth::Authentication;
 use crate::memory::MemoryStorage;
 use crate::model::Model;
-use crate::model::gemini::{
-    self, Gemini_2_5_Flash, Gemini_2_5_Pro, Gemini_3_1_Pro_Preview, Gemini_3_5_Flash,
-    GeminiModelArgs,
-};
+use crate::model::gemini::{self, GeminiModel, GeminiModelArgs};
 
 /// A [`Provider`] backed by a single Google Gemini account.
 ///
@@ -73,40 +70,31 @@ where
         reference: &ModelReference,
         authentication: &Authentication,
     ) -> ProviderResult<Arc<dyn Model>> {
-        Ok(match reference {
-            reference if reference == &gemini::gemini_2_5_pro() => {
-                Arc::new(Gemini_2_5_Pro::new(self.args.clone(), authentication).await?)
-            }
-            reference if reference == &gemini::gemini_2_5_flash() => {
-                Arc::new(Gemini_2_5_Flash::new(self.args.clone(), authentication).await?)
-            }
-            reference if reference == &gemini::gemini_3_1_pro_preview() => {
-                Arc::new(Gemini_3_1_Pro_Preview::new(self.args.clone(), authentication).await?)
-            }
-            reference if reference == &gemini::gemini_3_5_flash() => {
-                Arc::new(Gemini_3_5_Flash::new(self.args.clone(), authentication).await?)
-            }
-            _ => {
-                return Err(crate::error::provider_error(
+        let descriptor = gemini::catalog()
+            .into_iter()
+            .find(|descriptor| &descriptor.reference() == reference)
+            .ok_or_else(|| {
+                crate::error::provider_error(
                     ProviderErrorCategory::ModelNotFound,
                     self.id(),
                     Some(reference.model.clone()),
                     format!("model `{}` not found in Gemini provider", reference.model),
-                ));
-            }
-        })
+                )
+            })?;
+
+        Ok(Arc::new(
+            GeminiModel::new(self.args.clone(), authentication, descriptor).await?,
+        ))
     }
 
     async fn list_models(
         &self,
         _authentication: &Authentication,
     ) -> ProviderResult<Vec<ModelReference>> {
-        Ok(vec![
-            gemini::gemini_2_5_pro(),
-            gemini::gemini_2_5_flash(),
-            gemini::gemini_3_1_pro_preview(),
-            gemini::gemini_3_5_flash(),
-        ])
+        Ok(gemini::catalog()
+            .iter()
+            .map(ModelDescriptor::reference)
+            .collect())
     }
 }
 
@@ -203,10 +191,10 @@ mod tests {
         assert_eq!(
             listed,
             vec![
-                gemini::gemini_2_5_pro(),
-                gemini::gemini_2_5_flash(),
-                gemini::gemini_3_1_pro_preview(),
-                gemini::gemini_3_5_flash(),
+                gemini::gemini_2_5_pro().reference(),
+                gemini::gemini_2_5_flash().reference(),
+                gemini::gemini_3_1_pro_preview().reference(),
+                gemini::gemini_3_5_flash().reference(),
             ]
         );
     }
@@ -234,7 +222,10 @@ mod tests {
         // provider holds none, so a keyless authentication is rejected before
         // any client is constructed.
         let Err(error) = provider()
-            .resolve(&gemini::gemini_2_5_flash(), &Authentication::None)
+            .resolve(
+                &gemini::gemini_2_5_flash().reference(),
+                &Authentication::None,
+            )
             .await
         else {
             panic!("a model must not resolve without an API key");
