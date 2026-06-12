@@ -38,7 +38,7 @@ deterministic routing.
 | --------------------------------------------------------------- | -------------------------------------------------------------------- | ----------- |
 | [`smista-cli`](crates/smista-cli/README.md)                     | The `smista` command-line interface for developers.                  | Elastic-2.0 |
 | [`smista-core`](crates/smista-core/README.md)                   | Shared domain types, config, routing policy and validation.          | MIT         |
-| [`smista-providers`](crates/smista-providers/README.md)         | Model abstraction and provider adapters (OpenAI, Anthropic, …).      | Elastic-2.0 |
+| [`smista-providers`](crates/smista-providers/README.md)         | Model abstraction and provider adapters (OpenAI, Anthropic, Gemini). | Elastic-2.0 |
 | [`smista-router`](crates/smista-router/README.md)               | Routing and orchestration service exposing a local HTTP JSON API.    | Elastic-2.0 |
 | [`smista-router-client`](crates/smista-router-client/README.md) | Async Rust client for the router HTTP JSON API.                      | MIT         |
 | [`smista-sdk`](crates/smista-sdk/README.md)                     | Rust SDK facade re-exporting the domain types (and the client).      | MIT         |

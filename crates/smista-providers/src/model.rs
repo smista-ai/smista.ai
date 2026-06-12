@@ -8,6 +8,7 @@
 //! provider's knowledge at runtime rather than hand-declared in configuration.
 
 pub mod anthropic;
+pub mod gemini;
 pub mod ollama;
 pub mod openai;
 pub mod openai_compat;
