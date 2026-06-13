@@ -28,7 +28,7 @@ pub mod openai_compat;
 
 use std::sync::Arc;
 
-use smista_core::model::{ModelReference, Provider as ProviderId};
+use smista_core::model::{ModelReference, Provider as ProviderId, ProviderDescriptor};
 
 use crate::ProviderResult;
 use crate::auth::Authentication;
@@ -51,6 +51,21 @@ pub trait Provider: Send + Sync {
     /// A cheap accessor used as a map key and for logging, identifying which
     /// upstream (`openai`, `anthropic`, …) the provider speaks to.
     fn id(&self) -> ProviderId;
+
+    /// Returns this provider's descriptor: its identity, a human-friendly name,
+    /// and whether it serves models locally.
+    ///
+    /// This is the shape surfaced by `GET /llm/providers`, and
+    /// [`ProviderDescriptor::local`] is the provider-level source of truth for
+    /// locality — the router's routing discriminant for keeping sensitive work
+    /// on local models. Every model this provider resolves inherits that flag,
+    /// so a provider can never report itself local while a model it offers
+    /// routes to the cloud.
+    ///
+    /// Unlike [`Self::id`], this allocates the display name, so the router uses
+    /// [`Self::id`] for hot map-key lookups and this when it needs the full
+    /// metadata.
+    fn descriptor(&self) -> ProviderDescriptor;
 
     /// Resolves a reference into an executable model offered by this provider,
     /// authenticating with the supplied [`Authentication`].

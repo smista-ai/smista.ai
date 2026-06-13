@@ -132,8 +132,8 @@ mod tests {
     fn should_deserialize_spec_providers() {
         let json = r#"{
             "providers": [
-                { "id": "openai", "display_name": "OpenAI" },
-                { "id": "ollama", "display_name": "Ollama" }
+                { "id": "openai", "display_name": "OpenAI", "local": false },
+                { "id": "ollama", "display_name": "Ollama", "local": true }
             ]
         }"#;
         let response: ListProvidersResponse = serde_json::from_str(json).unwrap();

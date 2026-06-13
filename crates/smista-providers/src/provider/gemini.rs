@@ -8,7 +8,7 @@ use std::time::Duration;
 use smista_core::error::ProviderErrorCategory;
 use smista_core::model::{
     ModelAuthRequirement, ModelCapabilities, ModelDescriptor, ModelParameters, ModelReference,
-    Provider as ProviderId,
+    Provider as ProviderId, ProviderDescriptor,
 };
 
 use self::client::{GeminiClient, HttpGeminiClient};
@@ -201,6 +201,14 @@ where
 {
     fn id(&self) -> ProviderId {
         ProviderId::Gemini
+    }
+
+    fn descriptor(&self) -> ProviderDescriptor {
+        ProviderDescriptor {
+            id: ProviderId::Gemini,
+            display_name: "Gemini".to_string(),
+            local: false,
+        }
     }
 
     async fn resolve(

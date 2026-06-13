@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use smista_core::error::ProviderErrorCategory;
-use smista_core::model::{ModelDescriptor, ModelReference, Provider as ProviderId};
+use smista_core::model::{
+    ModelDescriptor, ModelReference, Provider as ProviderId, ProviderDescriptor,
+};
 
 use super::Provider;
 use crate::ProviderResult;
@@ -32,6 +34,12 @@ where
 {
     /// This instance's named identity, e.g. `openai-compat:my-vllm`.
     id: ProviderId,
+    /// Human-friendly name shown to users, supplied by configuration.
+    display_name: String,
+    /// Whether this instance serves its models locally, supplied by
+    /// configuration. Every model the instance offers must agree with it; a
+    /// disagreement is rejected when the provider is built.
+    local: bool,
     /// The single source of truth for the instance's base URL.
     endpoint: OpenAICompatEndpoint,
     /// Runtime (preamble + memory backend) used to construct each resolved model.
@@ -50,6 +58,8 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OpenAICompatProvider")
             .field("id", &self.id)
+            .field("display_name", &self.display_name)
+            .field("local", &self.local)
             .field("endpoint", &self.endpoint)
             .field("runtime", &self.runtime)
             .field("models", &format_args!("[{} model(s)]", self.models.len()))
@@ -64,22 +74,52 @@ where
     /// Creates a new [`OpenAICompatProvider`] for a named instance.
     ///
     /// `id` is the instance's identity (a [`ProviderId::OpenAICompatible`]) and
-    /// is returned verbatim from [`Provider::id`]. `endpoint` carries the base
-    /// URL, `runtime` the preamble and memory backend, and `models` the facts
-    /// for every model the instance offers, keyed by the reference each resolves
-    /// under. The credential is supplied per request when resolving.
+    /// is returned verbatim from [`Provider::id`]. `display_name` is the
+    /// human-friendly name and `is_local` whether the instance runs locally;
+    /// both come from configuration. `endpoint` carries the base URL, `runtime`
+    /// the preamble and memory backend, and `models` the facts for every model
+    /// the instance offers, keyed by the reference each resolves under. The
+    /// credential is supplied per request when resolving.
+    ///
+    /// Every supplied model's [`local`](ModelDescriptor::local) flag must equal
+    /// `is_local`: the instance's locality is the source of truth, and a model
+    /// that disagrees would let the provider advertise as one thing while a
+    /// model it offers behaves as another.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ProviderError`](smista_core::error::ProviderError) with
+    /// category
+    /// [`InvalidConfiguration`](smista_core::error::ProviderErrorCategory::InvalidConfiguration)
+    /// if any model's locality disagrees with `is_local`.
     pub fn new(
         id: ProviderId,
+        display_name: impl Into<String>,
+        is_local: bool,
         endpoint: OpenAICompatEndpoint,
         runtime: OpenAICompatRuntime<S>,
         models: HashMap<ModelReference, ModelDescriptor>,
-    ) -> Self {
-        Self {
+    ) -> ProviderResult<Self> {
+        if let Some((reference, _)) = models.iter().find(|(_, d)| d.local != is_local) {
+            return Err(crate::error::provider_error(
+                ProviderErrorCategory::InvalidConfiguration,
+                id.clone(),
+                Some(reference.model.clone()),
+                format!(
+                    "model `{}` has local={} but OpenAI-compatible instance `{id}` is configured local={is_local}",
+                    reference.model, !is_local
+                ),
+            ));
+        }
+
+        Ok(Self {
             id,
+            display_name: display_name.into(),
+            local: is_local,
             endpoint,
             runtime,
             models,
-        }
+        })
     }
 }
 
@@ -90,6 +130,14 @@ where
 {
     fn id(&self) -> ProviderId {
         self.id.clone()
+    }
+
+    fn descriptor(&self) -> ProviderDescriptor {
+        ProviderDescriptor {
+            id: self.id.clone(),
+            display_name: self.display_name.clone(),
+            local: self.local,
+        }
     }
 
     async fn resolve(
@@ -218,13 +266,24 @@ mod tests {
         }
     }
 
+    /// The fixture authors every descriptor as `local: true`, so a provider is
+    /// only consistent when built as a local instance.
     fn provider_with(models: &[&str]) -> OpenAICompatProvider<NoStorage> {
+        try_provider(models, true).expect("a local instance with local models is consistent")
+    }
+
+    fn try_provider(
+        models: &[&str],
+        is_local: bool,
+    ) -> ProviderResult<OpenAICompatProvider<NoStorage>> {
         let models = models
             .iter()
             .map(|m| (reference(m), descriptor(m)))
             .collect();
         OpenAICompatProvider::new(
             instance_id(),
+            "My vLLM",
+            is_local,
             OpenAICompatEndpoint::new("http://localhost:8000/v1"),
             OpenAICompatRuntime {
                 preamble: "be helpful".to_string(),
@@ -244,6 +303,32 @@ mod tests {
 
         assert_eq!(provider.id(), instance_id());
         assert_ne!(provider.id(), ProviderId::OpenAI);
+    }
+
+    #[test]
+    fn should_expose_its_descriptor_with_configured_locality() {
+        // An empty model set agrees with any locality, so a remote instance is
+        // consistent here.
+        let descriptor = try_provider(&[], false)
+            .expect("an instance with no models is consistent")
+            .descriptor();
+
+        assert_eq!(descriptor.id, instance_id());
+        assert_eq!(descriptor.display_name, "My vLLM");
+        assert!(!descriptor.local);
+    }
+
+    #[test]
+    fn should_reject_a_model_whose_locality_disagrees_with_the_instance() {
+        // The fixture authors the model as `local: true`; building a remote
+        // (`is_local = false`) instance with it is contradictory configuration.
+        let Err(error) = try_provider(&["llama-3.1-70b"], false) else {
+            panic!("a model that disagrees on locality must be rejected");
+        };
+
+        assert_eq!(error.category, ProviderErrorCategory::InvalidConfiguration);
+        assert_eq!(error.provider, instance_id());
+        assert_eq!(error.model.as_deref(), Some("llama-3.1-70b"));
     }
 
     #[tokio::test]

@@ -224,6 +224,10 @@ fn map_provider(error: ProviderError) -> ApiErrorResponse {
         ProviderErrorCategory::ContextLength => {
             (StatusCode::UNPROCESSABLE_ENTITY, "context_length_exceeded")
         }
+        ProviderErrorCategory::InvalidConfiguration => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "invalid_provider_configuration",
+        ),
         ProviderErrorCategory::InvalidCredentials => (
             StatusCode::SERVICE_UNAVAILABLE,
             "invalid_provider_credentials",

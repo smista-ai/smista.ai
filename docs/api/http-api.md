@@ -435,13 +435,17 @@ GET /api/v1/sessions/{session_id}/usage  # token and cost breakdown
 `GET /llm/providers` lists the providers that are currently **available** —
 those configured with usable credentials (or a base URL, for local providers).
 A provider that is not available is omitted entirely, so every entry returned is
-ready to route to:
+ready to route to. Each entry carries a `local` flag: `true` when the provider
+serves its models on your own host or network with no request leaving the
+machine (a local Ollama, a self-hosted OpenAI-compatible endpoint), and `false`
+for a cloud API. This is the same locality every one of that provider's models
+reports, so the two can never disagree:
 
 ```json
 {
   "providers": [
-    { "id": "anthropic", "display_name": "Anthropic" },
-    { "id": "ollama", "display_name": "Ollama" }
+    { "id": "anthropic", "display_name": "Anthropic", "local": false },
+    { "id": "ollama", "display_name": "Ollama", "local": true }
   ]
 }
 ```
@@ -570,35 +574,36 @@ The `code` field is the stable identifier clients should match on. The
 `message` is human-readable and may change; the HTTP status is provided
 alongside for convenience.
 
-| Code                              | Status | Meaning                                                                     |
-| --------------------------------- | ------ | --------------------------------------------------------------------------- |
-| `context_length_exceeded`         | 422    | Request exceeds the provider model's context window.                        |
-| `context_window_exceeded`         | 422    | Routing rejected a model whose context window cannot fit the input.         |
-| `fallback_exhausted`              | 503    | Primary route failed and every configured fallback also failed.             |
-| `forbidden`                       | 403    | Caller is authenticated but not the resource owner.                         |
-| `internal_error`                  | 500    | Unexpected server-side failure. Details intentionally omitted.              |
-| `invalid_model_reference`         | 422    | A model reference was not in the expected `provider/model` form.            |
-| `invalid_provider_credentials`    | 503    | Provider rejected the configured credentials.                               |
-| `invalid_request`                 | 422    | Provider rejected the request body as malformed.                            |
-| `invalid_token`                   | 401    | Session token is malformed or unknown.                                      |
-| `missing_capability`              | 422    | Selected model lacks a capability the task requires.                        |
-| `missing_credentials`             | 401    | No session token was presented to a protected endpoint.                     |
-| `missing_provider_credentials`    | 503    | The selected model requires provider credentials none were configured.      |
-| `model_not_found`                 | 404    | The referenced model is not offered by the provider asked to resolve it.    |
-| `no_route`                        | 422    | No routing rule matched and no default route is configured.                 |
-| `override_not_allowed`            | 403    | Caller asked for a model override that policy forbids.                      |
-| `permission_expansion`            | 422    | An override tried to loosen a tool permission that may only be tightened.   |
-| `provider_authentication`         | 503    | Provider rejected the request at the authentication layer.                  |
-| `provider_error`                  | 502    | Provider returned an error that did not match any known category.           |
-| `provider_unavailable`            | 503    | Provider returned a service-level error and may recover later.              |
-| `provider_unsupported_capability` | 422    | Provider reported it does not support a capability the request needed.      |
-| `rate_limited`                    | 429    | Provider rate-limited the request.                                          |
-| `request_timeout`                 | 504    | Call to the provider timed out before a response was returned.              |
-| `routing_unsupported_capability`  | 422    | Routing rejected the selected model because it lacks a required capability. |
-| `storage_error`                   | 502    | An error occurred while reading or writing from memory storage.             |
-| `token_expired`                   | 401    | Session token is past its expiry timestamp.                                 |
-| `token_revoked`                   | 401    | Session token was previously valid but has been revoked.                    |
-| `unknown_effort`                  | 422    | A reasoning effort name in the request was not recognized.                  |
-| `unknown_intent`                  | 422    | A task intent name in the request was not recognized.                       |
-| `unknown_model`                   | 422    | A referenced model is not configured on the router.                         |
-| `unknown_provider`                | 422    | A provider identifier in the request was not recognized.                    |
+| Code                              | Status | Meaning                                                                                                                                                |
+| --------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `context_length_exceeded`         | 422    | Request exceeds the provider model's context window.                                                                                                   |
+| `context_window_exceeded`         | 422    | Routing rejected a model whose context window cannot fit the input.                                                                                    |
+| `fallback_exhausted`              | 503    | Primary route failed and every configured fallback also failed.                                                                                        |
+| `forbidden`                       | 403    | Caller is authenticated but not the resource owner.                                                                                                    |
+| `internal_error`                  | 500    | Unexpected server-side failure. Details intentionally omitted.                                                                                         |
+| `invalid_model_reference`         | 422    | A model reference was not in the expected `provider/model` form.                                                                                       |
+| `invalid_provider_configuration`  | 500    | A provider was configured with contradictory settings, such as an OpenAI-compatible instance whose declared locality disagrees with one of its models. |
+| `invalid_provider_credentials`    | 503    | Provider rejected the configured credentials.                                                                                                          |
+| `invalid_request`                 | 422    | Provider rejected the request body as malformed.                                                                                                       |
+| `invalid_token`                   | 401    | Session token is malformed or unknown.                                                                                                                 |
+| `missing_capability`              | 422    | Selected model lacks a capability the task requires.                                                                                                   |
+| `missing_credentials`             | 401    | No session token was presented to a protected endpoint.                                                                                                |
+| `missing_provider_credentials`    | 503    | The selected model requires provider credentials none were configured.                                                                                 |
+| `model_not_found`                 | 404    | The referenced model is not offered by the provider asked to resolve it.                                                                               |
+| `no_route`                        | 422    | No routing rule matched and no default route is configured.                                                                                            |
+| `override_not_allowed`            | 403    | Caller asked for a model override that policy forbids.                                                                                                 |
+| `permission_expansion`            | 422    | An override tried to loosen a tool permission that may only be tightened.                                                                              |
+| `provider_authentication`         | 503    | Provider rejected the request at the authentication layer.                                                                                             |
+| `provider_error`                  | 502    | Provider returned an error that did not match any known category.                                                                                      |
+| `provider_unavailable`            | 503    | Provider returned a service-level error and may recover later.                                                                                         |
+| `provider_unsupported_capability` | 422    | Provider reported it does not support a capability the request needed.                                                                                 |
+| `rate_limited`                    | 429    | Provider rate-limited the request.                                                                                                                     |
+| `request_timeout`                 | 504    | Call to the provider timed out before a response was returned.                                                                                         |
+| `routing_unsupported_capability`  | 422    | Routing rejected the selected model because it lacks a required capability.                                                                            |
+| `storage_error`                   | 502    | An error occurred while reading or writing from memory storage.                                                                                        |
+| `token_expired`                   | 401    | Session token is past its expiry timestamp.                                                                                                            |
+| `token_revoked`                   | 401    | Session token was previously valid but has been revoked.                                                                                               |
+| `unknown_effort`                  | 422    | A reasoning effort name in the request was not recognized.                                                                                             |
+| `unknown_intent`                  | 422    | A task intent name in the request was not recognized.                                                                                                  |
+| `unknown_model`                   | 422    | A referenced model is not configured on the router.                                                                                                    |
+| `unknown_provider`                | 422    | A provider identifier in the request was not recognized.                                                                                               |
