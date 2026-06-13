@@ -3,15 +3,30 @@
 - [HTTP API](#http-api)
   - [Conventions](#conventions)
   - [Authentication](#authentication)
-    - [Auth endpoints](#auth-endpoints)
+    - [Bootstrap a user](#bootstrap-a-user)
+    - [Sign in](#sign-in)
+    - [Sign out](#sign-out)
+    - [Current user](#current-user)
   - [Sessions](#sessions)
+    - [Create a session](#create-a-session)
+    - [List sessions](#list-sessions)
+    - [Fetch a session](#fetch-a-session)
+    - [Update a session](#update-a-session)
+    - [Delete a session](#delete-a-session)
   - [Executing a task](#executing-a-task)
     - [Policy](#policy)
-    - [Streaming](#streaming)
-  - [Previewing a route](#previewing-a-route)
+    - [Execute the task](#execute-the-task)
+    - [Stream the task](#stream-the-task)
+    - [Preview a route](#preview-a-route)
   - [Approvals](#approvals)
   - [Traces](#traces)
-  - [Providers, models and usage](#providers-models-and-usage)
+    - [Latest trace](#latest-trace)
+    - [A trace by id](#a-trace-by-id)
+  - [Providers and models](#providers-and-models)
+    - [List providers](#list-providers)
+    - [List models](#list-models)
+  - [Usage](#usage)
+    - [Session usage](#session-usage)
   - [Errors](#errors)
     - [Status codes](#status-codes)
     - [Error codes](#error-codes)
@@ -55,13 +70,20 @@ The flow: `POST /auth/bootstrap` returns a user ID and a long-lived API key
 (shown once). `POST /auth/sign-in` exchanges that key for a short-lived session
 token, which you send as a bearer token on every other request.
 
-### Auth endpoints
+### Bootstrap a user
 
 ```http
 POST /api/v1/auth/bootstrap
 ```
 
-Creates a user. Returns `{ "user_id": "...", "api_key": "sk-smista-api01-..." }`.
+Public endpoint. Creates a user and returns the user ID together with a
+long-lived API key, shown only this once:
+
+```json
+{ "user_id": "user:abc123", "api_key": "sk-smista-api01-..." }
+```
+
+### Sign in
 
 ```http
 POST /api/v1/auth/sign-in
@@ -70,21 +92,84 @@ X-Smista-Api-Key: <api-key>
 { "user_id": "user:abc123" }
 ```
 
-Returns `{ "token": "st_...", "expires_at": "2026-05-25T12:00:00Z" }`.
+Public endpoint. Exchanges the API key for a short-lived session token and its
+expiry:
+
+```json
+{ "token": "st_...", "expires_at": "2026-05-25T12:00:00Z" }
+```
+
+### Sign out
 
 ```http
 POST /api/v1/auth/sign-out
 Authorization: Bearer <session-token>
 ```
 
-Revokes the current token. Returns `{ "revoked": true }`.
+Revokes the current session token:
+
+```json
+{ "revoked": true }
+```
+
+### Current user
 
 ```http
 GET /api/v1/auth/me
 Authorization: Bearer <session-token>
 ```
 
-Returns the authenticated user's sessions:
+Confirms the session token is valid and reports who you are:
+
+```json
+{ "user_id": "user:abc123" }
+```
+
+To list a user's sessions, use `GET /api/v1/sessions`.
+
+## Sessions
+
+```http
+POST   /api/v1/sessions                  # create (title required)
+GET    /api/v1/sessions                  # list every session, including archived
+GET    /api/v1/sessions/{session_id}     # fetch / resume
+PUT    /api/v1/sessions/{session_id}     # update title or archive
+DELETE /api/v1/sessions/{session_id}     # delete
+```
+
+All session routes require `Authorization: Bearer <session-token>`. A user can
+only access their own sessions; another user's session returns `403`.
+
+### Create a session
+
+```http
+POST /api/v1/sessions
+
+{ "title": "Refactor auth middleware" }
+```
+
+A `title` is required. Returns `201` with the new session summary:
+
+```json
+{
+  "session": {
+    "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
+    "title": "Refactor auth middleware",
+    "created_at": "2026-05-25T09:00:00Z",
+    "updated_at": "2026-05-25T09:00:00Z",
+    "archived": false
+  }
+}
+```
+
+### List sessions
+
+```http
+GET /api/v1/sessions
+```
+
+Returns every session that belongs to you, archived ones included, each as a
+summary:
 
 ```json
 {
@@ -100,39 +185,14 @@ Returns the authenticated user's sessions:
 }
 ```
 
-## Sessions
+### Fetch a session
 
 ```http
-POST   /api/v1/sessions                  # create (title required)
-GET    /api/v1/sessions/{session_id}     # fetch / resume
-PUT    /api/v1/sessions/{session_id}     # update title or archive
-DELETE /api/v1/sessions/{session_id}     # delete
+GET /api/v1/sessions/{session_id}
 ```
 
-All session routes require `Authorization: Bearer <session-token>`. A user can
-only access their own sessions; others return `403`.
-
-```json
-// POST /api/v1/sessions
-{ "title": "Refactor auth middleware" }
-```
-
-Creating a session returns the new session summary:
-
-```json
-{
-  "session": {
-    "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
-    "title": "Refactor auth middleware",
-    "created_at": "2026-05-25T09:00:00Z",
-    "updated_at": "2026-05-25T09:00:00Z",
-    "archived": false
-  }
-}
-```
-
-Fetching a session returns the full detail, including its messages and
-free-form metadata (archived sessions are not returned):
+Returns the full session, including its messages and free-form metadata. An
+archived session is not returned here; use the list endpoint to find it.
 
 ```json
 {
@@ -150,14 +210,25 @@ free-form metadata (archived sessions are not returned):
 }
 ```
 
-Updating a session takes a partial body; omit a field to leave it unchanged:
+### Update a session
 
-```json
-// PUT /api/v1/sessions/{session_id}
+```http
+PUT /api/v1/sessions/{session_id}
+
 { "title": "Refactor auth and sessions", "archived": false }
 ```
 
-Deleting a session returns `{ "deleted": true }`.
+The body is partial; omit a field to leave it unchanged. Returns the updated
+session summary.
+
+### Delete a session
+
+```http
+DELETE /api/v1/sessions/{session_id}
+```
+
+Deletes the session and the context memory tied to it. Returns
+`{ "deleted": true }`.
 
 ## Executing a task
 
@@ -282,6 +353,12 @@ model reports `requires_api_key` and whether a `credential_available` for it was
 supplied. The credentials themselves never appear in the body — they travel as
 `X-Smista-Provider-<Provider>-Api-Key` headers.
 
+### Execute the task
+
+```http
+POST /api/v1/sessions/{session_id}/execute
+```
+
 The router classifies the task, applies the policy, selects a model, builds the
 request and returns the result with a routing explanation:
 
@@ -314,7 +391,7 @@ request and returns the result with a routing explanation:
 If the model requests a tool call that needs approval, the response returns a
 pending approval instead of a final message.
 
-### Streaming
+### Stream the task
 
 ```http
 POST /api/v1/sessions/{session_id}/stream
@@ -341,7 +418,7 @@ the actual cost of the invocation. Local models report a zero cost. Models
 that cannot stream still answer on this endpoint: the full response is
 replayed as a short stream of the same events.
 
-## Previewing a route
+### Preview a route
 
 ```http
 POST /api/v1/sessions/{session_id}/preview
@@ -381,14 +458,22 @@ POST /api/v1/sessions/{session_id}/approvals/{approval_id}
 
 ## Traces
 
+A trace is the ordered list of events emitted while the router routed and ran a
+session's tasks. Both endpoints return a trace wrapped under a `trace` key.
+`events` is ordered oldest first. Each event carries its own routing context
+(`task_type`, `provider`, `model`, optional `matched_rule`) and a `payload`
+whose shape depends on `event_type`. `event_type` is one of `message`,
+`routing_decision`, `context_selection`, `tool_call`, `approval` or `cost`; the
+per-type `payload` shapes are listed under `trace_event_content` in the
+[storage schema reference](../technical/schema.md).
+
+### Latest trace
+
 ```http
 GET /api/v1/sessions/{session_id}/traces/latest
-GET /api/v1/sessions/{session_id}/traces/{trace_id}
 ```
 
-Returns the execution trace for the session: the ordered events that were
-emitted while routing and running its tasks. The trace is wrapped under a
-`trace` key:
+Returns the most recent trace for the session:
 
 ```json
 {
@@ -417,29 +502,31 @@ emitted while routing and running its tasks. The trace is wrapped under a
 }
 ```
 
-`events` is ordered oldest first. Each event carries its own routing context
-(`task_type`, `provider`, `model`, optional `matched_rule`) and a `payload`
-whose shape depends on `event_type`. `event_type` is one of `message`,
-`routing_decision`, `context_selection`, `tool_call`, `approval` or `cost`; the
-per-type `payload` shapes are listed under `trace_event_content` in the
-[storage schema reference](../technical/schema.md).
-
-## Providers, models and usage
+### A trace by id
 
 ```http
-GET /api/v1/llm/providers              # available providers
-GET /api/v1/llm/models                 # available models with capabilities
-GET /api/v1/sessions/{session_id}/usage  # token and cost breakdown
+GET /api/v1/sessions/{session_id}/traces/{trace_id}
 ```
 
-`GET /llm/providers` lists the providers that are currently **available** —
-those configured with usable credentials (or a base URL, for local providers).
-A provider that is not available is omitted entirely, so every entry returned is
-ready to route to. Each entry carries a `local` flag: `true` when the provider
-serves its models on your own host or network with no request leaving the
-machine (a local Ollama, a self-hosted OpenAI-compatible endpoint), and `false`
-for a cloud API. This is the same locality every one of that provider's models
-reports, so the two can never disagree:
+Returns the trace with the given id. The response shape matches the latest-trace
+response above.
+
+## Providers and models
+
+### List providers
+
+```http
+GET /api/v1/llm/providers
+```
+
+Lists the providers that are currently **available**: those configured with
+usable credentials (or a base URL, for local providers). A provider that is not
+available is omitted entirely, so every entry returned is ready to route to.
+Each entry carries a `local` flag: `true` when the provider serves its models on
+your own host or network with no request leaving the machine (a local Ollama, a
+self-hosted OpenAI-compatible endpoint), and `false` for a cloud API. This is
+the same locality every one of that provider's models reports, so the two can
+never disagree:
 
 ```json
 {
@@ -450,15 +537,29 @@ reports, so the two can never disagree:
 }
 ```
 
-`GET /llm/models` lists the available models, returning each one as a full model
-descriptor. Like `/execute`, it accepts `X-Smista-Provider-<Provider>-Api-Key`
-headers and needs them: the router queries each provider's `list_models`, and
-remote providers such as Anthropic and Gemini reject that call without an API
-key. Providers whose credentials are missing are omitted from the result.
-`capabilities` is a nested object of boolean flags — `streaming`,
-`tools`, `json_output`, `system_prompt`, `images`, `reasoning` and `memory` —
-where an absent or `false` flag means the capability is not supported. `auth`
-records how the model authenticates (`none`, `api_key`, `optional_api_key` or a
+### List models
+
+```http
+GET /api/v1/llm/models
+```
+
+Lists the available models, returning each one as a full model descriptor. Like
+`/execute`, it accepts `X-Smista-Provider-<Provider>-Api-Key` headers and needs
+them: the router queries each provider's `list_models`, and remote providers
+such as Anthropic and Gemini reject that call without an API key. A provider the
+router could not list — most often because its credentials are missing or were
+rejected — is left out of `models` and reported under `unavailable`, each entry
+naming the `provider`, a machine-readable `reason` and an optional human-readable
+`message`. This lets you tell an incomplete result from a genuinely empty one and
+see why each provider dropped out; `unavailable` is absent when every configured
+provider was listed. The `reason` is one of `authentication`, `context_length`,
+`invalid_configuration`, `invalid_credentials`, `invalid_request`,
+`missing_credentials`, `model_not_found`, `provider_unavailable`, `rate_limit`,
+`storage`, `timeout`, `unknown` or `unsupported_capability`. `capabilities` is a
+nested object of boolean flags — `streaming`, `tools`, `json_output`,
+`system_prompt`, `images`, `reasoning` and `memory` — where an absent or `false`
+flag means the capability is not supported. `auth` records how the model
+authenticates (`none`, `api_key`, `optional_api_key` or a
 `{ "custom": "<scheme>" }` object); `display_name`, `max_output_tokens` and the
 cost fields are present only when known, and the cost fields are decimal
 strings:
@@ -490,13 +591,27 @@ strings:
       "max_output_tokens": null,
       "default_parameters": {}
     }
+  ],
+  "unavailable": [
+    {
+      "provider": "gemini",
+      "reason": "missing_credentials",
+      "message": "no credentials configured for the provider"
+    }
   ]
 }
 ```
 
-`GET /sessions/{session_id}/usage` reports the session total plus per-model and
-per-task-type breakdowns. Cost fields are decimal strings; tokens absent from a
-provider's report are omitted:
+## Usage
+
+### Session usage
+
+```http
+GET /api/v1/sessions/{session_id}/usage
+```
+
+Reports the session total plus per-model and per-task-type breakdowns. Cost
+fields are decimal strings; tokens absent from a provider's report are omitted:
 
 ```json
 {

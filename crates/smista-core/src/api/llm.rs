@@ -9,7 +9,8 @@
 //! # Examples
 //!
 //! ```
-//! use smista_core::api::ListModelsResponse;
+//! use smista_core::api::{ListModelsResponse, UnavailableProvider};
+//! use smista_core::error::ProviderErrorCategory;
 //! use smista_core::model::{
 //!     ModelAuthRequirement, ModelCapabilities, ModelDescriptor, ModelParameters, Provider,
 //! };
@@ -32,14 +33,21 @@
 //!         default_parameters: ModelParameters::default(),
 //!         provider_options: None,
 //!     }],
+//!     unavailable: vec![UnavailableProvider {
+//!         provider: Provider::Anthropic,
+//!         reason: ProviderErrorCategory::MissingCredentials,
+//!         message: None,
+//!     }],
 //! };
 //! let json = serde_json::to_string(&response).unwrap();
 //! assert!(json.contains("\"local\":true"));
+//! assert!(json.contains("\"reason\":\"missing_credentials\""));
 //! ```
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{ModelDescriptor, ProviderDescriptor};
+use crate::error::ProviderErrorCategory;
+use crate::model::{ModelDescriptor, Provider, ProviderDescriptor};
 
 /// Response to `GET /llm/providers`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
@@ -55,6 +63,31 @@ pub struct ListProvidersResponse {
 pub struct ListModelsResponse {
     /// Available models across providers.
     pub models: Vec<ModelDescriptor>,
+    /// Providers omitted from `models` because listing their models failed,
+    /// each with the reason it dropped out.
+    ///
+    /// The router queries every configured provider when listing models. A
+    /// provider that cannot be listed — most often because its credentials are
+    /// missing or were rejected — is left out of `models` and reported here, so
+    /// a caller can tell an incomplete result from a genuinely empty one and act
+    /// on the cause. Empty when every configured provider was listed.
+    #[serde(default)]
+    pub unavailable: Vec<UnavailableProvider>,
+}
+
+/// A provider left out of [`ListModelsResponse::models`] because its models
+/// could not be listed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct UnavailableProvider {
+    /// The provider whose models could not be listed.
+    pub provider: Provider,
+    /// The classification of the failure that left the provider out.
+    pub reason: ProviderErrorCategory,
+    /// Human-readable, redacted detail describing the failure, when the
+    /// provider reported one. Never contains credentials.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 #[cfg(test)]
@@ -122,10 +155,42 @@ mod tests {
                 default_parameters: crate::model::ModelParameters::default(),
                 provider_options: None,
             }],
+            unavailable: Vec::new(),
         };
         let value = serde_json::to_value(&response).unwrap();
         assert_eq!(value["models"][0]["capabilities"]["streaming"], true);
         assert_eq!(value["models"][0]["local"], true);
+    }
+
+    #[test]
+    fn should_default_unavailable_when_absent() {
+        let json = r#"{ "models": [] }"#;
+        let response: ListModelsResponse = serde_json::from_str(json).unwrap();
+
+        assert!(response.unavailable.is_empty());
+    }
+
+    #[test]
+    fn should_report_unavailable_providers() {
+        let response = ListModelsResponse {
+            models: Vec::new(),
+            unavailable: vec![UnavailableProvider {
+                provider: Provider::Anthropic,
+                reason: ProviderErrorCategory::InvalidCredentials,
+                message: Some("provider rejected the configured credentials".to_string()),
+            }],
+        };
+        let value = serde_json::to_value(&response).unwrap();
+
+        assert_eq!(value["unavailable"][0]["provider"], "anthropic");
+        assert_eq!(value["unavailable"][0]["reason"], "invalid_credentials");
+        let parsed: ListModelsResponse =
+            serde_json::from_value(value).expect("round-trips through JSON");
+        assert_eq!(parsed.unavailable.len(), 1);
+        assert_eq!(
+            parsed.unavailable[0].reason,
+            ProviderErrorCategory::InvalidCredentials
+        );
     }
 
     #[test]
