@@ -115,6 +115,16 @@ pub struct RouterProviderConfig {
     /// Base URL for the provider endpoint, if non-default.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+    /// Whether the provider runs locally.
+    ///
+    /// Defaults to `false`. The router surfaces this to consumers so a local
+    /// provider can be told apart from a hosted one.
+    pub local: bool,
+    /// Human-readable display name for the provider, if any.
+    ///
+    /// When omitted, consumers fall back to the provider's own identifier.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
     /// Models advertised for a generic OpenAI-compatible endpoint that exposes
     /// no model-listing API.
     ///
