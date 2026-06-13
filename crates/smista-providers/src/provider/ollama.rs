@@ -8,6 +8,7 @@ use std::time::Duration;
 use smista_core::error::{ProviderError, ProviderErrorCategory};
 use smista_core::model::{
     ModelCapabilities, ModelDescriptor, ModelParameters, ModelReference, Provider as ProviderId,
+    ProviderDescriptor,
 };
 
 use self::client::{HttpOllamaClient, OllamaClient};
@@ -196,6 +197,16 @@ where
 {
     fn id(&self) -> ProviderId {
         ProviderId::Ollama
+    }
+
+    fn descriptor(&self) -> ProviderDescriptor {
+        // Locality comes from the endpoint, the same source that stamps every
+        // resolved model's `local` flag, so the two can never disagree.
+        ProviderDescriptor {
+            id: ProviderId::Ollama,
+            display_name: "Ollama".to_string(),
+            local: self.endpoint.is_local(),
+        }
     }
 
     async fn resolve(

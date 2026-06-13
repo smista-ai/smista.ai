@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use smista_core::error::ProviderErrorCategory;
-use smista_core::model::{ModelDescriptor, ModelReference, Provider as ProviderId};
+use smista_core::model::{
+    ModelDescriptor, ModelReference, Provider as ProviderId, ProviderDescriptor,
+};
 
 use super::Provider;
 use crate::ProviderResult;
@@ -63,6 +65,14 @@ where
 {
     fn id(&self) -> ProviderId {
         ProviderId::OpenAI
+    }
+
+    fn descriptor(&self) -> ProviderDescriptor {
+        ProviderDescriptor {
+            id: ProviderId::OpenAI,
+            display_name: "OpenAI".to_string(),
+            local: false,
+        }
     }
 
     async fn resolve(

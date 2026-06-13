@@ -18,4 +18,14 @@ id: Provider,
 /**
  * Human-friendly name shown to users.
  */
-display_name: string, };
+display_name: string, 
+/**
+ * Whether the provider serves its models locally, with no request leaving
+ * the host or network.
+ *
+ * This is the provider-level source of truth for locality: every model the
+ * provider offers inherits it, so a provider can never report itself local
+ * while a model it advertises routes to the cloud. The router uses it as a
+ * routing discriminant to keep sensitive work on local models.
+ */
+local: boolean, };

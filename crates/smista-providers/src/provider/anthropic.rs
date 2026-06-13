@@ -8,7 +8,7 @@ use std::time::Duration;
 use smista_core::error::ProviderErrorCategory;
 use smista_core::model::{
     ModelAuthRequirement, ModelCapabilities, ModelDescriptor, ModelParameters, ModelReference,
-    Provider as ProviderId,
+    Provider as ProviderId, ProviderDescriptor,
 };
 
 use self::client::{AnthropicClient, HttpAnthropicClient};
@@ -153,6 +153,14 @@ where
 {
     fn id(&self) -> ProviderId {
         ProviderId::Anthropic
+    }
+
+    fn descriptor(&self) -> ProviderDescriptor {
+        ProviderDescriptor {
+            id: ProviderId::Anthropic,
+            display_name: "Anthropic".to_string(),
+            local: false,
+        }
     }
 
     async fn resolve(

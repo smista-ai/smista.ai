@@ -217,6 +217,14 @@ pub struct ProviderDescriptor {
     pub id: Provider,
     /// Human-friendly name shown to users.
     pub display_name: String,
+    /// Whether the provider serves its models locally, with no request leaving
+    /// the host or network.
+    ///
+    /// This is the provider-level source of truth for locality: every model the
+    /// provider offers inherits it, so a provider can never report itself local
+    /// while a model it advertises routes to the cloud. The router uses it as a
+    /// routing discriminant to keep sensitive work on local models.
+    pub local: bool,
 }
 
 #[cfg(test)]
@@ -311,12 +319,14 @@ mod tests {
         let descriptor = ProviderDescriptor {
             id: Provider::Anthropic,
             display_name: "Anthropic".to_string(),
+            local: false,
         };
         assert_eq!(
             serde_json::to_value(&descriptor).unwrap(),
             serde_json::json!({
                 "id": "anthropic",
                 "display_name": "Anthropic",
+                "local": false,
             })
         );
     }
@@ -326,6 +336,7 @@ mod tests {
         let descriptor = ProviderDescriptor {
             id: Provider::Ollama,
             display_name: "Ollama".to_string(),
+            local: true,
         };
         let json = serde_json::to_string(&descriptor).unwrap();
         assert_eq!(

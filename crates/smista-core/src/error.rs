@@ -202,6 +202,12 @@ pub enum ProviderErrorCategory {
     /// The request exceeded the model's context window.
     #[error("request exceeded the model context window")]
     ContextLength,
+    /// The provider was configured with contradictory or invalid settings
+    /// (for example, an OpenAI-compatible instance whose declared locality
+    /// disagrees with one of its models). Detected when the provider is built,
+    /// not while serving a request.
+    #[error("provider configuration is invalid")]
+    InvalidConfiguration,
     /// Credentials were provided but rejected by the provider.
     #[error("provider rejected the configured credentials")]
     InvalidCredentials,
