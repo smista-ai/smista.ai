@@ -192,8 +192,12 @@ pub struct ProviderError {
 /// can reason about independently of the provider-specific HTTP status or
 /// SDK error code that produced it. The categories follow the smista.ai
 /// specification (Model interfaces → Error handling).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, thiserror::Error)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, thiserror::Error, ts_rs::TS,
+)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
+#[ts(rename_all = "snake_case")]
 pub enum ProviderErrorCategory {
     /// The request was authenticated but rejected (for example, a quota
     /// rule, plan limit, or organization policy denied it).
