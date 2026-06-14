@@ -18,6 +18,7 @@ pub use smista_core::trace::TraceEventType;
 use surrealdb::types::{RecordId, SurrealValue};
 
 use super::Table;
+use crate::types::SecretContent;
 
 /// A structured, append-only event recorded during task execution.
 ///
@@ -60,8 +61,8 @@ impl Table for TraceEvent {
 pub struct TraceEventContent {
     /// Record id, identical to the owning [`TraceEvent`].
     pub id: RecordId,
-    /// Structured event payload.
-    pub payload: String,
+    /// Structured event payload, in clear or sealed for an encrypted session.
+    pub payload: SecretContent,
 }
 
 impl Table for TraceEventContent {
@@ -106,7 +107,7 @@ mod tests {
         let id = RecordId::new(TraceEventContent::name(), uuid::Uuid::now_v7().to_string());
         let content = TraceEventContent {
             id,
-            payload: "{\"model\":\"claude\"}".to_string(),
+            payload: SecretContent::plaintext("{\"model\":\"claude\"}"),
         };
 
         crate::tests::roundtrip(content).await;

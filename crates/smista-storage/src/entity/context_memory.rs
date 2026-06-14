@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use surrealdb::types::{RecordId, SurrealValue};
 
 use super::Table;
+use crate::types::SecretContent;
 
 /// A per-session, model-populated memory owned by a session and a user.
 ///
@@ -42,8 +43,8 @@ impl Table for ContextMemory {
 pub struct ContextMemoryContent {
     /// Record id, identical to the owning [`ContextMemory`].
     pub id: RecordId,
-    /// The remembered fact.
-    pub content: String,
+    /// The remembered fact, in clear or sealed for an encrypted session.
+    pub content: SecretContent,
 }
 
 impl Table for ContextMemoryContent {
@@ -88,7 +89,7 @@ mod tests {
         );
         let content = ContextMemoryContent {
             id,
-            content: "the user is refactoring storage".to_string(),
+            content: SecretContent::plaintext("the user is refactoring storage"),
         };
 
         crate::tests::roundtrip(content).await;

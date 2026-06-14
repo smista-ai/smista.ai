@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use surrealdb::types::{RecordId, SurrealValue};
 
 use super::Table;
+use crate::types::SecretContent;
 
 /// Execution status of a tool call.
 ///
@@ -60,12 +61,12 @@ impl Table for SessionToolCall {
 pub struct SessionToolCallContent {
     /// Record id, identical to the owning [`SessionToolCall`].
     pub id: RecordId,
-    /// Tool-call arguments (sanitised).
-    pub arguments: String,
-    /// Tool-call result (sanitised).
-    pub result: Option<String>,
-    /// Error, if the tool call failed.
-    pub error: Option<String>,
+    /// Tool-call arguments (sanitised), in clear or sealed for an encrypted session.
+    pub arguments: SecretContent,
+    /// Tool-call result (sanitised), in clear or sealed for an encrypted session.
+    pub result: Option<SecretContent>,
+    /// Error, if the tool call failed, in clear or sealed for an encrypted session.
+    pub error: Option<SecretContent>,
 }
 
 impl Table for SessionToolCallContent {
@@ -111,8 +112,8 @@ mod tests {
         );
         let content = SessionToolCallContent {
             id,
-            arguments: "{\"path\":\"src/main.rs\"}".to_string(),
-            result: Some("file contents".to_string()),
+            arguments: SecretContent::plaintext("{\"path\":\"src/main.rs\"}"),
+            result: Some(SecretContent::plaintext("file contents")),
             error: None,
         };
 

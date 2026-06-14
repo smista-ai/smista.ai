@@ -28,3 +28,4 @@
 - [Architecture](technical/architecture.md)
 - [Memory](technical/memory.md)
 - [Schema](technical/schema.md)
+- [End-to-end encryption](technical/e2e.md)

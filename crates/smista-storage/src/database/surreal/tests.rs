@@ -6,6 +6,7 @@ use surrealdb::types::RecordId;
 
 use super::*;
 use crate::entity::{ToolCallStatus, TraceEventType};
+use crate::types::{ContentEnvelope, SecretContent};
 
 async fn memory_db() -> SurrealDatabase {
     SurrealDatabase::new(SurrealOptions {
@@ -306,6 +307,8 @@ fn session_for(id: Uuid, user_id: Uuid) -> Session {
         id: record_id::<Session, _>(id),
         user: record_id::<User, _>(user_id),
         title: Some("session".to_string()),
+        encrypted: false,
+        key_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
         archived_at: None,
@@ -329,7 +332,7 @@ fn message_for(
         },
         SessionMessageContent {
             id: record_id::<SessionMessageContent, _>(id),
-            content: "hello".to_string(),
+            content: SecretContent::plaintext("hello"),
         },
     )
 }
@@ -351,8 +354,8 @@ fn tool_call_for(
         },
         SessionToolCallContent {
             id: record_id::<SessionToolCallContent, _>(id),
-            arguments: "{}".to_string(),
-            result: Some("ok".to_string()),
+            arguments: SecretContent::plaintext("{}"),
+            result: Some(SecretContent::plaintext("ok")),
             error: None,
         },
     )
@@ -398,7 +401,7 @@ fn trace_event_for(
         },
         TraceEventContent {
             id: record_id::<TraceEventContent, _>(id),
-            payload: payload.to_string(),
+            payload: SecretContent::plaintext(payload),
         },
     )
 }
@@ -442,7 +445,7 @@ fn context_memory_for(
         },
         ContextMemoryContent {
             id: record_id::<ContextMemoryContent, _>(id),
-            content: content.to_string(),
+            content: SecretContent::plaintext(content),
         },
     )
 }
@@ -829,6 +832,63 @@ async fn should_append_message_and_read_session_state() {
 
     assert_eq!(state.messages.len(), 1);
     assert_eq!(state.messages[0], message);
+}
+
+#[tokio::test]
+async fn should_create_and_read_encrypted_session() {
+    let db = memory_db().await;
+    let user_id = Uuid::now_v7();
+    db.create_user(user(user_id))
+        .await
+        .expect("failed to create user");
+
+    let session_id = Uuid::now_v7();
+    let mut session = session_for(session_id, user_id);
+    session.encrypted = true;
+    session.key_id = Some("kf_ab12".to_string());
+    db.create_session(session)
+        .await
+        .expect("failed to create encrypted session");
+
+    let read = db
+        .get_session(user_id, session_id)
+        .await
+        .expect("failed to load session")
+        .expect("session not found");
+    assert!(read.encrypted);
+    assert_eq!(read.key_id.as_deref(), Some("kf_ab12"));
+}
+
+#[tokio::test]
+async fn should_append_and_read_encrypted_message_content() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let id = Uuid::now_v7();
+    let (message, _) = message_for(id, session_id, user_id);
+    let sealed = ContentEnvelope {
+        version: 1,
+        algorithm: "xchacha20poly1305".to_string(),
+        key_id: "kf_ab12".to_string(),
+        nonce: "bm9uY2U".to_string(),
+        ciphertext: "Y2lwaGVydGV4dA".to_string(),
+    };
+    let content = SessionMessageContent {
+        id: record_id::<SessionMessageContent, _>(id),
+        content: SecretContent::Encrypted(sealed.clone()),
+    };
+    db.append_message(user_id, message, content)
+        .await
+        .expect("failed to append encrypted message");
+
+    // The encrypted envelope must round-trip through the SCHEMAFULL content
+    // field, which storage holds opaquely.
+    let rows: Vec<SessionMessageContent> =
+        db.0.select(SessionMessageContent::name())
+            .await
+            .expect("failed to read content");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].content, SecretContent::Encrypted(sealed));
 }
 
 #[tokio::test]
@@ -1237,6 +1297,8 @@ fn session_with(
         id: record_id::<Session, _>(id),
         user: record_id::<User, _>(user_id),
         title: Some("session".to_string()),
+        encrypted: false,
+        key_id: None,
         created_at: Utc::now(),
         updated_at,
         archived_at,

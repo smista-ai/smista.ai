@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use surrealdb::types::{RecordId, SurrealValue};
 
 use super::Table;
+use crate::types::SecretContent;
 
 /// Lifecycle status of a diff.
 ///
@@ -57,8 +58,8 @@ impl Table for SessionDiff {
 pub struct SessionDiffContent {
     /// Record id, identical to the owning [`SessionDiff`].
     pub id: RecordId,
-    /// The diff body (secret-filtered).
-    pub diff: String,
+    /// The diff body (secret-filtered), in clear or sealed for an encrypted session.
+    pub diff: SecretContent,
 }
 
 impl Table for SessionDiffContent {
@@ -101,7 +102,7 @@ mod tests {
         let id = RecordId::new(SessionDiffContent::name(), uuid::Uuid::now_v7().to_string());
         let content = SessionDiffContent {
             id,
-            diff: "@@ -1 +1 @@\n-old\n+new".to_string(),
+            diff: SecretContent::plaintext("@@ -1 +1 @@\n-old\n+new"),
         };
 
         crate::tests::roundtrip(content).await;
