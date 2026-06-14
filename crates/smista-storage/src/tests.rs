@@ -68,6 +68,36 @@ where
     assert_eq!(read_child[0], child.unwrap());
 }
 
+/// Roundtrips a bare value type by storing it as the field of a scratch record.
+///
+/// Value types (those that carry no record id and implement no [`Table`]) cannot
+/// be stored on their own, so the value is wrapped in a throwaway record, read
+/// back, and compared field for field.
+pub async fn value_roundtrip<V>(value: V)
+where
+    V: SurrealValue + PartialEq + std::fmt::Debug,
+{
+    /// Throwaway record carrying a single value field.
+    #[derive(SurrealValue, PartialEq, Debug)]
+    struct Wrapper<V>
+    where
+        V: SurrealValue,
+    {
+        value: V,
+    }
+
+    let db = memory_db().await;
+    let stored: Option<Wrapper<V>> = db
+        .create("scratch")
+        .content(Wrapper { value })
+        .await
+        .expect("failed to create record");
+
+    let read: Vec<Wrapper<V>> = db.select("scratch").await.expect("failed to read record");
+    assert_eq!(read.len(), 1);
+    assert_eq!(read[0], stored.unwrap());
+}
+
 /// Builds a minimal [`User`] parent with the given record id, for FK tests.
 pub fn user(id: RecordId) -> User {
     User {
@@ -85,6 +115,8 @@ pub fn session(id: RecordId, user: RecordId) -> Session {
         id,
         user,
         title: None,
+        encrypted: false,
+        key_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
         archived_at: None,

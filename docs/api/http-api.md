@@ -145,16 +145,27 @@ only access their own sessions; another user's session returns `403`.
 ```http
 POST /api/v1/sessions
 
-{ "title": "Refactor auth middleware" }
+{ "title": "Refactor auth middleware", "encrypted": false }
 ```
 
-A `title` is required. Returns `201` with the new session summary:
+A `title` is required. `encrypted` is optional and defaults to `false`; set it to
+`true` to make the session end-to-end encrypted, in which case a `key_id` (the
+fingerprint of the per-session key your client holds) is also required:
+
+```json
+{ "title": "Refactor auth middleware", "encrypted": true, "key_id": "kf_ab12" }
+```
+
+`encrypted` is fixed for the life of the session and cannot be changed later. See
+[End-to-end encryption](../technical/e2e.md). Returns `201` with the new session
+summary:
 
 ```json
 {
   "session": {
     "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
     "title": "Refactor auth middleware",
+    "encrypted": false,
     "created_at": "2026-05-25T09:00:00Z",
     "updated_at": "2026-05-25T09:00:00Z",
     "archived": false
@@ -177,6 +188,7 @@ summary:
     {
       "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
       "title": "Refactor auth middleware",
+      "encrypted": false,
       "created_at": "2026-05-25T09:00:00Z",
       "updated_at": "2026-05-25T09:30:00Z",
       "archived": false
@@ -199,6 +211,7 @@ archived session is not returned here; use the list endpoint to find it.
   "session": {
     "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
     "title": "Refactor auth middleware",
+    "encrypted": false,
     "created_at": "2026-05-25T09:00:00Z",
     "updated_at": "2026-05-25T09:30:00Z",
     "messages": [

@@ -42,5 +42,6 @@ pub mod entity;
 mod error;
 #[cfg(test)]
 mod tests;
+pub mod types;
 
 pub use self::error::{StorageError, StorageResult};

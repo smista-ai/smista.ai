@@ -13,6 +13,10 @@ id: string,
  */
 title: string, 
 /**
+ * Whether the session's content is end-to-end encrypted.
+ */
+encrypted: boolean, 
+/**
  * When the session was created.
  */
 created_at: string, 

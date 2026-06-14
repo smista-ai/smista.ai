@@ -243,15 +243,16 @@ impl SurrealDatabase {
     ///
     /// Both writes run in one transaction so the metadata and its content never
     /// drift apart. Returns [`StorageError::NotFound`] if the base row is gone.
-    async fn replace_paired_content<M>(
+    async fn replace_paired_content<M, C>(
         &self,
         base: RecordId,
         content_table: &'static str,
         updated_at: DateTime<Utc>,
-        content: String,
+        content: C,
     ) -> StorageResult<M>
     where
         M: SurrealValue + Send + 'static,
+        C: SurrealValue + Send + 'static,
     {
         let content_id = RecordId::new(content_table, base.key.clone());
         let tx = self.0.clone().begin().await?;
@@ -684,10 +685,13 @@ impl Database for SurrealDatabase {
         let events = events
             .into_iter()
             .map(|event| {
+                // An encrypted payload is opaque here: storage holds no key, so
+                // the plaintext is empty until a client decrypts it through the
+                // execution protocol. A non-encrypted payload reads back in clear.
                 let payload = contents
                     .iter()
                     .find(|content| content.id.key == event.id.key)
-                    .map(|content| content.payload.as_str())
+                    .and_then(|content| content.payload.as_plaintext())
                     .unwrap_or_default();
                 let payload = serde_json::from_str::<serde_json::Value>(payload)
                     .unwrap_or_else(|_| serde_json::Value::String(payload.to_string()));
@@ -732,7 +736,7 @@ impl Database for SurrealDatabase {
             if let Some(existing) = existing {
                 tracing::debug!("replacing keyed user memory in place");
                 return self
-                    .replace_paired_content::<UserMemory>(
+                    .replace_paired_content::<UserMemory, _>(
                         existing.id,
                         UserMemoryContent::name(),
                         memory.updated_at,
@@ -769,7 +773,7 @@ impl Database for SurrealDatabase {
             return Err(StorageError::NotFound);
         };
 
-        self.replace_paired_content::<UserMemory>(
+        self.replace_paired_content::<UserMemory, _>(
             existing.id,
             UserMemoryContent::name(),
             Utc::now(),
@@ -832,7 +836,7 @@ impl Database for SurrealDatabase {
             if let Some(existing) = existing {
                 tracing::debug!("replacing keyed context memory in place");
                 return self
-                    .replace_paired_content::<ContextMemory>(
+                    .replace_paired_content::<ContextMemory, _>(
                         existing.id,
                         ContextMemoryContent::name(),
                         memory.updated_at,
@@ -874,7 +878,7 @@ impl Database for SurrealDatabase {
             return Err(StorageError::NotFound);
         };
 
-        self.replace_paired_content::<ContextMemory>(
+        self.replace_paired_content::<ContextMemory, _>(
             existing.id,
             ContextMemoryContent::name(),
             Utc::now(),

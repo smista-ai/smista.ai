@@ -2,9 +2,23 @@
 
 /**
  * Body of `POST /sessions`. The title is mandatory.
+ *
+ * `encrypted` opts the session into end-to-end encryption and defaults to
+ * `false` when omitted. When it is `true`, `key_id` is required and names the
+ * fingerprint of the per-session key the client holds; when it is `false`,
+ * `key_id` must be absent. The pairing is validated by the router, not by this
+ * type. The choice is fixed for the life of the session.
  */
 export type CreateSessionRequest = { 
 /**
  * Title for the new session.
  */
-title: string, };
+title: string, 
+/**
+ * Whether the new session is end-to-end encrypted.
+ */
+encrypted: boolean, 
+/**
+ * Fingerprint of the per-session key, required when `encrypted` is `true`.
+ */
+key_id?: string, };

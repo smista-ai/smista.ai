@@ -15,9 +15,13 @@
 //! ```
 //! use smista_core::api::CreateSessionRequest;
 //!
-//! let request = CreateSessionRequest { title: "Refactor auth".to_string() };
+//! let request = CreateSessionRequest {
+//!     title: "Refactor auth".to_string(),
+//!     encrypted: false,
+//!     key_id: None,
+//! };
 //! let json = serde_json::to_string(&request).unwrap();
-//! assert_eq!(json, r#"{"title":"Refactor auth"}"#);
+//! assert_eq!(json, r#"{"title":"Refactor auth","encrypted":false}"#);
 //! ```
 
 use chrono::{DateTime, Utc};
@@ -34,6 +38,8 @@ pub struct SessionSummary {
     pub id: Uuid,
     /// Human-readable session title.
     pub title: String,
+    /// Whether the session's content is end-to-end encrypted.
+    pub encrypted: bool,
     /// When the session was created.
     pub created_at: DateTime<Utc>,
     /// When the session was last updated.
@@ -53,6 +59,8 @@ pub struct SessionDetail {
     pub id: Uuid,
     /// Human-readable session title.
     pub title: String,
+    /// Whether the session's content is end-to-end encrypted.
+    pub encrypted: bool,
     /// When the session was created.
     pub created_at: DateTime<Utc>,
     /// When the session was last updated.
@@ -64,11 +72,24 @@ pub struct SessionDetail {
 }
 
 /// Body of `POST /sessions`. The title is mandatory.
+///
+/// `encrypted` opts the session into end-to-end encryption and defaults to
+/// `false` when omitted. When it is `true`, `key_id` is required and names the
+/// fingerprint of the per-session key the client holds; when it is `false`,
+/// `key_id` must be absent. The pairing is validated by the router, not by this
+/// type. The choice is fixed for the life of the session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct CreateSessionRequest {
     /// Title for the new session.
     pub title: String,
+    /// Whether the new session is end-to-end encrypted.
+    #[serde(default)]
+    pub encrypted: bool,
+    /// Fingerprint of the per-session key, required when `encrypted` is `true`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub key_id: Option<String>,
 }
 
 /// Response to `POST /sessions`, wrapping the created session.
@@ -123,6 +144,7 @@ mod tests {
         SessionSummary {
             id: Uuid::nil(),
             title: "Refactor auth middleware".to_string(),
+            encrypted: false,
             created_at: timestamp(),
             updated_at: timestamp(),
             archived: false,
@@ -133,6 +155,7 @@ mod tests {
     fn should_serialize_summary_with_snake_case_fields() {
         let value = serde_json::to_value(summary()).unwrap();
         assert_eq!(value["title"], "Refactor auth middleware");
+        assert_eq!(value["encrypted"], false);
         assert_eq!(value["created_at"], "2026-05-25T09:00:00Z");
         assert_eq!(value["archived"], false);
     }
@@ -142,6 +165,7 @@ mod tests {
         let detail = SessionDetail {
             id: Uuid::nil(),
             title: "Refactor auth middleware".to_string(),
+            encrypted: false,
             created_at: timestamp(),
             updated_at: timestamp(),
             messages: Vec::new(),
@@ -179,10 +203,32 @@ mod tests {
     fn should_serialize_create_request() {
         let request = CreateSessionRequest {
             title: "Refactor auth".to_string(),
+            encrypted: false,
+            key_id: None,
         };
         assert_eq!(
             serde_json::to_string(&request).unwrap(),
-            r#"{"title":"Refactor auth"}"#
+            r#"{"title":"Refactor auth","encrypted":false}"#
+        );
+    }
+
+    #[test]
+    fn should_default_encrypted_to_false_when_omitted() {
+        let request: CreateSessionRequest = serde_json::from_str(r#"{"title":"x"}"#).unwrap();
+        assert!(!request.encrypted);
+        assert_eq!(request.key_id, None);
+    }
+
+    #[test]
+    fn should_serialize_encrypted_create_request_with_key_id() {
+        let request = CreateSessionRequest {
+            title: "secret".to_string(),
+            encrypted: true,
+            key_id: Some("kf_ab12".to_string()),
+        };
+        assert_eq!(
+            serde_json::to_string(&request).unwrap(),
+            r#"{"title":"secret","encrypted":true,"key_id":"kf_ab12"}"#
         );
     }
 

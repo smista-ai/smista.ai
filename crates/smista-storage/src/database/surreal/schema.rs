@@ -47,6 +47,13 @@ DEFINE TABLE IF NOT EXISTS context_memory_content SCHEMAFULL;
 -- cascade or restrict on delete, so cascade and cleanup stay in Rust. The
 -- core enums (role, provider, task_type, decision, status, event_type)
 -- serialize to plain strings, so they are typed `string`.
+--
+-- Encryptable content fields hold a `SecretContent`, which serializes to an
+-- externally-tagged object: `{ "Plaintext": "…" }` for a normal session or
+-- `{ "Encrypted": { version, algorithm, key_id, nonce, ciphertext } }` for an
+-- end-to-end encrypted one. They are typed `TYPE object FLEXIBLE` so either
+-- shape is accepted. `user_memory_content` is not yet encryptable (it is
+-- user-scoped, outside the per-session flag) and stays `string`.
 
 -- user
 DEFINE FIELD IF NOT EXISTS api_key_hash ON TABLE user TYPE string;
@@ -64,6 +71,8 @@ DEFINE FIELD IF NOT EXISTS revoked_at ON TABLE auth_token TYPE option<datetime>;
 -- session
 DEFINE FIELD IF NOT EXISTS user ON TABLE session TYPE record<user> ASSERT record::exists($value);
 DEFINE FIELD IF NOT EXISTS title ON TABLE session TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS encrypted ON TABLE session TYPE bool;
+DEFINE FIELD IF NOT EXISTS key_id ON TABLE session TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE session TYPE datetime;
 DEFINE FIELD IF NOT EXISTS updated_at ON TABLE session TYPE datetime;
 DEFINE FIELD IF NOT EXISTS archived_at ON TABLE session TYPE option<datetime>;
@@ -77,7 +86,7 @@ DEFINE FIELD IF NOT EXISTS model ON TABLE session_message TYPE string;
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_message TYPE datetime;
 
 -- session_message_content
-DEFINE FIELD IF NOT EXISTS content ON TABLE session_message_content TYPE string;
+DEFINE FIELD IF NOT EXISTS content ON TABLE session_message_content TYPE object FLEXIBLE;
 
 -- session_routing_decision
 DEFINE FIELD IF NOT EXISTS session ON TABLE session_routing_decision TYPE record<session> ASSERT record::exists($value);
@@ -109,9 +118,9 @@ DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_tool_call TYPE datetime;
 DEFINE FIELD IF NOT EXISTS completed_at ON TABLE session_tool_call TYPE option<datetime>;
 
 -- session_tool_call_content
-DEFINE FIELD IF NOT EXISTS arguments ON TABLE session_tool_call_content TYPE string;
-DEFINE FIELD IF NOT EXISTS result ON TABLE session_tool_call_content TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS error ON TABLE session_tool_call_content TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS arguments ON TABLE session_tool_call_content TYPE object FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS result ON TABLE session_tool_call_content TYPE option<object> FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS error ON TABLE session_tool_call_content TYPE option<object> FLEXIBLE;
 
 -- session_approval
 DEFINE FIELD IF NOT EXISTS session ON TABLE session_approval TYPE record<session> ASSERT record::exists($value);
@@ -133,7 +142,7 @@ DEFINE FIELD IF NOT EXISTS approved_at ON TABLE session_plan TYPE option<datetim
 DEFINE FIELD IF NOT EXISTS content_hash ON TABLE session_plan TYPE option<string>;
 
 -- session_plan_content
-DEFINE FIELD IF NOT EXISTS content_snapshot ON TABLE session_plan_content TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS content_snapshot ON TABLE session_plan_content TYPE option<object> FLEXIBLE;
 
 -- session_diff
 DEFINE FIELD IF NOT EXISTS session ON TABLE session_diff TYPE record<session> ASSERT record::exists($value);
@@ -144,7 +153,7 @@ DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_diff TYPE datetime;
 DEFINE FIELD IF NOT EXISTS applied_at ON TABLE session_diff TYPE option<datetime>;
 
 -- session_diff_content
-DEFINE FIELD IF NOT EXISTS diff ON TABLE session_diff_content TYPE string;
+DEFINE FIELD IF NOT EXISTS diff ON TABLE session_diff_content TYPE object FLEXIBLE;
 
 -- trace_event
 DEFINE FIELD IF NOT EXISTS session ON TABLE trace_event TYPE record<session> ASSERT record::exists($value);
@@ -157,7 +166,7 @@ DEFINE FIELD IF NOT EXISTS matched_rule ON TABLE trace_event TYPE option<string>
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE trace_event TYPE datetime;
 
 -- trace_event_content
-DEFINE FIELD IF NOT EXISTS payload ON TABLE trace_event_content TYPE string;
+DEFINE FIELD IF NOT EXISTS payload ON TABLE trace_event_content TYPE object FLEXIBLE;
 
 -- user_memory
 DEFINE FIELD IF NOT EXISTS user ON TABLE user_memory TYPE record<user> ASSERT record::exists($value);
@@ -176,7 +185,7 @@ DEFINE FIELD IF NOT EXISTS created_at ON TABLE context_memory TYPE datetime;
 DEFINE FIELD IF NOT EXISTS updated_at ON TABLE context_memory TYPE datetime;
 
 -- context_memory_content
-DEFINE FIELD IF NOT EXISTS content ON TABLE context_memory_content TYPE string;
+DEFINE FIELD IF NOT EXISTS content ON TABLE context_memory_content TYPE object FLEXIBLE;
 
 -- Uniqueness of secret hashes. Both fields are always present, so a plain
 -- UNIQUE index is safe and surfaces duplicates as a constraint violation.

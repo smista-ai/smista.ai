@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use surrealdb::types::{RecordId, SurrealValue};
 
 use super::Table;
+use crate::types::SecretContent;
 
 /// Lifecycle status of a plan.
 ///
@@ -61,8 +62,8 @@ impl Table for SessionPlan {
 pub struct SessionPlanContent {
     /// Record id, identical to the owning [`SessionPlan`].
     pub id: RecordId,
-    /// Snapshot of the plan body.
-    pub content_snapshot: Option<String>,
+    /// Snapshot of the plan body, in clear or sealed for an encrypted session.
+    pub content_snapshot: Option<SecretContent>,
 }
 
 impl Table for SessionPlanContent {
@@ -107,7 +108,7 @@ mod tests {
         let id = RecordId::new(SessionPlanContent::name(), uuid::Uuid::now_v7().to_string());
         let content = SessionPlanContent {
             id,
-            content_snapshot: Some("1. do the thing".to_string()),
+            content_snapshot: Some(SecretContent::plaintext("1. do the thing")),
         };
 
         crate::tests::roundtrip(content).await;

@@ -12,6 +12,7 @@ use smista_core::model::Provider;
 use surrealdb::types::{RecordId, SurrealValue};
 
 use super::Table;
+use crate::types::SecretContent;
 
 /// A message exchanged during a session.
 ///
@@ -48,8 +49,8 @@ impl Table for SessionMessage {
 pub struct SessionMessageContent {
     /// Record id, identical to the owning [`SessionMessage`].
     pub id: RecordId,
-    /// The message body.
-    pub content: String,
+    /// The message body, stored in clear or sealed for an encrypted session.
+    pub content: SecretContent,
 }
 
 impl Table for SessionMessageContent {
@@ -93,7 +94,7 @@ mod tests {
         );
         let content = SessionMessageContent {
             id,
-            content: "the message body".to_string(),
+            content: SecretContent::plaintext("the message body"),
         };
 
         crate::tests::roundtrip(content).await;

@@ -49,9 +49,10 @@ These rules hold for every table in the schema:
 - **Metadata and content are physically separated.** Every entity that carries
   sensitive free-form content has a paired 1:1 `<entity>_content` table sharing
   the same record id. The base table holds queryable metadata; the `_content`
-  table holds only the encryptable payload. This enables future end-to-end
-  encryption with no later migration — metadata stays queryable while content
-  may be encrypted before persistence.
+  table holds only the encryptable payload. This enables end-to-end encryption
+  with no later migration: metadata stays queryable while content is stored
+  either in clear or sealed as a ciphertext envelope. See
+  [End-to-end encryption](./e2e.md) for the full design.
 - **User ownership is enforced at the query boundary.** Every session-scoped row
   stores `user` redundantly so ownership checks and scoped queries never need a
   join. A user can only ever reach rows they own.
@@ -85,6 +86,8 @@ erDiagram
         uuid id PK
         uuid user FK
         string title "optional"
+        bool encrypted
+        string key_id "optional"
         datetime created_at
         datetime updated_at
         datetime archived_at "optional"
@@ -192,6 +195,21 @@ Metadata-only entities (`user`, `auth_token`, `session`,
 `session_routing_decision`, `session_context_reference`, `session_approval`)
 stay single-table.
 
+Each encryptable payload field is typed `SecretContent` below. A `SecretContent`
+holds the value either in clear or sealed as a ciphertext envelope, and is stored
+as a flexible object in one of two shapes:
+
+- Plaintext: `{ "Plaintext": "<text>" }`, used by a non-encrypted session.
+- Encrypted: `{ "Encrypted": { "version": int, "algorithm": string, "key_id":
+  string, "nonce": string, "ciphertext": string } }`, used by an encrypted
+  session. The envelope is opaque to storage and the router; only a client
+  holding the session key can open it.
+
+Whether a session's content is plaintext or encrypted is fixed by the owning
+`session`'s `encrypted` flag. `user_memory_content` is the one exception: it is
+user-scoped rather than session-scoped, so it is not yet encryptable and keeps a
+plain `string`. See [End-to-end encryption](./e2e.md).
+
 ## Tables
 
 Each table below lists its fields. The `id` field is the SurrealDB record id
@@ -238,14 +256,22 @@ expired or revoked tokens are rejected and cleaned up over time.
 A resumable user interaction with smista.ai. Each session belongs to exactly one
 user, who is the only identity allowed to access it.
 
-| Field         | Type             | Description                             |
-| ------------- | ---------------- | --------------------------------------- |
-| `id`          | UUIDv7           | Globally unique session id (record id). |
-| `user`        | user reference   | Owning user.                            |
-| `title`       | string, option   | Human-readable session title.           |
-| `created_at`  | datetime         | When the session was created.           |
-| `updated_at`  | datetime         | When the session was last updated.      |
-| `archived_at` | datetime, option | When the session was archived.          |
+| Field         | Type             | Description                                         |
+| ------------- | ---------------- | --------------------------------------------------- |
+| `id`          | UUIDv7           | Globally unique session id (record id).             |
+| `user`        | user reference   | Owning user.                                        |
+| `title`       | string, option   | Human-readable session title.                       |
+| `encrypted`   | bool             | Whether the session's content is encrypted.         |
+| `key_id`      | string, option   | Fingerprint of the per-session key, when encrypted. |
+| `created_at`  | datetime         | When the session was created.                       |
+| `updated_at`  | datetime         | When the session was last updated.                  |
+| `archived_at` | datetime, option | When the session was archived.                      |
+
+`encrypted` is fixed when the session is created and never changed afterwards;
+flipping it would orphan content the router cannot re-key. When `true`, every
+paired `_content` row in the session stores a sealed payload and `key_id` names
+the per-session key that sealed it. The key itself never reaches storage. See
+[End-to-end encryption](./e2e.md).
 
 ### session_message
 
@@ -266,9 +292,10 @@ lives in `session_message_content`.
 
 Paired 1:1 with `session_message` (same record id).
 
-| Field     | Type   | Description       |
-| --------- | ------ | ----------------- |
-| `content` | string | The message body. |
+| Field     | Type            | Description                      |
+| --------- | --------------- | -------------------------------- |
+| `id`      | UUIDv7          | Record id, same as the metadata. |
+| `content` | `SecretContent` | The message body.                |
 
 ### session_routing_decision
 
@@ -325,11 +352,12 @@ secrets before persistence.
 
 Paired 1:1 with `session_tool_call` (same record id).
 
-| Field       | Type           | Description                      |
-| ----------- | -------------- | -------------------------------- |
-| `arguments` | string         | Tool-call arguments (sanitised). |
-| `result`    | string, option | Tool-call result (sanitised).    |
-| `error`     | string, option | Error, if the tool call failed.  |
+| Field       | Type                    | Description                      |
+| ----------- | ----------------------- | -------------------------------- |
+| `id`        | UUIDv7                  | Record id, same as the metadata. |
+| `arguments` | `SecretContent`         | Tool-call arguments (sanitised). |
+| `result`    | `SecretContent`, option | Tool-call result (sanitised).    |
+| `error`     | `SecretContent`, option | Error, if the tool call failed.  |
 
 ### session_approval
 
@@ -369,9 +397,10 @@ Records a generated or approved execution plan. The plan snapshot lives in
 
 Paired 1:1 with `session_plan` (same record id).
 
-| Field              | Type           | Description                |
-| ------------------ | -------------- | -------------------------- |
-| `content_snapshot` | string, option | Snapshot of the plan body. |
+| Field              | Type                    | Description                      |
+| ------------------ | ----------------------- | -------------------------------- |
+| `id`               | UUIDv7                  | Record id, same as the metadata. |
+| `content_snapshot` | `SecretContent`, option | Snapshot of the plan body.       |
 
 ### session_diff
 
@@ -393,9 +422,10 @@ privacy policy.
 
 Paired 1:1 with `session_diff` (same record id).
 
-| Field  | Type   | Description                      |
-| ------ | ------ | -------------------------------- |
-| `diff` | string | The diff body (secret-filtered). |
+| Field  | Type            | Description                      |
+| ------ | --------------- | -------------------------------- |
+| `id`   | UUIDv7          | Record id, same as the metadata. |
+| `diff` | `SecretContent` | The diff body (secret-filtered). |
 
 ### trace_event
 
@@ -422,11 +452,15 @@ from trace events alone. The free-form payload lives in `trace_event_content`.
 
 Paired 1:1 with `trace_event` (same record id).
 
-| Field     | Type   | Description               |
-| --------- | ------ | ------------------------- |
-| `payload` | string | Structured event payload. |
+| Field     | Type            | Description                      |
+| --------- | --------------- | -------------------------------- |
+| `id`      | UUIDv7          | Record id, same as the metadata. |
+| `payload` | `SecretContent` | Structured event payload.        |
 
-The `payload` is a JSON object, serialized to a string. Its shape is determined
+The payload is a JSON object serialized to a string, then wrapped as a
+`SecretContent`. The shapes below describe that plaintext string; in an encrypted
+session it is sealed in the envelope and only the holder of the session key can
+read it. Its shape is determined
 by the owning event's `event_type` and mirrors the fields of the matching
 metadata entity. `?` marks an optional field; `int` is a JSON number and a
 monetary `cost` is a decimal string (never a float).
@@ -461,9 +495,14 @@ deletion; subject to retention. The fact lives in `user_memory_content`.
 
 Paired 1:1 with `user_memory` (same record id).
 
-| Field     | Type   | Description          |
-| --------- | ------ | -------------------- |
-| `content` | string | The remembered fact. |
+| Field     | Type   | Description                      |
+| --------- | ------ | -------------------------------- |
+| `id`      | UUIDv7 | Record id, same as the metadata. |
+| `content` | string | The remembered fact.             |
+
+This is the one content payload that is not yet encryptable: `user_memory` is
+user-scoped, so the per-session `encrypted` flag cannot reach it. It keeps a
+plain `string` until a user-level scheme is designed.
 
 ### context_memory
 
@@ -485,9 +524,10 @@ in `context_memory_content`.
 
 Paired 1:1 with `context_memory` (same record id).
 
-| Field     | Type   | Description          |
-| --------- | ------ | -------------------- |
-| `content` | string | The remembered fact. |
+| Field     | Type            | Description                      |
+| --------- | --------------- | -------------------------------- |
+| `id`      | UUIDv7          | Record id, same as the metadata. |
+| `content` | `SecretContent` | The remembered fact.             |
 
 ## Indexes
 
