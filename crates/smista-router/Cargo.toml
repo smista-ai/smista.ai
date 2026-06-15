@@ -25,9 +25,11 @@ axum = { workspace = true, features = [
   "tracing",
 ] }
 clap = { workspace = true, features = ["derive", "env"] }
+rust_decimal = { workspace = true, features = ["serde-with-str"] }
 secrecy = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 smista-core = { workspace = true }
+smista-providers = { workspace = true }
 smista-storage = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = [
@@ -46,9 +48,12 @@ tower_governor = { workspace = true, features = ["axum", "tracing"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url = { workspace = true, features = ["serde"] }
+uuid = { workspace = true, features = ["v7"] }
 
 [dev-dependencies]
+async-trait = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+futures = { workspace = true }
 serde_json = { workspace = true }
 surrealdb = { workspace = true, features = ["kv-mem"] }
 tempfile = { workspace = true }

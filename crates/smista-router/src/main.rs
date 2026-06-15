@@ -13,6 +13,7 @@ mod args;
 mod config;
 mod log;
 mod retention;
+mod router;
 mod signal;
 mod storage;
 mod web;
@@ -79,11 +80,11 @@ async fn tokio_main() -> anyhow::Result<()> {
 
     // start the HTTP server
     tracing::debug!("starting web server");
-    let web_service = web::WebServer::new(web::WebServerConfig {
+    let web_service = web::WebServer::init(web::WebServerConfig {
         config,
         database,
         exit: exit.clone(),
-    })
+    })?
     .run()
     .await?;
 
