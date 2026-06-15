@@ -34,7 +34,7 @@ use crate::api::{
     CompletionRequest, CompletionResponse, FinishReason, RequestMessage, ResponseStream, ToolCall,
     ToolChoice, ToolDefinition,
 };
-use crate::memory::{MemoryRecord, MemoryStorage, MemoryTool};
+use crate::memory::{MemoryRecord, MemoryScope, MemoryStorage, MemoryTool};
 
 /// Maximum number of memory records to load from each memory type (user and session) when building the agent preamble.
 const MEMORIES_MAX_RECORDS: usize = 40;
@@ -62,6 +62,8 @@ where
     pub preamble: String,
     /// The memory storage to use for the agent's memory operations.
     pub storage: Arc<S>,
+    /// The user and session the agent's memory operations are scoped to.
+    pub scope: MemoryScope,
 }
 
 /// Internal structure which wraps an [`RigAgent`], and is built from the provider configuration and memory storage.
@@ -96,6 +98,7 @@ where
             descriptor,
             preamble,
             storage,
+            scope,
         }: AgentArgs<C, S>,
     ) -> ProviderResult<Self>
     where
@@ -111,10 +114,10 @@ where
             "loading preamble from memory storage for {{model.provider}}/{{model.name}}"
         );
         let memory_preamble =
-            load_memories_preamble(storage.as_ref(), provider.clone(), &model).await?;
+            load_memories_preamble(storage.as_ref(), scope, provider.clone(), &model).await?;
 
         // load memory tool
-        let memory_tool = MemoryTool::new(storage.clone());
+        let memory_tool = MemoryTool::new(storage.clone(), scope);
 
         // build agent
         tracing::debug!(
@@ -773,6 +776,7 @@ fn completion_events(response: CompletionResponse) -> ResponseStream {
 /// Loads the preamble for the agent by fetching user and session memories from the storage, normalizing the results, and building the preamble string.
 async fn load_memories_preamble<S>(
     storage: &S,
+    scope: MemoryScope,
     provider: Provider,
     model: &str,
 ) -> ProviderResult<Option<String>>
@@ -780,14 +784,16 @@ where
     S: MemoryStorage,
 {
     let user_memories = normalize_memories_result::<S>(
-        storage.get_user_memories(Some(MEMORIES_MAX_RECORDS)).await,
+        storage
+            .get_user_memories(scope, Some(MEMORIES_MAX_RECORDS))
+            .await,
         provider.clone(),
         model,
     )
     .await?;
     let session_memories = normalize_memories_result::<S>(
         storage
-            .get_session_memories(Some(MEMORIES_MAX_RECORDS))
+            .get_session_memories(scope, Some(MEMORIES_MAX_RECORDS))
             .await,
         provider,
         model,

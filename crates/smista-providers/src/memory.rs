@@ -22,10 +22,26 @@ mod storage;
 mod tool;
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 pub use self::preamble::build_preamble;
 pub use self::storage::MemoryStorage;
 pub use self::tool::{MemoryTool, MemoryToolError};
+
+/// Identifies the user and session a memory operation is scoped to.
+///
+/// The [`MemoryStorage`] backend is a long-lived, shared handle, so every call
+/// carries the scope it acts within rather than baking it in at construction.
+/// User-scoped operations read only [`user_id`](Self::user_id); session-scoped
+/// operations are confined to [`session_id`](Self::session_id) owned by that
+/// user.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MemoryScope {
+    /// The user whose memories the operation may touch.
+    pub user_id: Uuid,
+    /// The session a session-scoped operation is confined to.
+    pub session_id: Uuid,
+}
 
 /// A single memory entry as surfaced to the caller.
 ///

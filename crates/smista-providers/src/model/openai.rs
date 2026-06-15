@@ -15,7 +15,7 @@ use crate::ProviderResult;
 use crate::agent::{Agent, AgentArgs};
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
 use crate::auth::Authentication;
-use crate::memory::MemoryStorage;
+use crate::memory::{MemoryScope, MemoryStorage};
 use crate::model::Model;
 
 /// Returns the descriptors for every OpenAI model smista.ai offers.
@@ -101,6 +101,7 @@ impl OpenAIModel {
         OpenAIModelArgs { preamble, storage }: OpenAIModelArgs<S>,
         authentication: &Authentication,
         descriptor: ModelDescriptor,
+        scope: MemoryScope,
     ) -> Result<Self, ProviderError>
     where
         S: MemoryStorage + 'static,
@@ -123,6 +124,7 @@ impl OpenAIModel {
             descriptor: descriptor.clone(),
             preamble,
             storage,
+            scope,
         })
         .await?;
 
@@ -171,18 +173,24 @@ mod tests {
 
         async fn put_user_memory(
             &self,
+            _scope: MemoryScope,
             _key: Option<String>,
             _content: String,
         ) -> Result<MemoryRecord, Self::Error> {
             unreachable!("not exercised by these tests")
         }
 
-        async fn forget_user_memory(&self, _handle: String) -> Result<(), Self::Error> {
+        async fn forget_user_memory(
+            &self,
+            _scope: MemoryScope,
+            _handle: String,
+        ) -> Result<(), Self::Error> {
             Ok(())
         }
 
         async fn get_user_memories(
             &self,
+            _scope: MemoryScope,
             _limit: Option<usize>,
         ) -> Result<Vec<MemoryRecord>, Self::Error> {
             Ok(Vec::new())
@@ -190,6 +198,7 @@ mod tests {
 
         async fn get_user_memory_by_key(
             &self,
+            _scope: MemoryScope,
             _key: String,
         ) -> Result<Option<MemoryRecord>, Self::Error> {
             Ok(None)
@@ -197,18 +206,24 @@ mod tests {
 
         async fn put_session_memory(
             &self,
+            _scope: MemoryScope,
             _key: Option<String>,
             _content: String,
         ) -> Result<MemoryRecord, Self::Error> {
             unreachable!("not exercised by these tests")
         }
 
-        async fn forget_session_memory(&self, _handle: String) -> Result<(), Self::Error> {
+        async fn forget_session_memory(
+            &self,
+            _scope: MemoryScope,
+            _handle: String,
+        ) -> Result<(), Self::Error> {
             Ok(())
         }
 
         async fn get_session_memories(
             &self,
+            _scope: MemoryScope,
             _limit: Option<usize>,
         ) -> Result<Vec<MemoryRecord>, Self::Error> {
             Ok(Vec::new())
@@ -216,6 +231,7 @@ mod tests {
 
         async fn get_session_memory_by_key(
             &self,
+            _scope: MemoryScope,
             _key: String,
         ) -> Result<Option<MemoryRecord>, Self::Error> {
             Ok(None)

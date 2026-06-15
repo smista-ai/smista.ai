@@ -32,6 +32,7 @@ use smista_core::model::{ModelReference, Provider as ProviderId, ProviderDescrip
 
 use crate::ProviderResult;
 use crate::auth::Authentication;
+use crate::memory::MemoryScope;
 use crate::model::Model;
 
 /// A provider account or endpoint: discovers models and resolves them for
@@ -68,13 +69,16 @@ pub trait Provider: Send + Sync {
     fn descriptor(&self) -> ProviderDescriptor;
 
     /// Resolves a reference into an executable model offered by this provider,
-    /// authenticating with the supplied [`Authentication`].
+    /// authenticating with the supplied [`Authentication`] and binding the
+    /// model's memory to `scope`.
     ///
     /// On success the returned `Arc<dyn Model>` is ready to serve completions
     /// and exposes the model's facts via [`Model::descriptor`]. The handle is
     /// reference-counted so the router can share one model across concurrent
     /// tasks. The credentials are read from `authentication` rather than held by
-    /// the provider, so the same provider can resolve for different callers.
+    /// the provider, so the same provider can resolve for different callers; the
+    /// `scope` identifies the user and session whose memories the resolved model
+    /// reads and writes.
     ///
     /// # Errors
     ///
@@ -92,6 +96,7 @@ pub trait Provider: Send + Sync {
         &self,
         reference: &ModelReference,
         authentication: &Authentication,
+        scope: MemoryScope,
     ) -> ProviderResult<Arc<dyn Model>>;
 
     /// Lists every model this provider currently offers, authenticating with the

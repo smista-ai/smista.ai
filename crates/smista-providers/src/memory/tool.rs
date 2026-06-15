@@ -16,6 +16,7 @@ use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde::Deserialize;
 
+use crate::memory::MemoryScope;
 use crate::memory::storage::MemoryStorage;
 
 /// Operation the model asks the [`MemoryTool`] to perform on memory.
@@ -28,22 +29,22 @@ pub enum MemoryOp {
     Forget,
 }
 
-/// Scope of a memory entry: whether it belongs to a user or to a single session.
+/// Which memory store an operation targets: the user's or the session's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum MemoryScope {
+pub enum MemoryStore {
     /// A long-term fact about the user, shared across all of their sessions.
     User,
     /// A fact local to one session, invisible to other sessions of the same user.
     Session,
 }
 
-impl MemoryScope {
+impl MemoryStore {
     /// Lower-case label used when reporting an operation back to the model.
     const fn label(self) -> &'static str {
         match self {
-            MemoryScope::User => "user",
-            MemoryScope::Session => "session",
+            MemoryStore::User => "user",
+            MemoryStore::Session => "session",
         }
     }
 }
@@ -58,7 +59,7 @@ pub struct MemoryArgs {
     /// The operation to perform.
     op: MemoryOp,
     /// Which store the operation targets.
-    scope: MemoryScope,
+    scope: MemoryStore,
     /// Topic the fact is filed under; also how it is later forgotten.
     key: String,
     /// The fact to record. Required for `record`, ignored for `forget`.
@@ -83,35 +84,42 @@ where
 
 /// A tool that lets an agent record and forget memories during a turn.
 ///
-/// Generic over the [`MemoryStorage`] backend, which is created already scoped
-/// to the user and session this tool serves. The backend is shared (`Arc`) so
-/// the same scoped storage can also back the caller's preamble loading.
+/// Generic over the [`MemoryStorage`] backend, which is a shared, long-lived
+/// handle. The tool carries the [`MemoryScope`] it serves and passes it on
+/// every call; the same backend can therefore also back the caller's preamble
+/// loading for any scope.
 pub struct MemoryTool<S>
 where
     S: MemoryStorage,
 {
-    /// The scoped backend this tool records into and forgets from.
+    /// The shared backend this tool records into and forgets from.
     storage: Arc<S>,
+    /// The user and session this tool's operations are scoped to.
+    scope: MemoryScope,
 }
 
 impl<S> MemoryTool<S>
 where
     S: MemoryStorage,
 {
-    /// Creates a new [`MemoryTool`] backed by `storage`.
-    pub fn new(storage: Arc<S>) -> Self {
-        Self { storage }
+    /// Creates a new [`MemoryTool`] backed by `storage`, scoped to `scope`.
+    pub fn new(storage: Arc<S>, scope: MemoryScope) -> Self {
+        Self { storage, scope }
     }
 
-    /// Resolves a `key` to its backend handle within `scope`, if present.
+    /// Resolves a `key` to its backend handle within `store`, if present.
     async fn handle_for(
         &self,
-        scope: MemoryScope,
+        store: MemoryStore,
         key: String,
     ) -> Result<Option<String>, S::Error> {
-        let memory = match scope {
-            MemoryScope::User => self.storage.get_user_memory_by_key(key).await?,
-            MemoryScope::Session => self.storage.get_session_memory_by_key(key).await?,
+        let memory = match store {
+            MemoryStore::User => self.storage.get_user_memory_by_key(self.scope, key).await?,
+            MemoryStore::Session => {
+                self.storage
+                    .get_session_memory_by_key(self.scope, key)
+                    .await?
+            }
         };
 
         Ok(memory.map(|memory| memory.handle))
@@ -175,7 +183,7 @@ where
     async fn call(&self, args: MemoryArgs) -> Result<String, Self::Error> {
         let MemoryArgs {
             op,
-            scope,
+            scope: store,
             key,
             value,
         } = args;
@@ -183,29 +191,35 @@ where
         match op {
             MemoryOp::Record => {
                 let value = value.ok_or(MemoryToolError::MissingValue)?;
-                match scope {
-                    MemoryScope::User => {
+                match store {
+                    MemoryStore::User => {
                         self.storage
-                            .put_user_memory(Some(key.clone()), value)
+                            .put_user_memory(self.scope, Some(key.clone()), value)
                             .await?;
                     }
-                    MemoryScope::Session => {
+                    MemoryStore::Session => {
                         self.storage
-                            .put_session_memory(Some(key.clone()), value)
+                            .put_session_memory(self.scope, Some(key.clone()), value)
                             .await?;
                     }
                 }
-                Ok(format!("Recorded {} memory \"{key}\".", scope.label()))
+                Ok(format!("Recorded {} memory \"{key}\".", store.label()))
             }
-            MemoryOp::Forget => match self.handle_for(scope, key.clone()).await? {
+            MemoryOp::Forget => match self.handle_for(store, key.clone()).await? {
                 Some(handle) => {
-                    match scope {
-                        MemoryScope::User => self.storage.forget_user_memory(handle).await?,
-                        MemoryScope::Session => self.storage.forget_session_memory(handle).await?,
+                    match store {
+                        MemoryStore::User => {
+                            self.storage.forget_user_memory(self.scope, handle).await?;
+                        }
+                        MemoryStore::Session => {
+                            self.storage
+                                .forget_session_memory(self.scope, handle)
+                                .await?;
+                        }
                     }
-                    Ok(format!("Forgot {} memory \"{key}\".", scope.label()))
+                    Ok(format!("Forgot {} memory \"{key}\".", store.label()))
                 }
-                None => Ok(format!("No {} memory found for \"{key}\".", scope.label())),
+                None => Ok(format!("No {} memory found for \"{key}\".", store.label())),
             },
         }
     }
@@ -215,6 +229,8 @@ where
 mod tests {
     use std::collections::HashMap;
     use std::sync::Mutex;
+
+    use uuid::Uuid;
 
     use super::*;
     use crate::memory::MemoryRecord;
@@ -261,6 +277,7 @@ mod tests {
 
         async fn put_user_memory(
             &self,
+            _scope: MemoryScope,
             key: Option<String>,
             content: String,
         ) -> Result<MemoryRecord, Self::Error> {
@@ -276,7 +293,11 @@ mod tests {
             })
         }
 
-        async fn forget_user_memory(&self, handle: String) -> Result<(), Self::Error> {
+        async fn forget_user_memory(
+            &self,
+            _scope: MemoryScope,
+            handle: String,
+        ) -> Result<(), Self::Error> {
             let key = handle.strip_prefix("handle:").unwrap_or(&handle);
             self.user.lock().unwrap().remove(key);
             Ok(())
@@ -284,6 +305,7 @@ mod tests {
 
         async fn get_user_memories(
             &self,
+            _scope: MemoryScope,
             _limit: Option<usize>,
         ) -> Result<Vec<MemoryRecord>, Self::Error> {
             Ok(Self::records(&self.user))
@@ -291,6 +313,7 @@ mod tests {
 
         async fn get_user_memory_by_key(
             &self,
+            _scope: MemoryScope,
             key: String,
         ) -> Result<Option<MemoryRecord>, Self::Error> {
             Ok(Self::record_by_key(&self.user, &key))
@@ -298,6 +321,7 @@ mod tests {
 
         async fn put_session_memory(
             &self,
+            _scope: MemoryScope,
             key: Option<String>,
             content: String,
         ) -> Result<MemoryRecord, Self::Error> {
@@ -313,7 +337,11 @@ mod tests {
             })
         }
 
-        async fn forget_session_memory(&self, handle: String) -> Result<(), Self::Error> {
+        async fn forget_session_memory(
+            &self,
+            _scope: MemoryScope,
+            handle: String,
+        ) -> Result<(), Self::Error> {
             let key = handle.strip_prefix("handle:").unwrap_or(&handle);
             self.session.lock().unwrap().remove(key);
             Ok(())
@@ -321,6 +349,7 @@ mod tests {
 
         async fn get_session_memories(
             &self,
+            _scope: MemoryScope,
             _limit: Option<usize>,
         ) -> Result<Vec<MemoryRecord>, Self::Error> {
             Ok(Self::records(&self.session))
@@ -328,14 +357,23 @@ mod tests {
 
         async fn get_session_memory_by_key(
             &self,
+            _scope: MemoryScope,
             key: String,
         ) -> Result<Option<MemoryRecord>, Self::Error> {
             Ok(Self::record_by_key(&self.session, &key))
         }
     }
 
+    /// A throwaway scope; `FakeStorage` ignores it.
+    fn scope() -> MemoryScope {
+        MemoryScope {
+            user_id: Uuid::now_v7(),
+            session_id: Uuid::now_v7(),
+        }
+    }
+
     fn tool() -> MemoryTool<FakeStorage> {
-        MemoryTool::new(Arc::new(FakeStorage::default()))
+        MemoryTool::new(Arc::new(FakeStorage::default()), scope())
     }
 
     #[tokio::test]
@@ -344,7 +382,7 @@ mod tests {
         let out = tool
             .call(MemoryArgs {
                 op: MemoryOp::Record,
-                scope: MemoryScope::User,
+                scope: MemoryStore::User,
                 key: "editor".to_string(),
                 value: Some("neovim".to_string()),
             })
@@ -368,7 +406,7 @@ mod tests {
         let tool = tool();
         tool.call(MemoryArgs {
             op: MemoryOp::Record,
-            scope: MemoryScope::Session,
+            scope: MemoryStore::Session,
             key: "cwd".to_string(),
             value: Some("/tmp".to_string()),
         })
@@ -393,7 +431,7 @@ mod tests {
         let err = tool
             .call(MemoryArgs {
                 op: MemoryOp::Record,
-                scope: MemoryScope::User,
+                scope: MemoryStore::User,
                 key: "editor".to_string(),
                 value: None,
             })
@@ -408,7 +446,7 @@ mod tests {
         let tool = tool();
         tool.call(MemoryArgs {
             op: MemoryOp::Record,
-            scope: MemoryScope::User,
+            scope: MemoryStore::User,
             key: "editor".to_string(),
             value: Some("neovim".to_string()),
         })
@@ -418,7 +456,7 @@ mod tests {
         let out = tool
             .call(MemoryArgs {
                 op: MemoryOp::Forget,
-                scope: MemoryScope::User,
+                scope: MemoryStore::User,
                 key: "editor".to_string(),
                 value: None,
             })
@@ -435,7 +473,7 @@ mod tests {
         let out = tool
             .call(MemoryArgs {
                 op: MemoryOp::Forget,
-                scope: MemoryScope::Session,
+                scope: MemoryStore::Session,
                 key: "ghost".to_string(),
                 value: None,
             })
@@ -456,7 +494,7 @@ mod tests {
         .expect("valid args");
 
         assert!(matches!(args.op, MemoryOp::Record));
-        assert!(matches!(args.scope, MemoryScope::User));
+        assert!(matches!(args.scope, MemoryStore::User));
         assert_eq!(args.key, "editor");
         assert_eq!(args.value.as_deref(), Some("neovim"));
     }
