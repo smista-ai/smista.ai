@@ -29,6 +29,12 @@ request_timeout_ms = 120000
 provider_timeout_ms = 180000
 tool_timeout_ms = 60000
 
+[router.rate_limit]
+enabled = true
+period_ms = 10
+burst_size = 200
+trust_proxy_headers = false
+
 [router.logging]
 level = "info"
 format = "compact"
