@@ -10,11 +10,11 @@ publish = false
 smista-providers = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [dev-dependencies]
 futures = { workspace = true }
 rig-core = { workspace = true }
-secrecy = { workspace = true }
+secrecy = { workspace = true, features = ["serde"] }
 smista-core = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

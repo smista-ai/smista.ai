@@ -7,7 +7,7 @@ license = "Elastic-2.0"
 publish = false
 
 [dev-dependencies]
-secrecy = { workspace = true }
+secrecy = { workspace = true, features = ["serde"] }
 smista-storage = { workspace = true }
 surrealdb = { workspace = true, features = ["protocol-http", "protocol-ws"] }
 testcontainers = { workspace = true }
