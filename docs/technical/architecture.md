@@ -23,7 +23,6 @@ its backend.
 | `smista-core`          | Library        | Shared domain types, config, policy, trace structures, validation, errors.     |
 | `smista-providers`     | Library        | Model abstraction and provider adapters (OpenAI, Anthropic, Ollama, …).        |
 | `smista-storage`       | Library        | Storage traits, entities (incl. trace events) and the SurrealDB layer.         |
-| `smista-web`           | Library        | `axum` HTTP JSON API server for the router.                                    |
 | `@smista-ai/sdk`       | TypeScript SDK | Typed client over the router HTTP API.                                         |
 
 ## Principles

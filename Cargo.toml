@@ -9,7 +9,6 @@ members = [
   "crates/smista-router-client",
   "crates/smista-sdk",
   "crates/smista-storage",
-  "crates/smista-web",
 ]
 resolver = "3"
 
@@ -54,7 +53,6 @@ smista-router = { version = "0.0", path = "crates/smista-router" }
 smista-router-client = { version = "0.0", path = "crates/smista-router-client" }
 smista-sdk = { version = "0.0", path = "crates/smista-sdk" }
 smista-storage = { version = "0.0", path = "crates/smista-storage" }
-smista-web = { version = "0.0", path = "crates/smista-web" }
 surrealdb = "3"
 surrealdb-types = "3"
 tempfile = "3"

@@ -17,9 +17,6 @@ publish_smista_storage: (_publish "smista-storage")
 publish_smista_providers: (_publish "smista-providers")
 
 [group('publish')]
-publish_smista_web: (_publish "smista-web")
-
-[group('publish')]
 publish_smista_router: (_publish "smista-router")
 
 [group('publish')]

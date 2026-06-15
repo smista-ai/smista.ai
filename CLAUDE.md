@@ -24,7 +24,6 @@ This is a Cargo workspace. All crates live under `crates/`:
 | `smista-storage`       | lib  | Storage traits, entities and SurrealDB implementation. | Elastic-2.0 |
 | `smista-providers`     | lib  | Model abstraction and provider adapters (via `rig`).   | Elastic-2.0 |
 | `smista-router`        | bin  | Routing/orchestration service.                         | Elastic-2.0 |
-| `smista-web`           | lib  | `axum` HTTP JSON API for the router.                   | Elastic-2.0 |
 | `smista-router-client` | lib  | Async Rust client for the router HTTP API.             | MIT         |
 | `smista-sdk`           | lib  | Rust SDK facade re-exporting core types (+ client).    | MIT         |
 | `smista-cli`           | bin  | The `smista` CLI (`ratatui` + `clap`).                 | Elastic-2.0 |
