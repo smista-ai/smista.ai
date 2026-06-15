@@ -304,12 +304,12 @@ base_url = "https://api.openai.com/v1"
 
 Each `[router.providers.<id>]` table accepts:
 
-| Key            | Type            | Default  | Purpose                                                                                                                           |
-| -------------- | --------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `base_url`     | string          | provider | Endpoint base URL; omit to use the provider's default.                                                                            |
-| `local`        | bool            | `false`  | Whether the provider runs locally; surfaced to consumers to tell local providers from hosted ones.                                |
-| `display_name` | string          | none     | Human-readable name for the provider; consumers fall back to the provider identifier when omitted.                                |
-| `models`       | list of strings | `[]`     | Models advertised for an `openai-compat:<name>` endpoint with no model-listing API; see below. Ignored by the built-in providers. |
+| Key            | Type           | Default  | Purpose                                                                                                                                                                                                              |
+| -------------- | -------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base_url`     | string         | provider | Endpoint base URL. Honored only by `openai-compat:<name>` endpoints and the Ollama cloud endpoint; the built-in API providers (OpenAI, Anthropic, Gemini) use their fixed endpoint and ignore it (validation warns). |
+| `local`        | bool           | `false`  | Whether the provider runs locally; surfaced to consumers to tell local providers from hosted ones.                                                                                                                   |
+| `display_name` | string         | none     | Human-readable name for the provider; consumers fall back to the provider identifier when omitted.                                                                                                                   |
+| `models`       | list of tables | `[]`     | Models advertised for an `openai-compat:<name>` endpoint with no model-listing API; each entry declares one model and its facts, see below. Ignored by the built-in providers.                                       |
 
 ### Generic OpenAI-compatible endpoints
 
@@ -320,30 +320,65 @@ instance*: you choose a name, and routing rules address it as
 `openai-compat:my-vllm/llama-3.1-70b`).
 
 Configure each instance under its full identity as the table key. The name is
-quoted because it contains a colon:
+quoted because it contains a colon. Each model is its own `[[...models]]` table:
 
 ```toml
 [router.providers."openai-compat:my-vllm"]
 base_url     = "http://localhost:8000/v1"
 local        = true
 display_name = "My vLLM"
-models       = ["llama-3.1-70b"]
+
+[[router.providers."openai-compat:my-vllm".models]]
+name               = "llama-3.1-70b"
+max_context_tokens = 131072
+max_output_tokens  = 8192
 
 [router.providers."openai-compat:lmstudio"]
 base_url = "http://localhost:1234/v1"
+
+[[router.providers."openai-compat:lmstudio".models]]
+name               = "qwen2.5-coder-7b"
+max_context_tokens = 32768
+input_cost_per_million_tokens  = "0.0"
+output_cost_per_million_tokens = "0.0"
 ```
 
-The router lists an endpoint's models from its `/v1/models` API when it offers
-one; otherwise it advertises the `models` you list here. A model name still
-routes even when it is not listed. The credential, if the endpoint needs one, is
-set on the CLI side — see the `openai-compat:<name>` provider in
-[Configuring the CLI](cli.md).
+These endpoints expose no catalog of model facts, so routing reads each model's
+facts from the `[[...models]]` tables you declare. The credential, if the
+endpoint needs one, is set on the CLI side — see the `openai-compat:<name>`
+provider in [Configuring the CLI](cli.md).
+
+Each `[[router.providers.<id>.models]]` table accepts:
+
+| Key                              | Type    | Default     | Purpose                                                                        |
+| -------------------------------- | ------- | ----------- | ------------------------------------------------------------------------------ |
+| `name`                           | string  | required    | Model name, exactly as the endpoint expects it.                                |
+| `max_context_tokens`             | integer | required    | Maximum context window the model accepts, in tokens.                           |
+| `display_name`                   | string  | none        | Human-readable name; consumers fall back to `name` when omitted.               |
+| `auth`                           | string  | `none`      | How the model authenticates: `none`, `api_key`, or `optional_api_key`.         |
+| `max_output_tokens`              | integer | none        | Maximum tokens the model emits, if bounded.                                    |
+| `capabilities`                   | table   | OpenAI-like | What the model can do; see below. Defaults suit an OpenAI-compatible endpoint. |
+| `input_cost_per_million_tokens`  | string  | none        | Input price per million tokens, as a decimal string for exact precision.       |
+| `output_cost_per_million_tokens` | string  | none        | Output price per million tokens, as a decimal string for exact precision.      |
+
+The `capabilities` table defaults to `streaming`, `tools`, `json_output`,
+`system_prompt` and `memory` enabled, with `images` and `reasoning` disabled.
+Override any of them per model:
+
+```toml
+[[router.providers."openai-compat:my-vllm".models]]
+name               = "llava-1.6"
+max_context_tokens = 32768
+
+[router.providers."openai-compat:my-vllm".models.capabilities]
+images = true
+```
 
 > [!NOTE]
-> Model facts — capabilities, context window, costs, whether a model is local,
-> and whether it requires authentication — are **not** configured here. The
-> router obtains them from the provider at runtime and uses them when it selects
-> a model. There is no model catalog in `router.toml`.
+> The built-in providers (OpenAI, Anthropic, Gemini) and Ollama discover their
+> model facts at runtime and ignore the `models` tables. Only generic
+> `openai-compat:<name>` endpoints, which publish no catalog, read facts from
+> here.
 
 > [!NOTE]
 > Ollama's endpoint and model discovery are configured separately, under
@@ -361,48 +396,14 @@ two must stay consistent — see
 [router.ollama]
 enabled = true
 base_url = "http://127.0.0.1:11434"
-auto_discover_models = true
-startup_healthcheck = true
-startup_required = false
-model_refresh_interval_seconds = 300
-
-[router.ollama.limits]
-max_concurrent_requests = 4
-request_timeout_ms = 180000
-pull_timeout_ms = 600000
-
-[router.ollama.models]
-preload = ["llama3.1:8b", "qwen2.5-coder:7b"]
-allow_pull = false
-allowed_models = ["llama3.1:8b", "qwen2.5-coder:7b", "mistral:7b"]
 ```
 
 The `[router.ollama]` table accepts:
 
-| Key                              | Type    | Default                  | Purpose                                  |
-| -------------------------------- | ------- | ------------------------ | ---------------------------------------- |
-| `enabled`                        | bool    | `false`                  | Whether the Ollama backend is active.    |
-| `base_url`                       | string  | `http://127.0.0.1:11434` | Ollama endpoint base URL.                |
-| `auto_discover_models`           | bool    | `true`                   | Auto-discover installed models.          |
-| `startup_healthcheck`            | bool    | `true`                   | Health-check Ollama at startup.          |
-| `startup_required`               | bool    | `false`                  | Abort startup if the health-check fails. |
-| `model_refresh_interval_seconds` | integer | `300`                    | Model-list refresh interval, in seconds. |
-
-The `[router.ollama.limits]` table accepts:
-
-| Key                       | Type    | Default  | Purpose                              |
-| ------------------------- | ------- | -------- | ------------------------------------ |
-| `max_concurrent_requests` | integer | `4`      | Maximum concurrent Ollama requests.  |
-| `request_timeout_ms`      | integer | `180000` | Request timeout, in milliseconds.    |
-| `pull_timeout_ms`         | integer | `600000` | Model pull timeout, in milliseconds. |
-
-The `[router.ollama.models]` table accepts:
-
-| Key              | Type            | Default | Purpose                                            |
-| ---------------- | --------------- | ------- | -------------------------------------------------- |
-| `preload`        | list of strings | `[]`    | Models pulled or warmed at startup.                |
-| `allow_pull`     | bool            | `false` | Whether the router may pull models on demand.      |
-| `allowed_models` | list of strings | `[]`    | Allowed models; empty means all discovered models. |
+| Key        | Type   | Default                  | Purpose                               |
+| ---------- | ------ | ------------------------ | ------------------------------------- |
+| `enabled`  | bool   | `false`                  | Whether the Ollama backend is active. |
+| `base_url` | string | `http://127.0.0.1:11434` | Ollama endpoint base URL.             |
 
 ## Validation
 
@@ -412,3 +413,7 @@ configuration, local bootstrap enabled in remote mode, invalid timeouts or size
 limits, a zero rate-limit period or burst while rate limiting is enabled, unsafe
 CORS, and inline secrets. A failure prevents startup and explains the offending
 field.
+
+Validation also emits non-blocking warnings, such as setting a `base_url` on a
+built-in API provider that ignores it. Warnings are surfaced but do not prevent
+startup.

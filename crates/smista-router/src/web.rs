@@ -95,7 +95,7 @@ pub struct WebServerConfig {
 
 /// The router's HTTP server.
 ///
-/// Construct it with [`WebServer::new`], then call [`WebServer::run`] to bind
+/// Construct it with [`WebServer::init`], then call [`WebServer::run`] to bind
 /// the listener and start serving in a background task.
 #[derive(Debug)]
 pub struct WebServer {
