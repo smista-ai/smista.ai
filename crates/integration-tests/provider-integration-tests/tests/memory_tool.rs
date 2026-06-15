@@ -22,7 +22,8 @@ use rig_core::completion::Prompt;
 use rig_core::prelude::{CompletionClient, ProviderClient};
 use rig_core::providers::anthropic;
 use rig_core::providers::anthropic::completion::CLAUDE_HAIKU_4_5;
-use smista_providers::memory::{MemoryStorage, MemoryTool, build_preamble};
+use smista_providers::memory::{MemoryScope, MemoryStorage, MemoryTool, build_preamble};
+use uuid::Uuid;
 
 /// A long-term user fact and a rare value the model will echo verbatim.
 const USER_KEY: &str = "favorite_color";
@@ -41,6 +42,11 @@ async fn should_record_recall_and_forget_user_and_session_memories() {
     };
 
     let storage = Arc::new(InMemoryStorage::default());
+    // The in-memory backend ignores the scope; any value addresses the same store.
+    let scope = MemoryScope {
+        user_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+    };
 
     // Steps 1 & 2: the model records a user memory and a session memory by
     // calling the tool. We assert against storage, not the model's reply.
@@ -52,7 +58,7 @@ async fn should_record_recall_and_forget_user_and_session_memories() {
         )
         .temperature(0.0)
         .max_tokens(1024)
-        .tool(MemoryTool::new(storage.clone()))
+        .tool(MemoryTool::new(storage.clone(), scope))
         .build();
 
     recorder
@@ -67,7 +73,7 @@ async fn should_record_recall_and_forget_user_and_session_memories() {
         .expect("record prompt failed");
 
     let stored_user = storage
-        .get_user_memory_by_key(USER_KEY.to_string())
+        .get_user_memory_by_key(scope, USER_KEY.to_string())
         .await
         .expect("read user memory");
     assert_eq!(
@@ -77,7 +83,7 @@ async fn should_record_recall_and_forget_user_and_session_memories() {
     );
 
     let stored_session = storage
-        .get_session_memory_by_key(SESSION_KEY.to_string())
+        .get_session_memory_by_key(scope, SESSION_KEY.to_string())
         .await
         .expect("read session memory");
     assert_eq!(
@@ -88,9 +94,12 @@ async fn should_record_recall_and_forget_user_and_session_memories() {
 
     // Step 3: a fresh agent gets the stored memories injected into its preamble
     // and must recall them. No tool is attached: recall is preamble-only.
-    let user = storage.get_user_memories(None).await.expect("list user");
+    let user = storage
+        .get_user_memories(scope, None)
+        .await
+        .expect("list user");
     let session = storage
-        .get_session_memories(None)
+        .get_session_memories(scope, None)
         .await
         .expect("list session");
     let preamble = build_preamble(&user, &session).expect("preamble is non-empty");
@@ -132,7 +141,7 @@ async fn should_record_recall_and_forget_user_and_session_memories() {
         )
         .temperature(0.0)
         .max_tokens(1024)
-        .tool(MemoryTool::new(storage.clone()))
+        .tool(MemoryTool::new(storage.clone(), scope))
         .build();
 
     forgetter
@@ -148,7 +157,7 @@ async fn should_record_recall_and_forget_user_and_session_memories() {
 
     assert!(
         storage
-            .get_user_memory_by_key(USER_KEY.to_string())
+            .get_user_memory_by_key(scope, USER_KEY.to_string())
             .await
             .expect("read user memory")
             .is_none(),
@@ -156,7 +165,7 @@ async fn should_record_recall_and_forget_user_and_session_memories() {
     );
     assert!(
         storage
-            .get_session_memory_by_key(SESSION_KEY.to_string())
+            .get_session_memory_by_key(scope, SESSION_KEY.to_string())
             .await
             .expect("read session memory")
             .is_none(),

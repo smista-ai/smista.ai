@@ -18,3 +18,4 @@ rig-core = { workspace = true }
 secrecy = { workspace = true, features = ["serde"] }
 smista-core = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+uuid = { workspace = true, features = ["v7"] }
