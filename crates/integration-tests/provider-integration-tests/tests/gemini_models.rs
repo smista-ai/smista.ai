@@ -28,9 +28,11 @@ use smista_core::model::{ModelParameters, ModelReference, Provider as ProviderId
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
 use smista_providers::auth::Authentication;
+use smista_providers::memory::MemoryScope;
 use smista_providers::model::gemini::GeminiModelArgs;
 use smista_providers::provider::Provider;
 use smista_providers::provider::gemini::GeminiProvider;
+use uuid::Uuid;
 
 /// Model id of the Gemini Flash variant exercised by this test.
 const GEMINI_FLASH_MODEL_ID: &str = "gemini-2.5-flash";
@@ -74,7 +76,14 @@ async fn should_resolve_gemini_2_5_flash_and_run_complete_and_stream() {
     };
 
     let model = provider
-        .resolve(&reference, &authentication)
+        .resolve(
+            &reference,
+            &authentication,
+            MemoryScope {
+                user_id: Uuid::now_v7(),
+                session_id: Uuid::now_v7(),
+            },
+        )
         .await
         .expect("resolving the Gemini 2.5 Flash reference must succeed");
 

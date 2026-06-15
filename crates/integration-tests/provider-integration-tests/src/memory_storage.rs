@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use smista_providers::memory::{MemoryRecord, MemoryStorage};
+use smista_providers::memory::{MemoryRecord, MemoryScope, MemoryStorage};
 
 /// In-memory [`MemoryStorage`], keyed by `key` within each scope.
 ///
@@ -70,19 +70,25 @@ impl MemoryStorage for InMemoryStorage {
 
     async fn put_user_memory(
         &self,
+        _scope: MemoryScope,
         key: Option<String>,
         content: String,
     ) -> Result<MemoryRecord, Self::Error> {
         Ok(Self::put(&self.user, key, content))
     }
 
-    async fn forget_user_memory(&self, handle: String) -> Result<(), Self::Error> {
+    async fn forget_user_memory(
+        &self,
+        _scope: MemoryScope,
+        handle: String,
+    ) -> Result<(), Self::Error> {
         Self::forget(&self.user, &handle);
         Ok(())
     }
 
     async fn get_user_memories(
         &self,
+        _scope: MemoryScope,
         _limit: Option<usize>,
     ) -> Result<Vec<MemoryRecord>, Self::Error> {
         Ok(Self::list(&self.user))
@@ -90,6 +96,7 @@ impl MemoryStorage for InMemoryStorage {
 
     async fn get_user_memory_by_key(
         &self,
+        _scope: MemoryScope,
         key: String,
     ) -> Result<Option<MemoryRecord>, Self::Error> {
         Ok(Self::by_key(&self.user, &key))
@@ -97,19 +104,25 @@ impl MemoryStorage for InMemoryStorage {
 
     async fn put_session_memory(
         &self,
+        _scope: MemoryScope,
         key: Option<String>,
         content: String,
     ) -> Result<MemoryRecord, Self::Error> {
         Ok(Self::put(&self.session, key, content))
     }
 
-    async fn forget_session_memory(&self, handle: String) -> Result<(), Self::Error> {
+    async fn forget_session_memory(
+        &self,
+        _scope: MemoryScope,
+        handle: String,
+    ) -> Result<(), Self::Error> {
         Self::forget(&self.session, &handle);
         Ok(())
     }
 
     async fn get_session_memories(
         &self,
+        _scope: MemoryScope,
         _limit: Option<usize>,
     ) -> Result<Vec<MemoryRecord>, Self::Error> {
         Ok(Self::list(&self.session))
@@ -117,6 +130,7 @@ impl MemoryStorage for InMemoryStorage {
 
     async fn get_session_memory_by_key(
         &self,
+        _scope: MemoryScope,
         key: String,
     ) -> Result<Option<MemoryRecord>, Self::Error> {
         Ok(Self::by_key(&self.session, &key))

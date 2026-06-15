@@ -25,9 +25,11 @@ use smista_core::model::{ModelParameters, ModelReference, Provider as ProviderId
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
 use smista_providers::auth::Authentication;
+use smista_providers::memory::MemoryScope;
 use smista_providers::model::anthropic::AnthropicModelArgs;
 use smista_providers::provider::Provider;
 use smista_providers::provider::anthropic::AnthropicProvider;
+use uuid::Uuid;
 
 /// Model id of the Haiku variant exercised by this test.
 const HAIKU_MODEL_ID: &str = "claude-haiku-4-5-20251001";
@@ -70,7 +72,14 @@ async fn should_resolve_haiku_and_run_complete_and_stream() {
     };
 
     let model = provider
-        .resolve(&reference, &authentication)
+        .resolve(
+            &reference,
+            &authentication,
+            MemoryScope {
+                user_id: Uuid::now_v7(),
+                session_id: Uuid::now_v7(),
+            },
+        )
         .await
         .expect("resolving the Haiku reference must succeed");
 

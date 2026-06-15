@@ -29,9 +29,11 @@ use smista_core::model::{ModelParameters, ModelReference, Provider as ProviderId
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
 use smista_providers::auth::Authentication;
+use smista_providers::memory::MemoryScope;
 use smista_providers::model::ollama::{OllamaEndpoint, OllamaModelRuntime};
 use smista_providers::provider::Provider;
 use smista_providers::provider::ollama::OllamaProvider;
+use uuid::Uuid;
 
 /// Builds the deterministic, single-turn request both flows send.
 fn ping_request() -> CompletionRequest {
@@ -80,7 +82,14 @@ async fn should_resolve_installed_model_and_run_complete_and_stream() {
     };
 
     let model = provider
-        .resolve(&reference, &authentication)
+        .resolve(
+            &reference,
+            &authentication,
+            MemoryScope {
+                user_id: Uuid::now_v7(),
+                session_id: Uuid::now_v7(),
+            },
+        )
         .await
         .expect("resolving the configured Ollama model must succeed");
 

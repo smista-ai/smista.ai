@@ -25,9 +25,11 @@ use smista_core::model::{ModelParameters, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
 use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
 use smista_providers::auth::Authentication;
+use smista_providers::memory::MemoryScope;
 use smista_providers::model::openai::{OpenAIModelArgs, gpt_5_4_mini};
 use smista_providers::provider::Provider;
 use smista_providers::provider::openai::OpenAIProvider;
+use uuid::Uuid;
 
 /// Builds the deterministic, single-turn request both flows send.
 fn ping_request() -> CompletionRequest {
@@ -64,7 +66,14 @@ async fn should_resolve_gpt_5_4_mini_and_run_complete_and_stream() {
     let reference = gpt_5_4_mini().reference();
 
     let model = provider
-        .resolve(&reference, &authentication)
+        .resolve(
+            &reference,
+            &authentication,
+            MemoryScope {
+                user_id: Uuid::now_v7(),
+                session_id: Uuid::now_v7(),
+            },
+        )
         .await
         .expect("resolving the GPT-5.4-mini reference must succeed");
 
