@@ -146,7 +146,5 @@ mod tests {
         assert_eq!(config.logging.format, "compact");
         assert!(config.logging.redact_secrets);
         assert!(config.ollama.enabled);
-        assert_eq!(config.ollama.models.preload.len(), 2);
-        assert!(!config.ollama.models.allow_pull);
     }
 }

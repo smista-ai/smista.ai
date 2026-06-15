@@ -18,8 +18,8 @@ mod model;
 
 pub use load::{RouterConfigError, load, parse};
 pub use model::{
-    CorsConfig, LoggingConfig, OllamaConfig, OllamaLimits, OllamaModels, RateLimitConfig,
-    RetentionConfig, RouterAuthConfig, RouterConfig, RouterLimits, RouterProviderConfig,
-    StorageConfig, StorageEngine, StorageMode,
+    CorsConfig, LoggingConfig, OllamaConfig, RateLimitConfig, RetentionConfig, RouterAuthConfig,
+    RouterConfig, RouterLimits, RouterModelConfig, RouterProviderConfig, StorageConfig,
+    StorageEngine, StorageMode,
 };
 pub use validate::{Severity, ValidationCode, ValidationError, ValidationReport};

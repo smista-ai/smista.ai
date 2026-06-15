@@ -3,9 +3,12 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use rust_decimal::Decimal;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use smista_core::model::Provider;
+use smista_core::model::{
+    ModelAuthRequirement, ModelCapabilities, ModelDescriptor, ModelParameters, Provider,
+};
 use url::Url;
 
 /// The default [`RouterConfig::host`] value: the IPv4 loopback address.
@@ -58,15 +61,6 @@ const DEFAULT_CLEANUP_INTERVAL_SECONDS: u64 = 3_600;
 
 /// The default [`OllamaConfig::base_url`] value: the local Ollama endpoint.
 const DEFAULT_OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434";
-/// The default [`OllamaConfig::model_refresh_interval_seconds`] value: 5 minutes.
-const DEFAULT_OLLAMA_MODEL_REFRESH_INTERVAL_SECONDS: u64 = 300;
-
-/// The default [`OllamaLimits::max_concurrent_requests`] value.
-const DEFAULT_OLLAMA_MAX_CONCURRENT_REQUESTS: u32 = 4;
-/// The default [`OllamaLimits::request_timeout_ms`] value: 3 minutes.
-const DEFAULT_OLLAMA_REQUEST_TIMEOUT_MS: u64 = 180_000;
-/// The default [`OllamaLimits::pull_timeout_ms`] value: 10 minutes.
-const DEFAULT_OLLAMA_PULL_TIMEOUT_MS: u64 = 600_000;
 
 /// Top-level router runtime configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,11 +131,95 @@ pub struct RouterProviderConfig {
     /// Models advertised for a generic OpenAI-compatible endpoint that exposes
     /// no model-listing API.
     ///
-    /// Only consulted for an `openai-compat:<name>` provider, and only as a
-    /// fallback when the endpoint reports no models of its own. The built-in
-    /// providers and Ollama discover their models at runtime and ignore this.
+    /// Only consulted for an `openai-compat:<name>` provider: these endpoints
+    /// publish no facts of their own, so routing reads each model's facts from
+    /// here. The built-in providers and Ollama discover their models at runtime
+    /// and ignore this.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub models: Vec<String>,
+    pub models: Vec<RouterModelConfig>,
+}
+
+/// Facts for one model advertised by a generic OpenAI-compatible endpoint.
+///
+/// An `openai-compat:<name>` endpoint exposes no catalog of model facts, so the
+/// router takes them from here to build the model's descriptor. Only `name` and
+/// `max_context_tokens` are required; capabilities and authentication take
+/// OpenAI-compatible defaults and the costs are optional.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RouterModelConfig {
+    /// Model name, exactly as the endpoint expects it.
+    pub name: String,
+    /// Human-readable display name, if different from `name`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// How the endpoint authenticates this model. Defaults to no authentication.
+    #[serde(default)]
+    pub auth: ModelAuthRequirement,
+    /// What the model can do; defaults suit an OpenAI-compatible endpoint.
+    #[serde(default = "default_model_capabilities")]
+    pub capabilities: ModelCapabilities,
+    /// Maximum context window the model accepts, in tokens.
+    pub max_context_tokens: u32,
+    /// Maximum number of tokens the model emits, if bounded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u32>,
+    /// Input price per million tokens, if known.
+    #[serde(
+        default,
+        with = "rust_decimal::serde::str_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub input_cost_per_million_tokens: Option<Decimal>,
+    /// Output price per million tokens, if known.
+    #[serde(
+        default,
+        with = "rust_decimal::serde::str_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub output_cost_per_million_tokens: Option<Decimal>,
+}
+
+/// The capabilities assumed for a generic OpenAI-compatible model.
+///
+/// These endpoints speak the OpenAI Chat Completions API, so they stream, call
+/// tools, honor a system prompt and can be constrained to JSON; memory
+/// orchestration follows from tool calling. Image input and explicit reasoning
+/// vary by model and default off. Override any of these per model.
+fn default_model_capabilities() -> ModelCapabilities {
+    ModelCapabilities {
+        streaming: true,
+        tools: true,
+        json_output: true,
+        system_prompt: true,
+        images: false,
+        reasoning: false,
+        memory: true,
+    }
+}
+
+impl RouterModelConfig {
+    /// Builds the [`ModelDescriptor`] this configuration declares.
+    ///
+    /// `provider` is the owning provider's identity and `local` its locality,
+    /// both inherited by the model. The remaining facts come straight from the
+    /// configured fields; generation parameters default and provider options
+    /// are absent.
+    pub fn to_descriptor(&self, provider: Provider, local: bool) -> ModelDescriptor {
+        ModelDescriptor {
+            provider,
+            model: self.name.clone(),
+            display_name: self.display_name.clone(),
+            local,
+            auth: self.auth.clone(),
+            capabilities: self.capabilities,
+            max_context_tokens: self.max_context_tokens,
+            max_output_tokens: self.max_output_tokens,
+            input_cost_per_million_tokens: self.input_cost_per_million_tokens,
+            output_cost_per_million_tokens: self.output_cost_per_million_tokens,
+            default_parameters: ModelParameters::default(),
+            provider_options: None,
+        }
+    }
 }
 
 /// Storage engine identity.
@@ -380,18 +458,6 @@ pub struct OllamaConfig {
     pub enabled: bool,
     /// Ollama base URL.
     pub base_url: Url,
-    /// Whether to auto-discover installed models.
-    pub auto_discover_models: bool,
-    /// Whether to health-check Ollama at startup.
-    pub startup_healthcheck: bool,
-    /// Whether a failed startup health-check aborts startup.
-    pub startup_required: bool,
-    /// Model list refresh interval, in seconds.
-    pub model_refresh_interval_seconds: u64,
-    /// Concurrency and timeout limits.
-    pub limits: OllamaLimits,
-    /// Model allow/preload configuration.
-    pub models: OllamaModels,
 }
 
 impl Default for OllamaConfig {
@@ -402,48 +468,8 @@ impl Default for OllamaConfig {
                 .to_string()
                 .parse()
                 .expect("invalid default URL"),
-            auto_discover_models: true,
-            startup_healthcheck: true,
-            startup_required: false,
-            model_refresh_interval_seconds: DEFAULT_OLLAMA_MODEL_REFRESH_INTERVAL_SECONDS,
-            limits: OllamaLimits::default(),
-            models: OllamaModels::default(),
         }
     }
-}
-
-/// Ollama concurrency and timeout limits.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct OllamaLimits {
-    /// Maximum concurrent Ollama requests.
-    pub max_concurrent_requests: u32,
-    /// Request timeout, in milliseconds.
-    pub request_timeout_ms: u64,
-    /// Model pull timeout, in milliseconds.
-    pub pull_timeout_ms: u64,
-}
-
-impl Default for OllamaLimits {
-    fn default() -> Self {
-        Self {
-            max_concurrent_requests: DEFAULT_OLLAMA_MAX_CONCURRENT_REQUESTS,
-            request_timeout_ms: DEFAULT_OLLAMA_REQUEST_TIMEOUT_MS,
-            pull_timeout_ms: DEFAULT_OLLAMA_PULL_TIMEOUT_MS,
-        }
-    }
-}
-
-/// Ollama model preload/allow configuration.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct OllamaModels {
-    /// Models pulled/warmed at startup.
-    pub preload: Vec<String>,
-    /// Whether the router may pull models on demand.
-    pub allow_pull: bool,
-    /// Allowed models; empty means all discovered models are allowed.
-    pub allowed_models: Vec<String>,
 }
 
 #[cfg(test)]
@@ -489,11 +515,6 @@ mod tests {
     fn should_set_ollama_safe_defaults() {
         let ollama = OllamaConfig::default();
         assert!(!ollama.enabled);
-        assert!(ollama.auto_discover_models);
-        assert!(ollama.startup_healthcheck);
-        assert!(!ollama.startup_required);
-        assert!(!ollama.models.allow_pull);
-        assert!(ollama.models.allowed_models.is_empty());
     }
 
     #[test]
@@ -564,7 +585,11 @@ mod tests {
         let toml = r#"
             [providers."openai-compat:my-vllm"]
             base_url = "http://localhost:8000/v1"
-            models = ["llama-3.1-70b"]
+
+            [[providers."openai-compat:my-vllm".models]]
+            name = "llama-3.1-70b"
+            max_context_tokens = 131072
+            input_cost_per_million_tokens = "0.9"
         "#;
         let config: RouterConfig = toml::from_str(toml).unwrap();
         let key = Provider::OpenAICompatible("my-vllm".to_string());
@@ -572,7 +597,47 @@ mod tests {
             config.providers[&key].base_url.as_deref(),
             Some("http://localhost:8000/v1")
         );
-        assert_eq!(config.providers[&key].models, vec!["llama-3.1-70b"]);
+        let models = &config.providers[&key].models;
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].name, "llama-3.1-70b");
+        assert_eq!(models[0].max_context_tokens, 131_072);
+        // Capabilities and auth fall back to OpenAI-compatible defaults.
+        assert!(models[0].capabilities.tools);
+        assert_eq!(models[0].auth, ModelAuthRequirement::None);
+        assert_eq!(
+            models[0].input_cost_per_million_tokens,
+            Some(Decimal::new(9, 1))
+        );
+    }
+
+    #[test]
+    fn should_build_descriptor_from_model_config() {
+        let model = RouterModelConfig {
+            name: "llama-3.1-70b".to_string(),
+            display_name: Some("Llama 3.1 70B".to_string()),
+            auth: ModelAuthRequirement::OptionalApiKey,
+            capabilities: default_model_capabilities(),
+            max_context_tokens: 131_072,
+            max_output_tokens: Some(8_192),
+            input_cost_per_million_tokens: Some(Decimal::new(9, 1)),
+            output_cost_per_million_tokens: None,
+        };
+        let provider = Provider::OpenAICompatible("my-vllm".to_string());
+
+        let descriptor = model.to_descriptor(provider.clone(), true);
+
+        assert_eq!(descriptor.provider, provider);
+        assert_eq!(descriptor.model, "llama-3.1-70b");
+        assert_eq!(descriptor.display_name.as_deref(), Some("Llama 3.1 70B"));
+        assert!(descriptor.local);
+        assert_eq!(descriptor.auth, ModelAuthRequirement::OptionalApiKey);
+        assert_eq!(descriptor.max_context_tokens, 131_072);
+        assert_eq!(descriptor.max_output_tokens, Some(8_192));
+        assert!(descriptor.capabilities.tools);
+        assert_eq!(
+            descriptor.input_cost_per_million_tokens,
+            Some(Decimal::new(9, 1))
+        );
     }
 
     #[test]
@@ -580,12 +645,9 @@ mod tests {
         let toml = r#"
             [ollama]
             enabled = true
-            [ollama.models]
-            allow_pull = true
         "#;
         let config: RouterConfig = toml::from_str(toml).unwrap();
         assert!(config.ollama.enabled);
-        assert!(config.ollama.models.allow_pull);
         // Untouched nested defaults remain. `Url` normalizes an authority-only
         // URL with a trailing slash, so the rendered default carries one.
         assert_eq!(
