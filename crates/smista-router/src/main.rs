@@ -15,6 +15,7 @@ mod log;
 mod retention;
 mod signal;
 mod storage;
+mod web;
 
 use std::time::Duration;
 
@@ -67,7 +68,7 @@ async fn tokio_main() -> anyhow::Result<()> {
 
     // start storage retention task
     let retention_service = retention::RetentionService::new(retention::RetentionServiceConfig {
-        database,
+        database: database.clone(),
         exit: exit.clone(),
         trace_retention_days: config.retention.trace_retention_days,
         session_retention_days: config.retention.session_retention_days,
@@ -76,11 +77,21 @@ async fn tokio_main() -> anyhow::Result<()> {
     })
     .run();
 
+    // start the HTTP server
+    tracing::debug!("starting web server");
+    let web_service = web::WebServer::new(web::WebServerConfig {
+        config,
+        database,
+        exit: exit.clone(),
+    })
+    .run()
+    .await?;
+
     // cancel the exit token on SIGINT/SIGTERM so services wind down
     let shutdown_listener = tokio::spawn(signal::wait_for_shutdown(exit));
 
     // wait for all services to complete
-    let _ = tokio::join!(retention_service, shutdown_listener);
+    let _ = tokio::join!(retention_service, web_service, shutdown_listener);
     tracing::info!("smista-router stopped");
 
     Ok(())
