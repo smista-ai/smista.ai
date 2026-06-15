@@ -1267,6 +1267,127 @@ async fn should_upsert_keyed_context_memory_in_place() {
 }
 
 #[tokio::test]
+async fn should_list_user_memory_with_content_newest_first() {
+    let db = memory_db().await;
+    let user_id = Uuid::now_v7();
+    db.create_user(user(user_id))
+        .await
+        .expect("failed to create user");
+
+    let (older, older_content) = user_memory_for(Uuid::now_v7(), user_id, Some("editor"), "vim");
+    let mut older = older;
+    older.updated_at = Utc::now() - Duration::minutes(5);
+    db.record_user_memory(user_id, older, older_content)
+        .await
+        .expect("failed to record older memory");
+
+    let (newer, newer_content) = user_memory_for(Uuid::now_v7(), user_id, None, "prefers tabs");
+    db.record_user_memory(user_id, newer, newer_content)
+        .await
+        .expect("failed to record newer memory");
+
+    let listed = db
+        .list_user_memory_with_content(user_id)
+        .await
+        .expect("failed to list memory with content");
+
+    assert_eq!(listed.len(), 2);
+    // Most recently updated first, each paired with its own content.
+    assert_eq!(listed[0].0.key, None);
+    assert_eq!(listed[0].1.content, "prefers tabs");
+    assert_eq!(listed[1].0.key.as_deref(), Some("editor"));
+    assert_eq!(listed[1].1.content, "vim");
+}
+
+#[tokio::test]
+async fn should_not_list_user_memory_with_content_of_other_user() {
+    let db = memory_db().await;
+    let owner = Uuid::now_v7();
+    db.create_user(user(owner))
+        .await
+        .expect("failed to create owner");
+    let (memory, content) = user_memory_for(Uuid::now_v7(), owner, Some("editor"), "vim");
+    db.record_user_memory(owner, memory, content)
+        .await
+        .expect("failed to record memory");
+
+    let other = Uuid::now_v7();
+    db.create_user(user(other))
+        .await
+        .expect("failed to create other user");
+
+    let listed = db
+        .list_user_memory_with_content(other)
+        .await
+        .expect("failed to list memory with content");
+    assert!(listed.is_empty(), "memory of another user disclosed");
+}
+
+#[tokio::test]
+async fn should_list_context_memory_with_content_scoped_to_session() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let (memory, content) =
+        context_memory_for(Uuid::now_v7(), session_id, user_id, Some("goal"), "ship it");
+    db.record_context_memory(user_id, memory, content)
+        .await
+        .expect("failed to record context memory");
+
+    // A second session of the same user must not leak into the first's list.
+    let other_session = Uuid::now_v7();
+    db.create_session(session_for(other_session, user_id))
+        .await
+        .expect("failed to create second session");
+    let (other, other_content) =
+        context_memory_for(Uuid::now_v7(), other_session, user_id, None, "elsewhere");
+    db.record_context_memory(user_id, other, other_content)
+        .await
+        .expect("failed to record other context memory");
+
+    let listed = db
+        .list_context_memory_with_content(user_id, session_id)
+        .await
+        .expect("failed to list context memory with content");
+
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].0.key.as_deref(), Some("goal"));
+    assert_eq!(listed[0].1.content, SecretContent::plaintext("ship it"));
+}
+
+#[tokio::test]
+async fn should_list_context_memory_with_sealed_content() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let id = Uuid::now_v7();
+    let (memory, _) = context_memory_for(id, session_id, user_id, Some("goal"), "");
+    let sealed = ContentEnvelope {
+        version: 1,
+        algorithm: "xchacha20poly1305".to_string(),
+        key_id: "kf_ab12".to_string(),
+        nonce: "bm9uY2U".to_string(),
+        ciphertext: "Y2lwaGVydGV4dA".to_string(),
+    };
+    let content = ContextMemoryContent {
+        id: record_id::<ContextMemoryContent, _>(id),
+        content: SecretContent::Encrypted(sealed.clone()),
+    };
+    db.record_context_memory(user_id, memory, content)
+        .await
+        .expect("failed to record sealed context memory");
+
+    let listed = db
+        .list_context_memory_with_content(user_id, session_id)
+        .await
+        .expect("failed to list context memory with content");
+
+    // Storage returns the envelope opaquely; it never decrypts.
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].1.content, SecretContent::Encrypted(sealed));
+}
+
+#[tokio::test]
 async fn should_not_record_context_memory_for_unowned_session() {
     let db = memory_db().await;
     let (_owner, session_id) = user_with_session(&db).await;
