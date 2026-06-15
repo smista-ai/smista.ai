@@ -3,7 +3,7 @@
 //! This module is the wire contract for the router's `/api/v1` REST API: the
 //! request and response envelopes for authentication, sessions, task execution,
 //! route previews, approvals, traces, provider/model listings and usage, plus
-//! the structured error body. The router produces these, smista-web serializes
+//! the structured error body. The router produces these, smista-router serializes
 //! them, the Rust client and the TypeScript SDK consume them.
 //!
 //! The types here are pure, serialization-first value types. They add only the

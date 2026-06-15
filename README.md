@@ -43,7 +43,6 @@ deterministic routing.
 | [`smista-router-client`](crates/smista-router-client/README.md) | Async Rust client for the router HTTP JSON API.                      | MIT         |
 | [`smista-sdk`](crates/smista-sdk/README.md)                     | Rust SDK facade re-exporting the domain types (and the client).      | MIT         |
 | [`smista-storage`](crates/smista-storage/README.md)             | Storage traits, entities and the SurrealDB-backed persistence layer. | Elastic-2.0 |
-| [`smista-web`](crates/smista-web/README.md)                     | `axum` HTTP JSON API server for the router.                          | Elastic-2.0 |
 | [`@smista-ai/sdk`](sdk/README.md)                               | TypeScript SDK for building clients on top of the router.            | MIT         |
 
 ## Golden workflow

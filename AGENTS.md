@@ -38,7 +38,6 @@ This is a Cargo workspace. Rust crates live under `crates/`.
 | `smista-storage`       | lib  | Storage traits, entities, and SurrealDB implementation. | Elastic-2.0 |
 | `smista-providers`     | lib  | Model abstraction and provider adapters via `rig`.      | Elastic-2.0 |
 | `smista-router`        | bin  | Routing and orchestration service.                      | Elastic-2.0 |
-| `smista-web`           | lib  | `axum` HTTP JSON API for the router.                    | Elastic-2.0 |
 | `smista-router-client` | lib  | Async Rust client for the router HTTP API.              | MIT         |
 | `smista-sdk`           | lib  | Rust SDK facade re-exporting core types and client.     | MIT         |
 | `smista-cli`           | bin  | The `smista` CLI built with `ratatui` and `clap`.       | Elastic-2.0 |
@@ -70,7 +69,7 @@ When creating a crate:
 - Use `module_name.rs`; do not introduce `mod.rs`.
 - Keep shared domain types, config, policy, and errors in `smista-core`.
 - Keep routing and orchestration behavior in `smista-router`.
-- Keep HTTP API concerns in `smista-web`.
+- Keep HTTP API concerns in `smista-router` and `smista-core` (api.rs module in particular).
 - Keep storage traits, entities, and SurrealDB implementation in
   `smista-storage`.
 
