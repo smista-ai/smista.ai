@@ -6,8 +6,9 @@
 
 use chrono::{DateTime, Utc};
 use surrealdb::types::{RecordId, SurrealValue};
+use uuid::Uuid;
 
-use super::Table;
+use super::{Table, User, record_uuid};
 
 /// A long-term, model-populated preference owned by a user.
 ///
@@ -27,6 +28,29 @@ pub struct UserMemory {
     pub updated_at: DateTime<Utc>,
 }
 
+impl UserMemory {
+    /// Builds a user memory owned by `user_id` under the record key `id`.
+    ///
+    /// `created_at` and `updated_at` are stamped with the current time. Lets a
+    /// caller mint a memory from plain [`Uuid`]s without naming SurrealDB's
+    /// record id type.
+    pub fn new(id: Uuid, user_id: Uuid, key: Option<String>) -> Self {
+        let now = Utc::now();
+        Self {
+            id: RecordId::new(Self::name(), id.to_string()),
+            user: RecordId::new(User::name(), user_id.to_string()),
+            key,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    /// Returns this memory's UUIDv7 key.
+    pub fn uuid(&self) -> Uuid {
+        record_uuid(&self.id)
+    }
+}
+
 impl Table for UserMemory {
     fn name() -> &'static str {
         "user_memory"
@@ -40,6 +64,16 @@ pub struct UserMemoryContent {
     pub id: RecordId,
     /// The remembered fact.
     pub content: String,
+}
+
+impl UserMemoryContent {
+    /// Builds the content row paired with the [`UserMemory`] of the same `id`.
+    pub fn new(id: Uuid, content: String) -> Self {
+        Self {
+            id: RecordId::new(Self::name(), id.to_string()),
+            content,
+        }
+    }
 }
 
 impl Table for UserMemoryContent {
@@ -69,6 +103,21 @@ mod tests {
         };
 
         crate::tests::fk_roundtrip(crate::tests::user(user), memory).await;
+    }
+
+    #[test]
+    fn should_build_user_memory_from_uuids_and_expose_its_uuid() {
+        let id = Uuid::now_v7();
+        let user_id = Uuid::now_v7();
+        let memory = UserMemory::new(id, user_id, Some("editor".to_string()));
+
+        assert_eq!(memory.uuid(), id);
+        assert_eq!(
+            memory.user,
+            RecordId::new(User::name(), user_id.to_string())
+        );
+        assert_eq!(memory.key.as_deref(), Some("editor"));
+        assert_eq!(memory.created_at, memory.updated_at);
     }
 
     #[tokio::test]

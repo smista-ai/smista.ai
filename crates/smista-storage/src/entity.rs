@@ -41,6 +41,23 @@ pub use self::trace_event::{TraceEvent, TraceEventContent, TraceEventType};
 pub use self::user::User;
 pub use self::user_memory::{UserMemory, UserMemoryContent};
 
+/// Extracts the UUIDv7 key of a record id as a [`Uuid`].
+///
+/// Every entity's key is a UUIDv7 stored as the record id's key (see the schema
+/// invariants at the [crate] root). This recovers it so callers outside the
+/// storage layer can address a memory by [`Uuid`] without depending on
+/// SurrealDB's [`RecordId`](surrealdb::types::RecordId) type. A non-UUID key
+/// yields the nil UUID, which only happens for an externally tampered store.
+fn record_uuid(id: &surrealdb::types::RecordId) -> uuid::Uuid {
+    match &id.key {
+        surrealdb::types::RecordIdKey::String(value) => {
+            uuid::Uuid::parse_str(value).unwrap_or_default()
+        }
+        surrealdb::types::RecordIdKey::Uuid(uuid) => **uuid,
+        _ => uuid::Uuid::default(),
+    }
+}
+
 /// A typed handle to a SurrealDB table.
 ///
 /// Every entity implements this trait to expose the name of the table it is
