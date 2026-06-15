@@ -12,9 +12,9 @@ readme = "README.md"
 rust-version = { workspace = true }
 
 [dependencies]
-chrono = { workspace = true }
-secrecy = { workspace = true }
-serde = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+secrecy = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 smista-core = { workspace = true, features = ["surrealdb"] }
 surrealdb = { workspace = true, features = [
@@ -25,7 +25,7 @@ surrealdb = { workspace = true, features = [
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 tracing = { workspace = true }
-uuid = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v7"] }
 
 [dev-dependencies]
 surrealdb = { workspace = true, features = ["kv-mem"] }
