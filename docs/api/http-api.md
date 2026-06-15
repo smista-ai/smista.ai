@@ -2,6 +2,7 @@
 
 - [HTTP API](#http-api)
   - [Conventions](#conventions)
+  - [Health check](#health-check)
   - [Authentication](#authentication)
     - [Bootstrap a user](#bootstrap-a-user)
     - [Sign in](#sign-in)
@@ -48,6 +49,23 @@ logic stays in the router — clients never reimplement it.
 - Request and response bodies are JSON.
 - Paths are resource-oriented: `/auth`, `/sessions`, `/sessions/{id}/...`,
   `/llm`.
+
+## Health check
+
+```http
+GET /status
+```
+
+Public, unauthenticated, and the one endpoint that lives outside `/api/v1`. Use
+it to check that the router is up and to read the version it is running. It needs
+no token and no provider credentials:
+
+```json
+{ "status": "ok", "version": "0.1.0" }
+```
+
+`status` is `"ok"` whenever the server answers; `version` is the running
+router's version.
 
 ## Authentication
 

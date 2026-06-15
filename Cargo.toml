@@ -30,7 +30,17 @@ categories = ["command-line-utilities", "development-tools"]
 [workspace.dependencies]
 anyhow = "1"
 async-trait = "0.1"
-axum = "0.8"
+axum = { version = "0.8", default-features = false, features = [
+  "http1",
+  "http2",
+  "json",
+  "matched-path",
+  "original-uri",
+  "tokio",
+  "tower-log",
+  "tracing",
+  "query",
+] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env"] }
 dirs = "6"
@@ -61,6 +71,7 @@ thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 toml = "1"
+tower = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ts-rs = { version = "12", features = [
