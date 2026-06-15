@@ -23,7 +23,9 @@ serde_json = { workspace = true }
 smista-core = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
 url = { workspace = true, features = ["serde"] }
+uuid = { workspace = true, features = ["v7"] }

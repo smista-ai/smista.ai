@@ -15,7 +15,7 @@ use self::client::{AnthropicClient, HttpAnthropicClient};
 use super::Provider;
 use crate::ProviderResult;
 use crate::auth::Authentication;
-use crate::memory::MemoryStorage;
+use crate::memory::{MemoryScope, MemoryStorage};
 use crate::model::Model;
 use crate::model::anthropic::{self, AnthropicModel, AnthropicModelArgs};
 use crate::provider::cache::{Cached, TtlCache};
@@ -167,6 +167,7 @@ where
         &self,
         reference: &ModelReference,
         authentication: &Authentication,
+        scope: MemoryScope,
     ) -> ProviderResult<Arc<dyn Model>> {
         let descriptor = self
             .fetch_models(authentication)
@@ -186,7 +187,7 @@ where
             })?;
 
         Ok(Arc::new(
-            AnthropicModel::new(self.args.clone(), authentication, descriptor).await?,
+            AnthropicModel::new(self.args.clone(), authentication, descriptor, scope).await?,
         ))
     }
 
@@ -204,10 +205,19 @@ where
 mod tests {
     use secrecy::SecretString;
     use smista_core::model::Capability;
+    use uuid::Uuid;
 
     use super::client::MockAnthropicClient;
     use super::client::api::{Capabilities, Model as ApiModel, Supported};
     use super::*;
+
+    /// A throwaway memory scope; resolution does not bake it into the provider.
+    fn scope() -> MemoryScope {
+        MemoryScope {
+            user_id: Uuid::now_v7(),
+            session_id: Uuid::now_v7(),
+        }
+    }
     use crate::memory::MemoryRecord;
 
     /// Memory backend that stores nothing; resolution paths under test never
@@ -219,18 +229,24 @@ mod tests {
 
         async fn put_user_memory(
             &self,
+            _scope: MemoryScope,
             _key: Option<String>,
             _content: String,
         ) -> Result<MemoryRecord, Self::Error> {
             unreachable!("not exercised by these tests")
         }
 
-        async fn forget_user_memory(&self, _handle: String) -> Result<(), Self::Error> {
+        async fn forget_user_memory(
+            &self,
+            _scope: MemoryScope,
+            _handle: String,
+        ) -> Result<(), Self::Error> {
             Ok(())
         }
 
         async fn get_user_memories(
             &self,
+            _scope: MemoryScope,
             _limit: Option<usize>,
         ) -> Result<Vec<MemoryRecord>, Self::Error> {
             Ok(Vec::new())
@@ -238,6 +254,7 @@ mod tests {
 
         async fn get_user_memory_by_key(
             &self,
+            _scope: MemoryScope,
             _key: String,
         ) -> Result<Option<MemoryRecord>, Self::Error> {
             Ok(None)
@@ -245,18 +262,24 @@ mod tests {
 
         async fn put_session_memory(
             &self,
+            _scope: MemoryScope,
             _key: Option<String>,
             _content: String,
         ) -> Result<MemoryRecord, Self::Error> {
             unreachable!("not exercised by these tests")
         }
 
-        async fn forget_session_memory(&self, _handle: String) -> Result<(), Self::Error> {
+        async fn forget_session_memory(
+            &self,
+            _scope: MemoryScope,
+            _handle: String,
+        ) -> Result<(), Self::Error> {
             Ok(())
         }
 
         async fn get_session_memories(
             &self,
+            _scope: MemoryScope,
             _limit: Option<usize>,
         ) -> Result<Vec<MemoryRecord>, Self::Error> {
             Ok(Vec::new())
@@ -264,6 +287,7 @@ mod tests {
 
         async fn get_session_memory_by_key(
             &self,
+            _scope: MemoryScope,
             _key: String,
         ) -> Result<Option<MemoryRecord>, Self::Error> {
             Ok(None)
@@ -386,7 +410,7 @@ mod tests {
         };
 
         // `Arc<dyn Model>` is not `Debug`, so match rather than `expect_err`.
-        let Err(error) = provider.resolve(&unknown, &authentication()).await else {
+        let Err(error) = provider.resolve(&unknown, &authentication(), scope()).await else {
             panic!("an unoffered model must not resolve");
         };
 
@@ -405,7 +429,10 @@ mod tests {
             model: "claude-opus-4-8".to_string(),
         };
 
-        let Err(error) = provider.resolve(&reference, &Authentication::None).await else {
+        let Err(error) = provider
+            .resolve(&reference, &Authentication::None, scope())
+            .await
+        else {
             panic!("a model must not resolve without an API key");
         };
 
