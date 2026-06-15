@@ -18,6 +18,8 @@ pub enum Severity {
 pub enum ValidationCode {
     /// A timeout exceeds the sane upper bound.
     ExcessiveTimeout,
+    /// A built-in provider is configured with a `base_url` that has no effect.
+    IgnoredProviderBaseUrl,
     /// The bind host is empty or unparseable.
     InvalidHost,
     /// A size limit is zero.
