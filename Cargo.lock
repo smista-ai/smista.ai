@@ -3601,6 +3601,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -4838,6 +4839,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]
@@ -4845,13 +4847,17 @@ name = "smista-router"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "chrono",
  "clap",
+ "futures",
+ "rust_decimal",
  "secrecy",
  "serde",
  "serde_json",
  "smista-core",
+ "smista-providers",
  "smista-storage",
  "surrealdb",
  "tempfile",

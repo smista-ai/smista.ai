@@ -57,6 +57,7 @@ use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::key_extractor::SmartIpKeyExtractor;
 
 use crate::config::RouterConfig;
+use crate::router::Router as SmistaRouter;
 
 /// Shared state threaded into every request handler.
 ///
@@ -73,6 +74,12 @@ pub(crate) struct AppState {
         reason = "read by request handlers landing in follow-up issues (#133+)"
     )]
     pub(crate) database: SurrealDatabase,
+    #[expect(
+        dead_code,
+        reason = "read by request handlers landing in follow-up issues (#133+)"
+    )]
+    /// Router
+    pub(crate) router: Arc<SmistaRouter>,
 }
 
 /// Dependencies required to construct a [`WebServer`].
@@ -104,18 +111,20 @@ pub struct WebServer {
 
 impl WebServer {
     /// Creates a new [`WebServer`] from its dependencies.
-    pub fn new(config: WebServerConfig) -> Self {
+    pub fn init(config: WebServerConfig) -> anyhow::Result<Self> {
         let host = config.config.host.clone();
         let port = config.config.port;
-        Self {
+        let router = Arc::new(SmistaRouter::init(&config.config, config.database.clone())?);
+        Ok(Self {
             state: AppState {
                 config: Arc::new(config.config),
                 database: config.database,
+                router,
             },
             host,
             port,
             exit: config.exit,
-        }
+        })
     }
 
     /// Binds the listener and serves the API in a background task.
@@ -277,6 +286,10 @@ pub(crate) mod test_support {
         .expect("failed to initialize in-memory database")
     }
 
+    pub(crate) fn test_smista_router() -> Arc<super::SmistaRouter> {
+        Arc::new(super::SmistaRouter::mock())
+    }
+
     /// Builds the application router backed by the default configuration and a
     /// fresh in-memory database.
     ///
@@ -287,6 +300,7 @@ pub(crate) mod test_support {
         let state = AppState {
             config: Arc::new(RouterConfig::default()),
             database: test_database().await,
+            router: test_smista_router(),
         };
         build_router(state)
     }
@@ -347,7 +361,7 @@ mod tests {
     use axum::http::StatusCode;
     use tower::ServiceExt as _;
 
-    use super::test_support::{get, test_database};
+    use super::test_support::{get, test_database, test_smista_router};
     use super::{AppState, build_router};
     use crate::config::{RateLimitConfig, RouterConfig};
 
@@ -359,6 +373,7 @@ mod tests {
                 ..RouterConfig::default()
             }),
             database: test_database().await,
+            router: test_smista_router(),
         };
         build_router(state)
     }
