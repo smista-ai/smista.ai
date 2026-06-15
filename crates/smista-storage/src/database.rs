@@ -276,6 +276,17 @@ pub trait Database: Send + Sync {
         user_id: Uuid,
     ) -> impl Future<Output = StorageResult<Vec<UserMemory>>> + Send;
 
+    /// Lists the memories owned by `user_id`, each paired with its stored
+    /// content, most recently updated first.
+    ///
+    /// Unlike [`Self::list_user_memory`], this also loads the paired
+    /// `_content` row, so a caller can render the remembered facts without a
+    /// second read per memory.
+    fn list_user_memory_with_content(
+        &self,
+        user_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Vec<(UserMemory, UserMemoryContent)>>> + Send;
+
     /// Forgets a user memory owned by `user_id`, with its paired content.
     fn forget_user_memory(
         &self,
@@ -321,6 +332,18 @@ pub trait Database: Send + Sync {
         user_id: Uuid,
         session_id: Uuid,
     ) -> impl Future<Output = StorageResult<Vec<ContextMemory>>> + Send;
+
+    /// Lists the context memories owned by `user_id` in `session_id`, each
+    /// paired with its stored content, most recently updated first.
+    ///
+    /// The content of an encrypted session is returned sealed as a
+    /// [`SecretContent::Encrypted`](crate::types::SecretContent::Encrypted)
+    /// envelope; storage holds no key and never decrypts it.
+    fn list_context_memory_with_content(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Vec<(ContextMemory, ContextMemoryContent)>>> + Send;
 
     /// Forgets a context memory owned by `user_id`, with its paired content.
     fn forget_context_memory(

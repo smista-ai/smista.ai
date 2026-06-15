@@ -82,6 +82,32 @@ where
     RecordId::new(T::name(), id.to_string())
 }
 
+/// Pairs each base row with its `_content` row, matched by shared record key.
+///
+/// `_content` rows carry the same record key as their base row, so they are
+/// joined on `id.key`. The base ordering is preserved, and a base row whose
+/// content is missing is dropped — a paired write is transactional, so this
+/// only guards against an externally tampered store.
+fn pair_by_key<M, C>(
+    bases: Vec<M>,
+    contents: &[C],
+    base_id: impl Fn(&M) -> &RecordId,
+    content_id: impl Fn(&C) -> &RecordId,
+) -> Vec<(M, C)>
+where
+    C: Clone,
+{
+    bases
+        .into_iter()
+        .filter_map(|base| {
+            contents
+                .iter()
+                .find(|content| content_id(content).key == base_id(&base).key)
+                .map(|content| (base, content.clone()))
+        })
+        .collect()
+}
+
 /// Explicit ownership cascade for [`SurrealDatabase::delete_session`].
 ///
 /// SurrealDB enforces no foreign-key cascade, so every session-scoped table and
@@ -801,6 +827,42 @@ impl Database for SurrealDatabase {
             .map_err(StorageError::from)
     }
 
+    async fn list_user_memory_with_content(
+        &self,
+        user_id: Uuid,
+    ) -> StorageResult<Vec<(UserMemory, UserMemoryContent)>> {
+        tracing::debug!("listing user memory with content for user {user_id}");
+        let user = record_id::<User, _>(user_id);
+
+        let bases: Vec<UserMemory> = self
+            .0
+            .query("SELECT * FROM $table WHERE user = $user ORDER BY updated_at DESC")
+            .bind(("table", UserMemory::table()))
+            .bind(("user", user.clone()))
+            .await?
+            .take(0)?;
+
+        // The `_content` payloads share each memory's record key; pair them by key.
+        let contents: Vec<UserMemoryContent> = self
+            .0
+            .query(
+                "SELECT * FROM $content_table WHERE record::id(id) IN \
+                 (SELECT VALUE record::id(id) FROM $base_table WHERE user = $user)",
+            )
+            .bind(("content_table", UserMemoryContent::table()))
+            .bind(("base_table", UserMemory::table()))
+            .bind(("user", user))
+            .await?
+            .take(0)?;
+
+        Ok(pair_by_key(
+            bases,
+            &contents,
+            |memory| &memory.id,
+            |content| &content.id,
+        ))
+    }
+
     async fn forget_user_memory(&self, user_id: Uuid, id: Uuid) -> StorageResult<()> {
         tracing::debug!("forgetting user memory {id} for user {user_id}");
 
@@ -921,6 +983,52 @@ impl Database for SurrealDatabase {
             .await?
             .take(0)
             .map_err(StorageError::from)
+    }
+
+    async fn list_context_memory_with_content(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> StorageResult<Vec<(ContextMemory, ContextMemoryContent)>> {
+        tracing::debug!(
+            "listing context memory with content for user {user_id} in session {session_id}"
+        );
+        let session = record_id::<Session, _>(session_id);
+        let user = record_id::<User, _>(user_id);
+
+        let bases: Vec<ContextMemory> = self
+            .0
+            .query(
+                "SELECT * FROM $table WHERE session = $sess \
+                 AND user = $user ORDER BY updated_at DESC",
+            )
+            .bind(("table", ContextMemory::table()))
+            .bind(("sess", session.clone()))
+            .bind(("user", user.clone()))
+            .await?
+            .take(0)?;
+
+        // The `_content` payloads share each memory's record key; pair them by key.
+        let contents: Vec<ContextMemoryContent> = self
+            .0
+            .query(
+                "SELECT * FROM $content_table WHERE record::id(id) IN \
+                 (SELECT VALUE record::id(id) FROM $base_table \
+                  WHERE session = $sess AND user = $user)",
+            )
+            .bind(("content_table", ContextMemoryContent::table()))
+            .bind(("base_table", ContextMemory::table()))
+            .bind(("sess", session))
+            .bind(("user", user))
+            .await?
+            .take(0)?;
+
+        Ok(pair_by_key(
+            bases,
+            &contents,
+            |memory| &memory.id,
+            |content| &content.id,
+        ))
     }
 
     async fn forget_context_memory(
