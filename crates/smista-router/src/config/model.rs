@@ -36,6 +36,12 @@ const DEFAULT_PROVIDER_TIMEOUT_MS: u64 = 180_000;
 /// The default [`RouterLimits::tool_timeout_ms`] value: 1 minute.
 const DEFAULT_TOOL_TIMEOUT_MS: u64 = 60_000;
 
+/// The default [`RateLimitConfig::period_ms`] value: 10 ms, i.e. a sustained
+/// rate of 100 requests per second per client.
+const DEFAULT_RATE_LIMIT_PERIOD_MS: u64 = 10;
+/// The default [`RateLimitConfig::burst_size`] value.
+const DEFAULT_RATE_LIMIT_BURST_SIZE: u32 = 200;
+
 /// The default [`LoggingConfig::level`] value.
 const DEFAULT_LOG_LEVEL: &str = "info";
 /// The default [`LoggingConfig::format`] value.
@@ -76,6 +82,8 @@ pub struct RouterConfig {
     pub auth: RouterAuthConfig,
     /// Request and execution limits.
     pub limits: RouterLimits,
+    /// HTTP rate-limiting configuration.
+    pub rate_limit: RateLimitConfig,
     /// Logging configuration.
     pub logging: LoggingConfig,
     /// CORS configuration.
@@ -96,6 +104,7 @@ impl Default for RouterConfig {
             storage: StorageConfig::default(),
             auth: RouterAuthConfig::default(),
             limits: RouterLimits::default(),
+            rate_limit: RateLimitConfig::default(),
             logging: LoggingConfig::default(),
             cors: CorsConfig::default(),
             retention: RetentionConfig::default(),
@@ -266,6 +275,46 @@ impl Default for RouterLimits {
     }
 }
 
+/// HTTP rate-limiting configuration.
+///
+/// Rate limiting is enforced per client IP address with a token-bucket (GCRA)
+/// algorithm: a client may issue up to [`burst_size`](Self::burst_size) requests
+/// at once, and the quota refills by one request every
+/// [`period_ms`](Self::period_ms) milliseconds. Requests over the limit are
+/// rejected with `429 Too Many Requests`. Enabled by default with generous
+/// limits sized for local use.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RateLimitConfig {
+    /// Whether HTTP rate limiting is enabled.
+    pub enabled: bool,
+    /// Quota refill period, in milliseconds: the time to replenish one request.
+    ///
+    /// The sustained rate is one request per `period_ms` milliseconds.
+    pub period_ms: u64,
+    /// Maximum number of requests a client may issue in a burst.
+    pub burst_size: u32,
+    /// Whether to key buckets by the client IP carried in proxy headers
+    /// (`X-Forwarded-For`, `X-Real-IP`, `Forwarded`) instead of the TCP peer.
+    ///
+    /// Disabled by default. Enable it **only** when the router sits behind a
+    /// trusted reverse proxy that overwrites these headers. With direct clients
+    /// the headers are attacker-controlled, so trusting them lets a client forge
+    /// a fresh IP per request and bypass the limit entirely.
+    pub trust_proxy_headers: bool,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            period_ms: DEFAULT_RATE_LIMIT_PERIOD_MS,
+            burst_size: DEFAULT_RATE_LIMIT_BURST_SIZE,
+            trust_proxy_headers: false,
+        }
+    }
+}
+
 /// Logging configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -416,6 +465,15 @@ mod tests {
     #[test]
     fn should_redact_secrets_by_default() {
         assert!(LoggingConfig::default().redact_secrets);
+    }
+
+    #[test]
+    fn should_enable_rate_limiting_with_generous_defaults() {
+        let rate_limit = RateLimitConfig::default();
+        assert!(rate_limit.enabled);
+        assert_eq!(rate_limit.period_ms, 10);
+        assert_eq!(rate_limit.burst_size, 200);
+        assert!(!rate_limit.trust_proxy_headers);
     }
 
     #[test]

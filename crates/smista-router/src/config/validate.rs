@@ -4,6 +4,7 @@ mod auth;
 mod binding;
 mod cors;
 mod limits;
+mod rate_limit;
 mod report;
 mod storage;
 
@@ -23,6 +24,7 @@ pub fn validate(config: &RouterConfig) -> ValidationReport {
     storage::check_storage(config, &mut report);
     auth::check_auth(config, &mut report);
     limits::check_limits(config, &mut report);
+    rate_limit::check_rate_limit(config, &mut report);
     cors::check_cors(config, &mut report);
 
     tracing::debug!(

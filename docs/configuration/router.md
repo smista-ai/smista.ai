@@ -7,6 +7,7 @@
   - [Storage](#storage)
   - [Authentication](#authentication)
   - [Runtime limits](#runtime-limits)
+  - [Rate limiting](#rate-limiting)
   - [Logging](#logging)
   - [CORS](#cors)
   - [Retention](#retention)
@@ -58,6 +59,12 @@ max_concurrent_requests = 8
 request_timeout_ms = 120000
 provider_timeout_ms = 180000
 tool_timeout_ms = 60000
+
+[router.rate_limit]
+enabled = true
+period_ms = 10
+burst_size = 200
+trust_proxy_headers = false
 
 [router.logging]
 level = "info"
@@ -176,6 +183,52 @@ The `[router.limits]` table accepts:
 | `request_timeout_ms`      | integer | `120000`   | Overall request timeout, in milliseconds. |
 | `provider_timeout_ms`     | integer | `180000`   | Provider call timeout, in milliseconds.   |
 | `tool_timeout_ms`         | integer | `60000`    | Tool execution timeout, in milliseconds.  |
+
+## Rate limiting
+
+Caps how fast a single client can hit the router, so a runaway script or a
+misbehaving client cannot overwhelm it. Limiting is applied per client IP
+address using a token bucket: each client may send a burst of up to `burst_size`
+requests, and its allowance refills by one request every `period_ms`
+milliseconds. Requests over the limit get a `429 Too Many Requests` response.
+
+Enabled by default with limits sized for local use — roughly 100 requests per
+second per client with room for a burst of 200. Raise the limits if you drive
+the router hard from scripts, or set `enabled = false` to turn it off entirely.
+
+```toml
+[router.rate_limit]
+enabled = true
+period_ms = 10
+burst_size = 200
+trust_proxy_headers = false
+```
+
+The `[router.rate_limit]` table accepts:
+
+| Key                   | Type    | Default | Purpose                                                                               |
+| --------------------- | ------- | ------- | ------------------------------------------------------------------------------------- |
+| `enabled`             | bool    | `true`  | Whether rate limiting is enabled.                                                     |
+| `period_ms`           | integer | `10`    | Refill period, in milliseconds: the allowance grows by one request every `period_ms`. |
+| `burst_size`          | integer | `200`   | Maximum number of requests a client may send in a burst before being limited.         |
+| `trust_proxy_headers` | bool    | `false` | Identify clients by proxy headers instead of the connection's source address.         |
+
+The sustained rate is one request every `period_ms` milliseconds — so the
+default of `10` allows about 100 requests per second per client. When rate
+limiting is enabled, both `period_ms` and `burst_size` must be greater than
+zero; validation rejects a zero value.
+
+By default each client is identified by the source address of its connection.
+When the router runs behind a reverse proxy, every request appears to come from
+the proxy, so they would all share one limit. Set `trust_proxy_headers = true`
+to identify clients by the `X-Forwarded-For`, `X-Real-IP` or `Forwarded` header
+the proxy sets instead.
+
+> [!WARNING]
+> Only enable `trust_proxy_headers` when a trusted reverse proxy sits in front
+> of the router and sets these headers itself. With clients connecting directly,
+> anyone can put any value in the header and hand themselves a fresh limit on
+> every request, which defeats rate limiting entirely.
 
 ## Logging
 
@@ -356,5 +409,6 @@ The `[router.ollama.models]` table accepts:
 Router configuration is validated at startup. Validation rejects an invalid host
 or port, an unsafe public binding in local mode, missing or unsupported storage
 configuration, local bootstrap enabled in remote mode, invalid timeouts or size
-limits, unsafe CORS, and inline secrets. A failure prevents startup and explains
-the offending field.
+limits, a zero rate-limit period or burst while rate limiting is enabled, unsafe
+CORS, and inline secrets. A failure prevents startup and explains the offending
+field.

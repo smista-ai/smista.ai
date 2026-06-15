@@ -24,6 +24,8 @@ pub enum ValidationCode {
     InvalidLimit,
     /// The bind port is zero.
     InvalidPort,
+    /// A rate-limit setting is zero while rate limiting is enabled.
+    InvalidRateLimit,
     /// A timeout is zero.
     InvalidTimeout,
     /// Local API-key bootstrap is enabled while storage mode is remote.
