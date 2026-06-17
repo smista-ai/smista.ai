@@ -314,8 +314,8 @@ Each `[router.providers.<id>]` table accepts:
 ### Generic OpenAI-compatible endpoints
 
 You can point the router at any number of OpenAI-compatible endpoints — a local
-vLLM or LM Studio server, llama.cpp, or a hosted gateway. Each one is a *named
-instance*: you choose a name, and routing rules address it as
+vLLM or LM Studio server, llama.cpp, or a hosted gateway. Each one is a _named
+instance_: you choose a name, and routing rules address it as
 `openai-compat:<name>/<model>` (for example
 `openai-compat:my-vllm/llama-3.1-70b`).
 
@@ -324,22 +324,22 @@ quoted because it contains a colon. Each model is its own `[[...models]]` table:
 
 ```toml
 [router.providers."openai-compat:my-vllm"]
-base_url     = "http://localhost:8000/v1"
-local        = true
+base_url = "http://localhost:8000/v1"
+local = true
 display_name = "My vLLM"
 
 [[router.providers."openai-compat:my-vllm".models]]
-name               = "llama-3.1-70b"
+name = "llama-3.1-70b"
 max_context_tokens = 131072
-max_output_tokens  = 8192
+max_output_tokens = 8192
 
 [router.providers."openai-compat:lmstudio"]
 base_url = "http://localhost:1234/v1"
 
 [[router.providers."openai-compat:lmstudio".models]]
-name               = "qwen2.5-coder-7b"
+name = "qwen2.5-coder-7b"
 max_context_tokens = 32768
-input_cost_per_million_tokens  = "0.0"
+input_cost_per_million_tokens = "0.0"
 output_cost_per_million_tokens = "0.0"
 ```
 
@@ -367,7 +367,7 @@ Override any of them per model:
 
 ```toml
 [[router.providers."openai-compat:my-vllm".models]]
-name               = "llava-1.6"
+name = "llava-1.6"
 max_context_tokens = 32768
 
 [router.providers."openai-compat:my-vllm".models.capabilities]

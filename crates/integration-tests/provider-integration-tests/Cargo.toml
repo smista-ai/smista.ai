@@ -2,9 +2,9 @@
 name = "provider-integration-tests"
 version = { workspace = true }
 edition = { workspace = true }
-description = "API-key-gated provider integration tests for the smista.ai workspace."
 license = "Elastic-2.0"
 publish = false
+description = "API-key-gated provider integration tests for the smista.ai workspace."
 
 [dependencies]
 smista-providers = { workspace = true }

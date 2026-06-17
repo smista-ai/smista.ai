@@ -1,15 +1,15 @@
 [package]
 name = "smista-cli"
 version = { workspace = true }
-edition = { workspace = true }
 authors = { workspace = true }
-description = "smista command-line interface."
-license = "Elastic-2.0"
-repository = { workspace = true }
 categories = { workspace = true }
+edition = { workspace = true }
 keywords = { workspace = true }
+license = "Elastic-2.0"
 readme = "README.md"
+repository = { workspace = true }
 rust-version = { workspace = true }
+description = "smista command-line interface."
 
 [[bin]]
 name = "smista"

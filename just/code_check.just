@@ -1,12 +1,12 @@
-# Format the Rust code
+# Format all sources (Markdown, TOML, YAML and Rust via nightly rustfmt) with dprint
 [group('code_check')]
 fmt args="":
-    cargo fmt --all {{ args }}
+    dprint fmt {{ args }}
 
-# Format the Rust code using the nightly version of rustfmt
+# Check formatting of all sources with dprint (no writes)
 [group('code_check')]
-fmt_nightly args="":
-    cargo +nightly fmt --all {{ args }}
+fmt_check args="":
+    dprint check {{ args }}
 
 # Run clippy on the workspace
 [group('code_check')]
@@ -34,7 +34,7 @@ typecheck_sdk: sdk_typecheck
 # Run all code checks. Fails if any check fails
 [group('code_check')]
 check_code:
-    just fmt_nightly "--check"
+    just fmt_check
     just clippy "-- -D warnings"
     just doc
     just deny

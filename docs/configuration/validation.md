@@ -48,13 +48,13 @@ ambiguity:
 ```toml
 [[routing.rules]]
 name = "review with claude"
-priority = 10        # wins over the rule below
+priority = 10 # wins over the rule below
 intent = "review"
 model = "anthropic/claude-sonnet"
 
 [[routing.rules]]
 name = "review with gpt"
-priority = 20        # distinct priority — no ambiguity
+priority = 20 # distinct priority — no ambiguity
 intent = "review"
 model = "openai/gpt-5.5-mini"
 ```
@@ -69,19 +69,19 @@ restriction.
 ```toml
 # project .smista/config.toml
 [privacy.remote]
-mode = "deny"            # no remote sends
+mode = "deny" # no remote sends
 
 [tools.permissions]
-shell = "ask"            # shell requires approval
+shell = "ask" # shell requires approval
 ```
 
 ```toml
 # local preferences — these are rejected
 [privacy.remote]
-mode = "allow"           # error: unsafe override
+mode = "allow" # error: unsafe override
 
 [tools.permissions]
-shell = "allow"          # error: permission widening
+shell = "allow" # error: permission widening
 ```
 
 ### Skill references
@@ -139,9 +139,9 @@ for a valid router configuration.
 [router.limits]
 # Error: request_timeout_ms = 0
 # Fix:
-request_timeout_ms = 120000    # 2 minutes
-provider_timeout_ms = 180000   # 3 minutes
-tool_timeout_ms = 60000        # 1 minute
+request_timeout_ms = 120000 # 2 minutes
+provider_timeout_ms = 180000 # 3 minutes
+tool_timeout_ms = 60000 # 1 minute
 ```
 
 ### Example: correcting unsafe CORS

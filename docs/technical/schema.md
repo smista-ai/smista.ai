@@ -43,7 +43,7 @@ isolated in the storage implementation.
 These rules hold for every table in the schema:
 
 - **Record id is the id.** The SurrealDB record id (`table:⟨key⟩`, a `RecordId`)
-  *is* the entity id. There is no redundant `id` column. The key is a UUIDv7
+  _is_ the entity id. There is no redundant `id` column. The key is a UUIDv7
   generated in Rust (`Uuid::now_v7()`), so ids are deterministic, portable, and
   time-sortable. Session ids are globally unique.
 - **Metadata and content are physically separated.** Every entity that carries
@@ -176,7 +176,7 @@ relation edges for readability) used to enforce ownership without a join.
 ## Metadata and content split
 
 Content-bearing entities are split across two tables that share the same UUIDv7
-record id; the identical key *is* the 1:1 join (`session_message:⟨uuid⟩` ↔
+record id; the identical key _is_ the 1:1 join (`session_message:⟨uuid⟩` ↔
 `session_message_content:⟨uuid⟩`). The base table is always queryable; the
 `_content` table holds only the payload that may later be encrypted.
 

@@ -1,15 +1,15 @@
 [package]
 name = "smista-core"
 version = { workspace = true }
-edition = { workspace = true }
 authors = { workspace = true }
-description = "Shared domain types, configuration, routing policy and trace structures for smista.ai."
-license = "MIT"
-repository = { workspace = true }
 categories = { workspace = true }
+edition = { workspace = true }
 keywords = { workspace = true }
+license = "MIT"
 readme = "README.md"
+repository = { workspace = true }
 rust-version = { workspace = true }
+description = "Shared domain types, configuration, routing policy and trace structures for smista.ai."
 
 [features]
 surrealdb = ["dep:surrealdb-types"]
@@ -25,9 +25,5 @@ serde_json = { workspace = true }
 surrealdb-types = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-ts-rs = { workspace = true, features = [
-  "chrono-impl",
-  "serde-json-impl",
-  "uuid-impl",
-] }
+ts-rs = { workspace = true, features = ["chrono-impl", "serde-json-impl", "uuid-impl"] }
 uuid = { workspace = true, features = ["serde", "v7"] }

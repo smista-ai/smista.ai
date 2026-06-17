@@ -24,13 +24,13 @@ unmaintained = "all"
 # Each ignored advisory is assessed and documented below. Re-review whenever
 # the SurrealDB stack is bumped, as both originate from it.
 ignore = [
-    # rsa has no constant-time implementation and no safe upgrade is available.
-    # Reaches us only transitively via surrealdb -> jsonwebtoken -> rsa, used
-    # server-side where the timing sidechannel is not remotely observable.
-    { id = "RUSTSEC-2023-0071", reason = "transitive via surrealdb/jsonwebtoken; no upgrade available; server-side use" },
-    # bincode 2.x is permanently unmaintained but feature-complete. Reaches us
-    # only transitively via surrealdb-core -> surrealmx -> bincode.
-    { id = "RUSTSEC-2025-0141", reason = "transitive via surrealdb; bincode is feature-complete, no action possible" },
+  # rsa has no constant-time implementation and no safe upgrade is available.
+  # Reaches us only transitively via surrealdb -> jsonwebtoken -> rsa, used
+  # server-side where the timing sidechannel is not remotely observable.
+  { id = "RUSTSEC-2023-0071", reason = "transitive via surrealdb/jsonwebtoken; no upgrade available; server-side use" },
+  # bincode 2.x is permanently unmaintained but feature-complete. Reaches us
+  # only transitively via surrealdb-core -> surrealmx -> bincode.
+  { id = "RUSTSEC-2025-0141", reason = "transitive via surrealdb; bincode is feature-complete, no action possible" },
 ]
 
 # ---------------------------------------------------------------------------
@@ -57,45 +57,31 @@ ignore = [
 # ---------------------------------------------------------------------------
 [licenses]
 allow = [
-    "Apache-2.0",
-    "BSD-1-Clause",
-    "BSD-2-Clause",
-    "BSD-3-Clause",
-    "BSL-1.0",
-    "CC0-1.0",
-    "CDLA-Permissive-2.0",
-    "Elastic-2.0",
-    "ISC",
-    "MIT",
-    "MIT-0",
-    "MPL-2.0",
-    "Unicode-3.0",
-    "Unlicense",
-    "Zlib",
+  "Apache-2.0",
+  "BSD-1-Clause",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "Elastic-2.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
 ]
 confidence-threshold = 0.8
 exceptions = [
-    { allow = [
-        "BUSL-1.1",
-    ], crate = "surrealdb" },
-    { allow = [
-        "BUSL-1.1",
-    ], crate = "surrealdb-collections" },
-    { allow = [
-        "BUSL-1.1",
-    ], crate = "surrealdb-core" },
-    { allow = [
-        "BUSL-1.1",
-    ], crate = "surrealdb-protocol" },
-    { allow = [
-        "BUSL-1.1",
-    ], crate = "surrealdb-strand" },
-    { allow = [
-        "BUSL-1.1",
-    ], crate = "surrealdb-types" },
-    { allow = [
-        "BUSL-1.1",
-    ], crate = "surrealdb-types-derive" },
+  { allow = ["BUSL-1.1"], crate = "surrealdb" },
+  { allow = ["BUSL-1.1"], crate = "surrealdb-collections" },
+  { allow = ["BUSL-1.1"], crate = "surrealdb-core" },
+  { allow = ["BUSL-1.1"], crate = "surrealdb-protocol" },
+  { allow = ["BUSL-1.1"], crate = "surrealdb-strand" },
+  { allow = ["BUSL-1.1"], crate = "surrealdb-types" },
+  { allow = ["BUSL-1.1"], crate = "surrealdb-types-derive" },
 ]
 
 [licenses.private]
