@@ -85,7 +85,7 @@ to `false`; set the ones a matched model must support: `streaming`, `tools`,
 `json_output`, `system_prompt`, `images`, `reasoning`, `memory`.
 
 `required_permissions` declares the [tool permissions](#tool-permissions) the
-matched route needs. It is merged over the project defaults and may only *narrow*
+matched route needs. It is merged over the project defaults and may only _narrow_
 them — see [Tool permissions](#tool-permissions).
 
 `cost_limit` is written as a quoted decimal string for exact precision (it is
@@ -211,7 +211,7 @@ The `[classification]` table itself accepts:
 ## Privacy
 
 Privacy policies control which context may reach which model class. Restricted
-files are never sent to remote models unless the policy allows it *and* the user
+files are never sent to remote models unless the policy allows it _and_ the user
 approves.
 
 ```toml
@@ -260,8 +260,8 @@ git = "allow"
 ```
 
 Skill- or rule-specific permissions (a rule's `required_permissions`) may
-*narrow* these defaults — tightening a tool from `allow` to `ask` to `deny`, or
-adding a tool not listed in the defaults. They may never *widen* them: an
+_narrow_ these defaults — tightening a tool from `allow` to `ask` to `deny`, or
+adding a tool not listed in the defaults. They may never _widen_ them: an
 override that loosens a stricter mode (for example setting `shell = "allow"` when
 the project default is `shell = "deny"`) is a configuration error naming the
 offending tool, not a silent override.
@@ -298,7 +298,7 @@ one of the identifiers below — otherwise the reference is rejected during
 validation.
 
 A generic OpenAI-compatible endpoint (a local vLLM or LM Studio server, a
-gateway, …) is a *named instance*, and its identifier takes the form
+gateway, …) is a _named instance_, and its identifier takes the form
 `openai-compat:<name>` — for example `openai-compat:my-vllm/llama-3.1-70b`.
 Instance names use lowercase letters, digits, `-` and `_`. You can configure as
 many such instances as you like, each with its own name.
@@ -353,7 +353,7 @@ Each `[providers.<id>]` table accepts:
 > A model's facts — its capabilities, context window, costs, whether it runs
 > locally, and whether it needs authentication — are **not** declared here. They
 > come from the provider at runtime. A rule's `requires_capabilities` is a
-> *requirement* you state; the router checks it against those facts when it
+> _requirement_ you state; the router checks it against those facts when it
 > selects a model. Endpoint overrides (such as a custom OpenAI-compatible URL)
 > belong to the router — see [Running the Router](router.md).
 

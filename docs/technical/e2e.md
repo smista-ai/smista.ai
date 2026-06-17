@@ -24,7 +24,7 @@ stored data is useless without it.
 ## What it does not hide
 
 The router still sees your content **while a task runs**, because it is the part
-that calls the model for you. Encryption protects what is *stored*, not what is
+that calls the model for you. Encryption protects what is _stored_, not what is
 processed live. In short: nothing readable is kept on disk, and the router never
 holds a key. It is not a promise that the router never sees your text.
 

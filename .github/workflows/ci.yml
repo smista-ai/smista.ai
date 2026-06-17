@@ -37,10 +37,8 @@ jobs:
         with:
           toolchain: nightly
           components: rustfmt
-      - name: Install just
-        uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
-      - name: Check formatting
-        run: just fmt_nightly "--check"
+      - name: Check formatting (dprint)
+        uses: dprint/check@9cb3a2b17a8e606d37aae341e49df3654933fc23 # v2.3
 
   clippy:
     needs: toolchain

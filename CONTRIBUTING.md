@@ -29,8 +29,10 @@ You only need to sign once; later pull requests are recognized automatically.
 
 1. Fork and clone the repository.
 2. Install the toolchain pinned in `rust-toolchain.toml` (rustup handles this
-   automatically), [Node.js](https://nodejs.org) 22+ for the SDK, and
-   [`just`](https://just.systems).
+   automatically), the `nightly` toolchain with `rustfmt`
+   (`rustup toolchain install nightly --component rustfmt`),
+   [Node.js](https://nodejs.org) 22+ for the SDK, [`just`](https://just.systems)
+   and [`dprint`](https://dprint.dev).
 3. Build everything:
 
    ```sh
@@ -48,12 +50,22 @@ Run `just` to list every available recipe.
 - Commit messages follow [Conventional Commits](https://conventionalcommits.org).
 - Do **not** add `Co-Authored-By` lines.
 
+## Formatting
+
+[`dprint`](https://dprint.dev) formats Markdown, TOML (including `Cargo.toml`),
+YAML and Rust (delegating to `nightly` `rustfmt`) from a single entrypoint:
+
+```sh
+just fmt         # format every supported file in place
+just fmt_check   # check formatting without writing (what CI runs)
+```
+
 ## Before opening a pull request
 
 Run the same checks CI runs:
 
 ```sh
-just check_code   # fmt --check, clippy -D warnings, SDK lint + typecheck
+just check_code   # dprint check, clippy -D warnings, SDK lint + typecheck
 just test_all     # crate + SDK tests
 just build_all
 ```

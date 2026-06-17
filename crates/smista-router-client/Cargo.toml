@@ -1,12 +1,12 @@
 [package]
 name = "smista-router-client"
 version = { workspace = true }
-edition = { workspace = true }
 authors = { workspace = true }
-description = "Async Rust client for the smista-router HTTP JSON API."
-license = "MIT"
-repository = { workspace = true }
 categories = { workspace = true }
+edition = { workspace = true }
 keywords = { workspace = true }
+license = "MIT"
 readme = "README.md"
+repository = { workspace = true }
 rust-version = { workspace = true }
+description = "Async Rust client for the smista-router HTTP JSON API."

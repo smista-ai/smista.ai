@@ -79,8 +79,12 @@ Tasks are driven by [`just`](https://just.systems); run `just` to list recipes.
 just build_all          # crates + SDK
 just build_crates       # cargo build --workspace
 
+# Format (dprint: Markdown, TOML, YAML, Rust via nightly rustfmt)
+just fmt                # format every supported file in place
+just fmt_check          # check formatting without writing
+
 # Checks (what CI runs)
-just check_code         # nightly fmt --check, clippy -D warnings, SDK lint + typecheck
+just check_code         # dprint check, clippy -D warnings, SDK lint + typecheck
 just test_all           # cargo test --workspace + SDK vitest
 
 # SDK (all npm scripts are exposed as `sdk_*` recipes)

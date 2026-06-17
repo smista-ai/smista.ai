@@ -32,7 +32,6 @@
     - [Status codes](#status-codes)
     - [Error codes](#error-codes)
 
-
 `smista-router` exposes a JSON REST API. The CLI uses it, and so can your own
 tools, scripts, editors or web clients. The API authenticates users, manages
 sessions, previews routes, executes tasks, and reports traces and usage. Routing
