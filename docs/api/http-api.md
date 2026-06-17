@@ -78,10 +78,15 @@ different headers and are never mixed.
 | `X-Smista-Api-Key: <api-key>`                 | Auth endpoints only, to obtain a token.     |
 | `X-Smista-Provider-<Provider>-Api-Key: <key>` | Provider credential for a specific request. |
 
-For example: `X-Smista-Provider-Anthropic-Api-Key: <key>`. Provider credentials
-are sent only when the selected model needs them, used for that one request, and
-never logged, traced or forwarded to the model. Credentials are never accepted
-in query parameters.
+For example: `X-Smista-Provider-Anthropic-Api-Key: <key>`. The `<Provider>` part
+is the provider name and is case-insensitive (`anthropic`, `openai`, `gemini`,
+`ollama`). For an OpenAI-compatible endpoint, use its instance name directly —
+`X-Smista-Provider-my-vllm-Api-Key` for an instance named `my-vllm` — since the
+`openai-compat:` form cannot appear in a header name.
+
+Provider credentials are sent only when the selected model needs them, used for
+that one request, and never logged, traced or forwarded to the model.
+Credentials are never accepted in query parameters.
 
 The flow: `POST /auth/bootstrap` returns a user ID and a long-lived API key
 (shown once). `POST /auth/sign-in` exchanges that key for a short-lived session
