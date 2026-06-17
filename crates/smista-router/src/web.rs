@@ -250,8 +250,14 @@ fn build_router(state: AppState) -> Router {
         }
     }
 
+    // The credential guard runs before the extractor so a credential smuggled
+    // through the query string is rejected outright; the extractor then lifts
+    // the header credentials into the request extensions for the handler.
     app.layer(axum::middleware::from_fn(
         middleware::reject_query_credentials,
+    ))
+    .layer(axum::middleware::from_fn(
+        middleware::extract_provider_credentials,
     ))
     .with_state(state)
 }
