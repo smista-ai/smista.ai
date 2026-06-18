@@ -8,7 +8,7 @@
 //!
 //! - [`WebServer`], a long-lived service that binds the listener and serves the
 //!   router until the shared [`CancellationToken`] is triggered.
-//! - One request module per endpoint (for example [`status`] or [`execute`]),
+//! - One request module per endpoint (for example [`routes::status`] or [`routes::execute`]),
 //!   each owning a single handler. Endpoints not yet implemented return a
 //!   `501 Not Implemented` [`error::WebError`] until their owning issue fills
 //!   them in.
@@ -20,27 +20,9 @@
 //! [`ApiErrorResponse`](smista_core::api::ApiErrorResponse) in `smista-core` and
 //! rendered as JSON by [`error::WebError`].
 
-mod bootstrap;
-mod create_session;
-mod delete_session;
 mod error;
-mod execute;
-mod get_session;
-mod get_trace;
-mod latest_trace;
-mod list_models;
-mod list_providers;
-mod list_sessions;
-mod me;
 mod middleware;
-mod preview;
-mod session_usage;
-mod sign_in;
-mod sign_out;
-mod status;
-mod stream;
-mod submit_approval;
-mod update_session;
+mod routes;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -175,44 +157,41 @@ impl WebServer {
 /// endpoint and the cross-cutting middleware.
 fn build_router(state: AppState) -> Router {
     let api = Router::new()
-        .route("/auth/bootstrap", post(bootstrap::bootstrap))
-        .route("/auth/sign-in", post(sign_in::sign_in))
-        .route("/auth/sign-out", post(sign_out::sign_out))
-        .route("/auth/me", get(me::me))
+        .route("/auth/bootstrap", post(routes::bootstrap))
+        .route("/auth/sign-in", post(routes::sign_in))
+        .route("/auth/sign-out", post(routes::sign_out))
+        .route("/auth/me", get(routes::me))
         .route(
             "/sessions",
-            post(create_session::create_session).get(list_sessions::list_sessions),
+            post(routes::create_session).get(routes::list_sessions),
         )
         .route(
             "/sessions/{session_id}",
-            get(get_session::get_session)
-                .put(update_session::update_session)
-                .delete(delete_session::delete_session),
+            get(routes::get_session)
+                .put(routes::update_session)
+                .delete(routes::delete_session),
         )
-        .route("/sessions/{session_id}/execute", post(execute::execute))
-        .route("/sessions/{session_id}/stream", post(stream::stream))
-        .route("/sessions/{session_id}/preview", post(preview::preview))
+        .route("/sessions/{session_id}/execute", post(routes::execute))
+        .route("/sessions/{session_id}/stream", post(routes::stream))
+        .route("/sessions/{session_id}/preview", post(routes::preview))
         .route(
             "/sessions/{session_id}/approvals/{approval_id}",
-            post(submit_approval::submit_approval),
+            post(routes::submit_approval),
         )
         .route(
             "/sessions/{session_id}/traces/latest",
-            get(latest_trace::latest_trace),
+            get(routes::latest_trace),
         )
         .route(
             "/sessions/{session_id}/traces/{trace_id}",
-            get(get_trace::get_trace),
+            get(routes::get_trace),
         )
-        .route(
-            "/sessions/{session_id}/usage",
-            get(session_usage::session_usage),
-        )
-        .route("/llm/providers", get(list_providers::list_providers))
-        .route("/llm/models", get(list_models::list_models));
+        .route("/sessions/{session_id}/usage", get(routes::session_usage))
+        .route("/llm/providers", get(routes::list_providers))
+        .route("/llm/models", get(routes::list_models));
 
     let mut app = Router::new()
-        .route("/status", get(status::status))
+        .route("/status", get(routes::status))
         .nest("/api/v1", api)
         // Logging runs outermost so it observes the final status code, including
         // responses short-circuited by the rate limiter and credential guard
