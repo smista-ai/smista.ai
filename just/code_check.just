@@ -23,6 +23,11 @@ doc args="":
 deny args="":
     cargo deny check {{ args }}
 
+# Scan for secrets with trufflehog (defaults to the whole working tree)
+[group('code_check')]
+scan_secrets *args=".":
+    trufflehog filesystem {{ args }} --results=verified,unknown --fail --no-update
+
 # Lint and format-check the TypeScript SDK (Biome)
 [group('code_check')]
 check_sdk: sdk_check
@@ -30,6 +35,12 @@ check_sdk: sdk_check
 # Type-check the TypeScript SDK
 [group('code_check')]
 typecheck_sdk: sdk_typecheck
+
+# Point git at the tracked .githooks directory (installs the pre-commit hook)
+[group('code_check')]
+setup_githooks:
+    git config core.hooksPath .githooks
+    @echo "git hooks installed: core.hooksPath = .githooks"
 
 # Run all code checks. Fails if any check fails
 [group('code_check')]
