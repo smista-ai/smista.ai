@@ -31,8 +31,11 @@ You only need to sign once; later pull requests are recognized automatically.
 2. Install the toolchain pinned in `rust-toolchain.toml` (rustup handles this
    automatically), the `nightly` toolchain with `rustfmt`
    (`rustup toolchain install nightly --component rustfmt`),
-   [Node.js](https://nodejs.org) 22+ for the SDK, [`just`](https://just.systems)
-   and [`dprint`](https://dprint.dev).
+   [Node.js](https://nodejs.org) 22+ for the SDK, [`just`](https://just.systems),
+   [`dprint`](https://dprint.dev),
+   [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny) and
+   [`trufflehog`](https://github.com/trufflesecurity/trufflehog) (the last two
+   power the git hooks below).
 3. Build everything:
 
    ```sh
@@ -59,6 +62,25 @@ YAML and Rust (delegating to `nightly` `rustfmt`) from a single entrypoint:
 just fmt         # format every supported file in place
 just fmt_check   # check formatting without writing (what CI runs)
 ```
+
+## Git hooks
+
+Install the tracked git hooks once after cloning:
+
+```sh
+just setup_githooks   # sets core.hooksPath to .githooks
+```
+
+The `pre-commit` hook gates every commit on three checks:
+
+1. **trufflehog** scans the staged files for verified or unknown secrets
+   (`just scan_secrets`).
+2. **dprint** verifies formatting (`just fmt_check`).
+3. **cargo-deny** verifies advisories, licenses, bans and sources
+   (`just deny`).
+
+In an emergency you can skip the hook with `git commit --no-verify`, but CI
+runs the same checks, so the commit still has to pass them.
 
 ## Before opening a pull request
 
