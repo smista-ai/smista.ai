@@ -36,6 +36,13 @@ lives in `docs/`.
 - **Commits**: [Conventional Commits](https://conventionalcommits.org). Never
   add a `Co-Authored-By` line.
 - **Branches**: `feat/{issue_number}-{issue_name}` (e.g. `feat/1-scaffolding`).
+- **Issues**: when refining a task that belongs to a milestone, or creating an
+  issue to implement a new feature, use the
+  [`Development task`](.github/ISSUE_TEMPLATE/task.md) template (Description,
+  Out of scope, Dependencies, Notes, Acceptance criteria). Always label the
+  issue with the relevant `area:{name}` and `crate:{name}` labels (e.g.
+  `area:auth`, `crate:router`), and add it to the `smista.ai` GitHub Project
+  with status `Backlog`.
 - **Licensing**: the project is dual-licensed per crate. Consumer-facing
   libraries (`smista-core`, `smista-router-client`, `smista-sdk`, the TS
   `@smista-ai/sdk`) are MIT; everything else is Elastic-2.0. There is **no**
