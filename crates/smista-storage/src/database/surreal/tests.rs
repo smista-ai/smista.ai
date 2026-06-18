@@ -471,14 +471,15 @@ async fn should_not_create_token_with_duplicate_hash() {
 }
 
 #[tokio::test]
-async fn should_validate_active_token() {
+async fn should_get_active_token() {
     let db = memory_db().await;
     let user_id = Uuid::now_v7();
     db.create_user(user(user_id))
         .await
         .expect("failed to create user");
+    let id = Uuid::now_v7();
     db.create_token(token_for(
-        Uuid::now_v7(),
+        id,
         user_id,
         "live",
         Utc::now() + Duration::hours(1),
@@ -487,23 +488,27 @@ async fn should_validate_active_token() {
     .await
     .expect("failed to create token");
 
-    let valid = db
-        .validate_token("live")
+    let token = db
+        .get_active_token(id)
         .await
-        .expect("failed to validate token");
+        .expect("failed to get token")
+        .expect("active token not found");
 
-    assert!(valid.is_some());
+    assert_eq!(token.token_hash, "live");
+    // The owning user is recoverable from the loaded token.
+    assert_eq!(token.user_id(), user_id);
 }
 
 #[tokio::test]
-async fn should_not_validate_expired_or_revoked_token() {
+async fn should_not_get_expired_or_revoked_token() {
     let db = memory_db().await;
     let user_id = Uuid::now_v7();
     db.create_user(user(user_id))
         .await
         .expect("failed to create user");
+    let expired_id = Uuid::now_v7();
     db.create_token(token_for(
-        Uuid::now_v7(),
+        expired_id,
         user_id,
         "expired",
         Utc::now() - Duration::hours(1),
@@ -511,8 +516,9 @@ async fn should_not_validate_expired_or_revoked_token() {
     ))
     .await
     .expect("failed to create expired token");
+    let revoked_id = Uuid::now_v7();
     db.create_token(token_for(
-        Uuid::now_v7(),
+        revoked_id,
         user_id,
         "revoked",
         Utc::now() + Duration::hours(1),
@@ -522,18 +528,18 @@ async fn should_not_validate_expired_or_revoked_token() {
     .expect("failed to create revoked token");
 
     assert!(
-        db.validate_token("expired")
+        db.get_active_token(expired_id)
             .await
-            .expect("failed to validate")
+            .expect("failed to get token")
             .is_none(),
-        "expired token validated"
+        "expired token returned"
     );
     assert!(
-        db.validate_token("revoked")
+        db.get_active_token(revoked_id)
             .await
-            .expect("failed to validate")
+            .expect("failed to get token")
             .is_none(),
-        "revoked token validated"
+        "revoked token returned"
     );
 }
 
@@ -560,9 +566,9 @@ async fn should_revoke_token() {
         .expect("failed to revoke token");
 
     assert!(
-        db.validate_token("to-revoke")
+        db.get_active_token(token_id)
             .await
-            .expect("failed to validate")
+            .expect("failed to get token")
             .is_none(),
         "revoked token still valid"
     );
@@ -1393,8 +1399,9 @@ async fn should_delete_expired_and_revoked_tokens() {
         .await
         .expect("failed to create user");
 
+    let live_id = Uuid::now_v7();
     db.create_token(token_for(
-        Uuid::now_v7(),
+        live_id,
         user_id,
         "live",
         Utc::now() + Duration::hours(1),
@@ -1432,9 +1439,9 @@ async fn should_delete_expired_and_revoked_tokens() {
         "expired or revoked tokens remain"
     );
     assert!(
-        db.validate_token("live")
+        db.get_active_token(live_id)
             .await
-            .expect("failed to validate")
+            .expect("failed to get token")
             .is_some(),
         "live token was deleted"
     );

@@ -90,7 +90,9 @@ Credentials are never accepted in query parameters.
 
 The flow: `POST /auth/bootstrap` returns a user ID and a long-lived API key
 (shown once). `POST /auth/sign-in` exchanges that key for a short-lived session
-token, which you send as a bearer token on every other request.
+token, which you send as a bearer token on every other request. For how these
+credentials are formatted, hashed and verified, see
+[Router authentication](../technical/authentication.md).
 
 ### Bootstrap a user
 
@@ -120,8 +122,18 @@ Public endpoint. The API key already identifies the user, so no body is needed.
 Exchanges the API key for a short-lived session token and its expiry:
 
 ```json
-{ "token": "st_...", "expires_at": "2026-05-25T12:00:00Z" }
+{
+  "token": "0194f1e23a2d7e6f9b0a1c2d3e4f5a6b-3k9q...<64 chars>",
+  "expires_at": "2026-05-25T12:00:00Z"
+}
 ```
+
+The token is `<token-id>-<secret>`: a 32-hex-digit token id, a hyphen, then a
+64-character lowercase-alphanumeric secret. Treat it as opaque and send it back
+verbatim as `Authorization: Bearer <token>`. Its lifetime comes from
+`router.auth.token_ttl_seconds`. See
+[Router authentication](../technical/authentication.md#session-tokens) for the
+format and hashing details.
 
 ### Sign out
 

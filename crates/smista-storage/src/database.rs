@@ -75,13 +75,15 @@ pub trait Database: Send + Sync {
         token: AuthToken,
     ) -> impl Future<Output = StorageResult<AuthToken>> + Send;
 
-    /// Returns the token matching the given hash if it is currently valid.
+    /// Returns the active token with the given id, if any.
     ///
-    /// A token is valid when it exists, has not expired and has not been
-    /// revoked; otherwise `None` is returned.
-    fn validate_token(
+    /// A token is active when it exists, has not expired and has not been
+    /// revoked; otherwise `None` is returned. The full row is returned so the
+    /// caller can verify the presented secret against the stored hash and scope
+    /// the request to the owning user.
+    fn get_active_token(
         &self,
-        token_hash: &str,
+        token_id: Uuid,
     ) -> impl Future<Output = StorageResult<Option<AuthToken>>> + Send;
 
     /// Revokes the token with the given id.

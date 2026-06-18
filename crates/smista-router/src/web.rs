@@ -118,10 +118,11 @@ impl WebServer {
     pub fn init(config: WebServerConfig) -> anyhow::Result<Self> {
         let host = config.config.host.clone();
         let port = config.config.port;
+        let token_ttl = Duration::from_secs(config.config.auth.token_ttl_seconds);
         let router = Arc::new(SmistaRouter::init(&config.config, config.database.clone())?);
         Ok(Self {
             state: AppState {
-                authenticator: Arc::new(Authenticator::new(config.database.clone())),
+                authenticator: Arc::new(Authenticator::new(config.database.clone(), token_ttl)),
                 config: Arc::new(config.config),
                 database: config.database,
                 router,
@@ -309,9 +310,11 @@ pub(crate) mod test_support {
     /// provider and model endpoints without reaching a real backend.
     pub(crate) async fn test_router() -> Router {
         let database = test_database().await;
+        let config = RouterConfig::default();
+        let token_ttl = std::time::Duration::from_secs(config.auth.token_ttl_seconds);
         let state = AppState {
-            authenticator: Arc::new(super::Authenticator::new(database.clone())),
-            config: Arc::new(RouterConfig::default()),
+            authenticator: Arc::new(super::Authenticator::new(database.clone(), token_ttl)),
+            config: Arc::new(config),
             database,
             router: test_smista_router(),
         };
@@ -381,8 +384,10 @@ mod tests {
     /// Builds a router whose only non-default setting is its rate-limit config.
     async fn router_with_rate_limit(rate_limit: RateLimitConfig) -> Router {
         let database = test_database().await;
+        let token_ttl =
+            std::time::Duration::from_secs(RouterConfig::default().auth.token_ttl_seconds);
         let state = AppState {
-            authenticator: Arc::new(super::Authenticator::new(database.clone())),
+            authenticator: Arc::new(super::Authenticator::new(database.clone(), token_ttl)),
             config: Arc::new(RouterConfig {
                 rate_limit,
                 ..RouterConfig::default()

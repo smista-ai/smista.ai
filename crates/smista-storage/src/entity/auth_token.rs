@@ -1,9 +1,13 @@
 //! Authentication token table.
 
+use std::time::Duration;
+
 use chrono::{DateTime, Utc};
 use surrealdb::types::{RecordId, SurrealValue};
+use uuid::Uuid;
 
-use super::Table;
+use super::{Table, record_uuid};
+use crate::entity::User;
 
 /// A short-lived authentication session for the router.
 ///
@@ -24,6 +28,34 @@ pub struct AuthToken {
     pub expires_at: DateTime<Utc>,
     /// When the token was revoked, if applicable.
     pub revoked_at: Option<DateTime<Utc>>,
+}
+
+impl AuthToken {
+    /// Creates a new [`AuthToken`] owned by `user`, identified by `id` and storing `token_hash`.
+    ///
+    /// The token expires `duration` after creation and starts out not revoked.
+    pub fn new(id: Uuid, token_hash: String, user: &User, duration: Duration) -> Self {
+        let now = Utc::now();
+        let expires_at = now + duration;
+
+        Self {
+            id: RecordId::new(Self::name(), id.to_string()),
+            user: user.id.clone(),
+            token_hash,
+            created_at: now,
+            expires_at,
+            revoked_at: None,
+        }
+    }
+
+    /// Returns the [`Uuid`] of the user that owns this token.
+    ///
+    /// This recovers the owning user's id from the stored record reference so
+    /// callers can scope a request to that user without depending on SurrealDB's
+    /// [`RecordId`] type.
+    pub fn user_id(&self) -> Uuid {
+        record_uuid(&self.user)
+    }
 }
 
 impl Table for AuthToken {
