@@ -16,12 +16,14 @@ pub(crate) async fn me() -> WebError {
 mod tests {
     use axum::http::StatusCode;
 
-    use crate::web::test_support::{get, send, test_router};
+    use crate::web::test_support::{authenticated_router, get_with_token, send};
 
     #[tokio::test]
     async fn should_return_not_implemented() {
-        let router = test_router().await;
-        let (status, body) = send(router, get("/api/v1/auth/me")).await;
+        // The route is authenticated, so a valid token is needed to reach the
+        // scaffolded handler and observe its placeholder response.
+        let (router, token) = authenticated_router().await;
+        let (status, body) = send(router, get_with_token("/api/v1/auth/me", &token)).await;
 
         assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
         assert_eq!(body["error"]["code"], "not_implemented");
