@@ -399,18 +399,6 @@ impl Database for SurrealDatabase {
         self.0.select(id).await.map_err(StorageError::from)
     }
 
-    async fn get_user_by_api_key_hash(&self, api_key_hash: &str) -> StorageResult<Option<User>> {
-        tracing::debug!("getting user with API key hash {api_key_hash}");
-
-        self.0
-            .query("SELECT * FROM $table WHERE api_key_hash = $hash")
-            .bind(("table", User::table()))
-            .bind(("hash", api_key_hash))
-            .await?
-            .take::<Option<User>>(0)
-            .map_err(StorageError::from)
-    }
-
     async fn create_token(&self, token: AuthToken) -> StorageResult<AuthToken> {
         let id = format!("{:?}", token.id);
         let user_id = format!("{:?}", token.user);

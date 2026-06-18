@@ -4847,11 +4847,13 @@ name = "smista-router"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "argon2",
  "async-trait",
  "axum",
  "chrono",
  "clap",
  "futures",
+ "rand 0.10.1",
  "rust_decimal",
  "secrecy",
  "serde",

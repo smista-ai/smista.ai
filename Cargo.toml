@@ -33,6 +33,7 @@ description = "Local-first agent and CLI that deterministically routes each phas
 
 [workspace.dependencies]
 anyhow = "1"
+argon2 = { version = "0.5", default-features = false }
 async-trait = "0.1"
 axum = { version = "0.8", default-features = false }
 chrono = "0.4"
@@ -41,6 +42,7 @@ dirs = "6"
 futures = "0.3"
 globset = "0.4"
 http = "1"
+rand = "0.10"
 ratatui = "0.30"
 reqwest = "0.13"
 rig-core = "0.38"

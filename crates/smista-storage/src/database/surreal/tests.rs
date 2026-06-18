@@ -148,47 +148,6 @@ async fn should_not_get_nonexistent_user() {
 }
 
 #[tokio::test]
-async fn should_get_user_by_api_key_hash() {
-    let db = memory_db().await;
-
-    let id = Uuid::now_v7();
-    let user = user(id);
-
-    assert!(
-        db.get_user_by_api_key_hash(&user.api_key_hash)
-            .await
-            .expect("failed to get user by API key hash")
-            .is_none(),
-        "unexpectedly found user before creation"
-    );
-
-    db.create_user(user.clone())
-        .await
-        .expect("failed to create user");
-
-    let got = db
-        .get_user_by_api_key_hash(&user.api_key_hash)
-        .await
-        .expect("failed to get user by API key hash")
-        .expect("user not found after creation");
-
-    assert_eq!(got, user);
-}
-
-#[tokio::test]
-async fn should_not_get_nonexistent_user_by_api_key_hash() {
-    let db = memory_db().await;
-
-    assert!(
-        db.get_user_by_api_key_hash("hash")
-            .await
-            .expect("failed to get user by API key hash")
-            .is_none(),
-        "unexpectedly found user that was never created"
-    );
-}
-
-#[tokio::test]
 async fn should_create_auth_token() {
     let db = memory_db().await;
 
