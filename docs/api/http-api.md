@@ -102,20 +102,22 @@ Public endpoint. Creates a user and returns the user ID together with a
 long-lived API key, shown only this once:
 
 ```json
-{ "user_id": "user:abc123", "api_key": "sk-smista-api01-..." }
+{ "user_id": "user:abc123", "api_key": "sk-smista-api01-<user-id>-<secret>" }
 ```
+
+The key is `sk-smista-api01-` followed by the user id and a random secret. It
+embeds the user id, so the router identifies the owner from the key alone — you
+never send the user id alongside it.
 
 ### Sign in
 
 ```http
 POST /api/v1/auth/sign-in
 X-Smista-Api-Key: <api-key>
-
-{ "user_id": "user:abc123" }
 ```
 
-Public endpoint. Exchanges the API key for a short-lived session token and its
-expiry:
+Public endpoint. The API key already identifies the user, so no body is needed.
+Exchanges the API key for a short-lived session token and its expiry:
 
 ```json
 { "token": "st_...", "expires_at": "2026-05-25T12:00:00Z" }

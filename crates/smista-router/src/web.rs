@@ -56,6 +56,7 @@ use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::key_extractor::SmartIpKeyExtractor;
 
+use crate::auth::Authenticator;
 use crate::config::RouterConfig;
 use crate::router::Router as SmistaRouter;
 
@@ -66,6 +67,9 @@ use crate::router::Router as SmistaRouter;
 /// shared connection.
 #[derive(Debug, Clone)]
 pub(crate) struct AppState {
+    /// Authenticator for handling user authentication and session management.
+    #[expect(dead_code, reason = "used by bearer authentication middleware (#136)")]
+    pub(crate) authenticator: Arc<Authenticator>,
     /// The validated router configuration.
     pub(crate) config: Arc<RouterConfig>,
     /// The storage backend handle.
@@ -117,6 +121,7 @@ impl WebServer {
         let router = Arc::new(SmistaRouter::init(&config.config, config.database.clone())?);
         Ok(Self {
             state: AppState {
+                authenticator: Arc::new(Authenticator::new(config.database.clone())),
                 config: Arc::new(config.config),
                 database: config.database,
                 router,
@@ -303,9 +308,11 @@ pub(crate) mod test_support {
     /// mocked providers will be injected here so handler tests can exercise the
     /// provider and model endpoints without reaching a real backend.
     pub(crate) async fn test_router() -> Router {
+        let database = test_database().await;
         let state = AppState {
+            authenticator: Arc::new(super::Authenticator::new(database.clone())),
             config: Arc::new(RouterConfig::default()),
-            database: test_database().await,
+            database,
             router: test_smista_router(),
         };
         build_router(state)
@@ -373,12 +380,14 @@ mod tests {
 
     /// Builds a router whose only non-default setting is its rate-limit config.
     async fn router_with_rate_limit(rate_limit: RateLimitConfig) -> Router {
+        let database = test_database().await;
         let state = AppState {
+            authenticator: Arc::new(super::Authenticator::new(database.clone())),
             config: Arc::new(RouterConfig {
                 rate_limit,
                 ..RouterConfig::default()
             }),
-            database: test_database().await,
+            database,
             router: test_smista_router(),
         };
         build_router(state)

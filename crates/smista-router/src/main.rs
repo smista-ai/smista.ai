@@ -10,6 +10,7 @@
 //!
 
 mod args;
+mod auth;
 mod config;
 mod log;
 mod retention;

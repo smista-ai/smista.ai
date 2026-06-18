@@ -13,8 +13,10 @@ description = "smista-router service: routing, orchestration and the HTTP API ho
 
 [dependencies]
 anyhow = { workspace = true }
+argon2 = { workspace = true, features = ["password-hash"] }
 axum = { workspace = true, features = ["http1", "http2", "json", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing"] }
 clap = { workspace = true, features = ["derive", "env"] }
+rand = { workspace = true }
 rust_decimal = { workspace = true, features = ["serde-with-str"] }
 secrecy = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }

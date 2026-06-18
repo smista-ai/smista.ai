@@ -7,6 +7,7 @@
 
 use chrono::{DateTime, Utc};
 use surrealdb::types::{RecordId, SurrealValue};
+use uuid::Uuid;
 
 use super::Table;
 
@@ -29,6 +30,20 @@ pub struct User {
     pub disabled_at: Option<DateTime<Utc>>,
 }
 
+impl User {
+    /// Builds a [`User`] entity with the given `id` and `api_key_hash`.
+    pub fn new(id: Uuid, api_key_hash: String) -> Self {
+        let now = Utc::now();
+        Self {
+            id: RecordId::new(Self::name(), id.to_string()),
+            api_key_hash,
+            created_at: now,
+            updated_at: now,
+            disabled_at: None,
+        }
+    }
+}
+
 impl Table for User {
     fn name() -> &'static str {
         "user"
@@ -39,6 +54,17 @@ impl Table for User {
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn should_build_user_from_id_and_hash() {
+        let id = Uuid::now_v7();
+        let user = User::new(id, "hashed_api_key".to_string());
+
+        assert_eq!(user.id, RecordId::new(User::name(), id.to_string()));
+        assert_eq!(user.api_key_hash, "hashed_api_key");
+        assert_eq!(user.created_at, user.updated_at);
+        assert!(user.disabled_at.is_none());
+    }
 
     #[tokio::test]
     async fn should_store_and_read_user() {

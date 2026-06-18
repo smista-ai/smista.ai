@@ -61,16 +61,11 @@ pub trait Database: Send + Sync {
     fn create_user(&self, user: User) -> impl Future<Output = StorageResult<User>> + Send;
 
     /// Loads a user by id, or `None` if no such user exists.
-    fn get_user(&self, id: Uuid) -> impl Future<Output = StorageResult<Option<User>>> + Send;
-
-    /// Loads the user holding the given API-key hash, or `None` if unknown.
     ///
-    /// The raw key is never stored; callers pass the hash computed by the
-    /// router's authentication layer.
-    fn get_user_by_api_key_hash(
-        &self,
-        api_key_hash: &str,
-    ) -> impl Future<Output = StorageResult<Option<User>>> + Send;
+    /// API keys embed their owner's id, so the authentication layer parses the
+    /// id from the presented key, loads the user here and verifies the key
+    /// against the stored hash; there is no lookup by hash.
+    fn get_user(&self, id: Uuid) -> impl Future<Output = StorageResult<Option<User>>> + Send;
 
     // -- Tokens --------------------------------------------------------------
 
