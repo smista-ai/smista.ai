@@ -1,9 +1,10 @@
 //! Types for issuing and validating API keys for smista-router
 
-use anyhow::Context as _;
 use rand::distr::{Alphanumeric, SampleString};
 use secrecy::{ExposeSecret as _, SecretString};
 use uuid::Uuid;
+
+use crate::auth::{AuthenticationResult, AuthenticatorError};
 
 const API_KEY_PREFIX_V1: &str = "sk-smista-api01-";
 const API_KEY_RANDOM_LEN_V1: usize = 96;
@@ -39,23 +40,21 @@ impl ApiKeyIssuer {
     ///
     /// Returns an error if the key does not carry the expected v1 prefix, is
     /// missing its secret segment, or its embedded user id is not a valid UUID.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by bearer authentication middleware (#136)")
-    )]
-    pub fn parse_user_id(api_key: &SecretString) -> anyhow::Result<Uuid> {
+    pub fn parse_user_id(api_key: &SecretString) -> AuthenticationResult<Uuid> {
         let body = api_key
             .expose_secret()
             .strip_prefix(API_KEY_PREFIX_V1)
-            .context("api key does not carry the expected v1 prefix")?;
+            .ok_or(AuthenticatorError::InvalidApiKey)?;
 
         let (user_id, secret) = body
             .split_once('-')
-            .context("api key is missing its secret segment")?;
+            .ok_or(AuthenticatorError::InvalidApiKey)?;
 
-        anyhow::ensure!(!secret.is_empty(), "api key is missing its secret segment");
+        if secret.is_empty() {
+            return Err(AuthenticatorError::InvalidApiKey);
+        }
 
-        Uuid::try_parse(user_id).context("api key carries an invalid user id")
+        Uuid::try_parse(user_id).map_err(|_| AuthenticatorError::InvalidApiKey)
     }
 
     /// Generates a random alphanumeric string of the specified length using a cryptographically secure random number generator (CSPRNG).

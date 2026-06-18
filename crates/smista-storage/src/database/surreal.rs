@@ -422,16 +422,16 @@ impl Database for SurrealDatabase {
         }
     }
 
-    async fn validate_token(&self, token_hash: &str) -> StorageResult<Option<AuthToken>> {
-        tracing::debug!("validating auth token");
+    async fn get_active_token(&self, token_id: Uuid) -> StorageResult<Option<AuthToken>> {
+        tracing::debug!("getting active token {token_id}");
 
         self.0
             .query(
-                "SELECT * FROM $table WHERE token_hash = $hash \
+                "SELECT * FROM $table WHERE id = $id \
                  AND expires_at > time::now() AND revoked_at IS NONE",
             )
             .bind(("table", AuthToken::table()))
-            .bind(("hash", token_hash.to_string()))
+            .bind(("id", record_id::<AuthToken, _>(token_id)))
             .await?
             .take::<Option<AuthToken>>(0)
             .map_err(StorageError::from)

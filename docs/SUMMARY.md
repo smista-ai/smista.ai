@@ -26,6 +26,7 @@
 # Technical
 
 - [Architecture](technical/architecture.md)
+- [Router authentication](technical/authentication.md)
 - [Memory](technical/memory.md)
 - [Schema](technical/schema.md)
 - [End-to-end encryption](technical/e2e.md)
