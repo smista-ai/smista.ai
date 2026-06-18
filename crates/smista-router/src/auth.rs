@@ -7,6 +7,7 @@ mod token;
 use std::time::Duration;
 
 use axum::http;
+use chrono::{DateTime, Utc};
 use secrecy::{ExposeSecret as _, SecretString};
 use smista_storage::database::Database as _;
 use smista_storage::database::surreal::SurrealDatabase;
@@ -32,15 +33,22 @@ pub enum AuthenticatorError {
     UserNotFound,
 }
 
-impl From<AuthenticatorError> for http::StatusCode {
-    fn from(error: AuthenticatorError) -> Self {
-        match error {
+impl AuthenticatorError {
+    /// Maps each error variant to an appropriate HTTP status code for API responses.
+    pub fn status_code(&self) -> http::StatusCode {
+        match self {
             AuthenticatorError::UserNotFound
             | AuthenticatorError::InvalidToken
             | AuthenticatorError::InvalidApiKey => http::StatusCode::UNAUTHORIZED,
             AuthenticatorError::InvalidHash => http::StatusCode::BAD_REQUEST,
             AuthenticatorError::InternalError(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
         }
+    }
+}
+
+impl From<AuthenticatorError> for http::StatusCode {
+    fn from(error: AuthenticatorError) -> Self {
+        error.status_code()
     }
 }
 
@@ -58,6 +66,21 @@ pub struct Authenticator {
     /// How long an issued session token stays valid, sourced from
     /// `router.auth.token_ttl_seconds`.
     token_ttl: Duration,
+}
+
+/// Represents a user session, including the session token and its expiration time.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "used by POST /auth/sign-in endpoint (#150)")
+)]
+pub struct UserSession {
+    /// The expiration time of the session token.
+    pub expires_at: DateTime<Utc>,
+    /// The session token issued to the user.
+    pub token: SecretString,
+    /// The user ID associated with the session.
+    pub user_id: Uuid,
 }
 
 impl Authenticator {
@@ -95,12 +118,13 @@ impl Authenticator {
     ///
     /// A session token is issued, stored in the database and returned to the caller if the API key is valid.
     ///
+    /// Returns a [`UserSession`] containing the issued token, its expiration time, and the user ID.
     /// Returns an error if the user is not found or if the API key is invalid.
     #[cfg_attr(
         not(test),
         expect(dead_code, reason = "used by POST /auth/sign-in endpoint (#150)")
     )]
-    pub async fn sign_in(&self, api_key: &SecretString) -> AuthenticationResult<SecretString> {
+    pub async fn sign_in(&self, api_key: &SecretString) -> AuthenticationResult<UserSession> {
         tracing::debug!("parsing user id from api key");
         let user_id = ApiKeyIssuer::parse_user_id(api_key)?;
         tracing::debug!("loading user from database with id {user_id}");
@@ -128,20 +152,25 @@ impl Authenticator {
             &user,
             self.token_ttl,
         );
+        let expires_at = token_entity.expires_at;
         self.storage
             .create_token(token_entity)
             .await
             .map_err(|e| AuthenticatorError::InternalError(e.into()))?;
 
         tracing::info!(
-            "successfully signed in user {user_id} and issued token {}",
-            token.token_id()
+            "successfully signed in user {user_id} and issued token {token}; expires at {expires_at}",
+            token = token.token_id()
         );
 
-        Ok(token_str)
+        Ok(UserSession {
+            expires_at,
+            token: token_str,
+            user_id,
+        })
     }
 
-    /// Validates a session token and resolves the user it authenticates.
+    /// Authenticates a session token and resolves the user it authenticates.
     ///
     /// The token id is parsed from the presented token, the matching active
     /// token row is loaded by that id (a missing, expired or revoked token is
@@ -151,11 +180,7 @@ impl Authenticator {
     ///
     /// Returns [`AuthenticatorError::InvalidToken`] when the token is malformed,
     /// unknown, expired, revoked or does not match the stored hash.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by bearer authentication middleware (#136)")
-    )]
-    pub async fn validate_session(&self, token: &SecretString) -> AuthenticationResult<Uuid> {
+    pub async fn authenticate(&self, token: &SecretString) -> AuthenticationResult<Uuid> {
         tracing::debug!("parsing token from string");
         let parsed_token = Token::parse(token.expose_secret())?;
         tracing::debug!("loading active token with id {}", parsed_token.token_id());
@@ -322,14 +347,21 @@ mod tests {
             .await
             .expect("failed to bootstrap user");
 
-        let token = authenticator
+        let user_session = authenticator
             .sign_in(&bootstrapped.api_key)
             .await
             .expect("failed to sign in with a valid api key");
 
+        // check expires_at
+        let now = Utc::now();
+        assert!(user_session.expires_at > now);
+        assert!(user_session.expires_at < now + chrono::Duration::seconds(3600));
+        // check user_id
+        assert_eq!(user_session.user_id, bootstrapped.user_id);
+
         // The issued token authenticates the same user that signed in.
         let user_id = authenticator
-            .validate_session(&token)
+            .authenticate(&user_session.token)
             .await
             .expect("failed to validate the issued token");
         assert_eq!(user_id, bootstrapped.user_id);
@@ -346,7 +378,8 @@ mod tests {
         let token = authenticator
             .sign_in(&bootstrapped.api_key)
             .await
-            .expect("failed to sign in");
+            .expect("failed to sign in")
+            .token;
 
         let token_id = Token::parse(token.expose_secret())
             .expect("issued token is malformed")
@@ -412,7 +445,7 @@ mod tests {
         let malformed = SecretString::from("not-a-valid-token");
 
         let error = authenticator
-            .validate_session(&malformed)
+            .authenticate(&malformed)
             .await
             .expect_err("validation succeeded for a malformed token");
         assert!(matches!(error, AuthenticatorError::InvalidToken));
@@ -425,7 +458,7 @@ mod tests {
         let unknown = SecretString::from(TokenIssuer::generate_token().to_string());
 
         let error = authenticator
-            .validate_session(&unknown)
+            .authenticate(&unknown)
             .await
             .expect_err("validation succeeded for an unknown token");
         assert!(matches!(error, AuthenticatorError::InvalidToken));
@@ -441,7 +474,8 @@ mod tests {
         let token = authenticator
             .sign_in(&bootstrapped.api_key)
             .await
-            .expect("failed to sign in");
+            .expect("failed to sign in")
+            .token;
 
         authenticator
             .sign_out(&token)
@@ -449,7 +483,7 @@ mod tests {
             .expect("failed to sign out");
 
         let error = authenticator
-            .validate_session(&token)
+            .authenticate(&token)
             .await
             .expect_err("a revoked token still validated");
         assert!(matches!(error, AuthenticatorError::InvalidToken));

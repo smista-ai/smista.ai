@@ -15,6 +15,7 @@ description = "smista-router service: routing, orchestration and the HTTP API ho
 anyhow = { workspace = true }
 argon2 = { workspace = true, features = ["password-hash"] }
 axum = { workspace = true, features = ["http1", "http2", "json", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing"] }
+chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["derive", "env"] }
 password-hash = { workspace = true }
 rand = { workspace = true }
