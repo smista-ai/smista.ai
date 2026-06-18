@@ -50,7 +50,6 @@ use crate::router::Router as SmistaRouter;
 #[derive(Debug, Clone)]
 pub(crate) struct AppState {
     /// Authenticator for handling user authentication and session management.
-    #[expect(dead_code, reason = "used by bearer authentication middleware (#136)")]
     pub(crate) authenticator: Arc<Authenticator>,
     /// The validated router configuration.
     pub(crate) config: Arc<RouterConfig>,
@@ -155,10 +154,25 @@ impl WebServer {
 
 /// Builds the application router: the public health check, every `/api/v1`
 /// endpoint and the cross-cutting middleware.
+///
+/// Under `/api/v1` the endpoints are split into a public group (bootstrap and
+/// sign-in, which cannot require a token of their own) and a protected group
+/// gated by the [`authenticate`](middleware::authenticate) middleware. The guard
+/// is attached with `route_layer`, so it runs only on the protected routes and
+/// never on the public routes or on an unmatched path.
 fn build_router(state: AppState) -> Router {
-    let api = Router::new()
+    // Public endpoints accept anonymous callers: bootstrap mints the first key
+    // and sign-in exchanges credentials for a session token, so neither can
+    // require a token of its own.
+    let public = Router::new()
         .route("/auth/bootstrap", post(routes::bootstrap))
-        .route("/auth/sign-in", post(routes::sign_in))
+        .route("/auth/sign-in", post(routes::sign_in));
+
+    // Protected endpoints are gated by [`authenticate`], applied with
+    // `route_layer` so it runs only on these matched routes and never on a 404
+    // or on the public routes above. The layer carries its own authenticator
+    // state, independent of the application `with_state` below.
+    let protected = Router::new()
         .route("/auth/sign-out", post(routes::sign_out))
         .route("/auth/me", get(routes::me))
         .route(
@@ -188,7 +202,13 @@ fn build_router(state: AppState) -> Router {
         )
         .route("/sessions/{session_id}/usage", get(routes::session_usage))
         .route("/llm/providers", get(routes::list_providers))
-        .route("/llm/models", get(routes::list_models));
+        .route("/llm/models", get(routes::list_models))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.authenticator.clone(),
+            middleware::authenticate,
+        ));
+
+    let api = public.merge(protected);
 
     let mut app = Router::new()
         .route("/status", get(routes::status))
@@ -261,10 +281,11 @@ pub(crate) mod test_support {
     use axum::body::Body;
     use axum::extract::ConnectInfo;
     use axum::http::{Method, Request, StatusCode};
+    use secrecy::ExposeSecret as _;
     use smista_storage::database::surreal::{SurrealBackend, SurrealDatabase, SurrealOptions};
     use tower::ServiceExt as _;
 
-    use super::{AppState, RouterConfig, build_router};
+    use super::{AppState, Authenticator, RouterConfig, build_router};
 
     /// Builds a fresh in-memory database for a test.
     pub(crate) async fn test_database() -> SurrealDatabase {
@@ -344,6 +365,56 @@ pub(crate) mod test_support {
             .body(Body::empty())
             .expect("failed to build request")
     }
+
+    /// Builds an empty `POST` request for `uri`.
+    pub(crate) fn post(uri: &str) -> Request<Body> {
+        Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .body(Body::empty())
+            .expect("failed to build request")
+    }
+
+    /// Builds an empty `GET` request for `uri` carrying `token` as a Bearer
+    /// credential in the `Authorization` header.
+    pub(crate) fn get_with_token(uri: &str, token: &str) -> Request<Body> {
+        Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .expect("failed to build request")
+    }
+
+    /// Builds the application router alongside a valid Bearer token for a freshly
+    /// bootstrapped user.
+    ///
+    /// Mirrors [`test_router`] but also bootstraps a user and signs them in over
+    /// the same authenticator the router uses, so tests can drive the
+    /// authenticated routes end to end. Returns the router and the raw token
+    /// string to place in the `Authorization` header.
+    pub(crate) async fn authenticated_router() -> (Router, String) {
+        let database = test_database().await;
+        let config = RouterConfig::default();
+        let token_ttl = std::time::Duration::from_secs(config.auth.token_ttl_seconds);
+        let authenticator = Arc::new(Authenticator::new(database.clone(), token_ttl));
+        let user = authenticator
+            .bootstrap_user()
+            .await
+            .expect("failed to bootstrap the test user");
+        let session = authenticator
+            .sign_in(&user.api_key)
+            .await
+            .expect("failed to sign the test user in");
+        let token = session.token.expose_secret().to_string();
+        let state = AppState {
+            authenticator,
+            config: Arc::new(config),
+            database,
+            router: test_smista_router(),
+        };
+        (build_router(state), token)
+    }
 }
 
 #[cfg(test)]
@@ -356,7 +427,9 @@ mod tests {
     use axum::http::StatusCode;
     use tower::ServiceExt as _;
 
-    use super::test_support::{get, test_database, test_smista_router};
+    use super::test_support::{
+        authenticated_router, get, get_with_token, post, send, test_database, test_smista_router,
+    };
     use super::{AppState, build_router};
     use crate::config::{RateLimitConfig, RouterConfig};
 
@@ -466,5 +539,47 @@ mod tests {
             status_code_forwarded_for(router.clone(), Some("203.0.113.1")).await,
             StatusCode::TOO_MANY_REQUESTS
         );
+    }
+
+    #[tokio::test]
+    async fn should_allow_public_routes_without_a_token() {
+        // Bootstrap is public: with no `Authorization` header the request must
+        // reach the (scaffolded) handler rather than being rejected by the auth
+        // guard, proving the guard does not wrap the public routes.
+        let (router, _token) = authenticated_router().await;
+        let (status, body) = send(router, post("/api/v1/auth/bootstrap")).await;
+
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(body["error"]["code"], "not_implemented");
+    }
+
+    #[tokio::test]
+    async fn should_reject_protected_routes_without_a_token() {
+        let (router, _token) = authenticated_router().await;
+        let (status, body) = send(router, get("/api/v1/auth/me")).await;
+
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body["error"]["code"], "missing_token");
+    }
+
+    #[tokio::test]
+    async fn should_allow_protected_routes_with_a_valid_token() {
+        // A valid token clears the guard, so the request reaches the (scaffolded)
+        // handler and gets its placeholder response rather than a 401.
+        let (router, token) = authenticated_router().await;
+        let (status, body) = send(router, get_with_token("/api/v1/auth/me", &token)).await;
+
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(body["error"]["code"], "not_implemented");
+    }
+
+    #[tokio::test]
+    async fn should_not_authenticate_unknown_routes() {
+        // The guard is attached with `route_layer`, so an unmatched path falls
+        // through to a 404 instead of being challenged for a token first.
+        let (router, _token) = authenticated_router().await;
+        let (status, _body) = send(router, get("/api/v1/does-not-exist")).await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 }

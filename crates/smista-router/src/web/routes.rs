@@ -1,3 +1,10 @@
+//! HTTP route handlers, one module per endpoint.
+//!
+//! Each submodule holds the handler for a single route and its tests; this
+//! module re-exports those handlers for [`build_router`](crate::web) to mount.
+//! The handlers split into public endpoints (`status`, `bootstrap`, `sign_in`)
+//! and endpoints gated by the [`authenticate`](crate::web) middleware.
+
 mod bootstrap;
 mod create_session;
 mod delete_session;

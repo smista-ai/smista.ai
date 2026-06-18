@@ -215,7 +215,7 @@ impl Authenticator {
     /// Signs a user out by revoking the session token they present.
     ///
     /// The token id is parsed from the presented token and the matching row is
-    /// revoked, after which [`Authenticator::validate_session`] rejects it.
+    /// revoked, after which [`Authenticator::authenticate`] rejects it.
     ///
     /// Returns [`AuthenticatorError::InvalidToken`] when the token is malformed.
     #[cfg_attr(
