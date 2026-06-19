@@ -49,6 +49,9 @@ impl From<AuthenticatorError> for WebError {
         // reported as an invalid API key so sign-in never leaks which users
         // exist.
         let (code, message) = match err {
+            AuthenticatorError::ExpiredToken => {
+                (ApiErrorCode::TokenExpired, "The session token has expired.")
+            }
             AuthenticatorError::InternalError(_) => {
                 (ApiErrorCode::InternalError, "An internal error occurred.")
             }
@@ -61,6 +64,10 @@ impl From<AuthenticatorError> for WebError {
             AuthenticatorError::InvalidToken => {
                 (ApiErrorCode::InvalidToken, "The session token is invalid.")
             }
+            AuthenticatorError::RevokedToken => (
+                ApiErrorCode::TokenRevoked,
+                "The session token has been revoked.",
+            ),
         };
 
         Self::from_code(code, message)
@@ -116,6 +123,18 @@ mod tests {
             (
                 AuthenticatorError::InvalidToken,
                 ApiErrorCode::InvalidToken,
+                StatusCode::UNAUTHORIZED,
+            ),
+            // A token known to the holder but past its expiry, or signed out, is
+            // reported with its own code so the holder knows to sign in again.
+            (
+                AuthenticatorError::ExpiredToken,
+                ApiErrorCode::TokenExpired,
+                StatusCode::UNAUTHORIZED,
+            ),
+            (
+                AuthenticatorError::RevokedToken,
+                ApiErrorCode::TokenRevoked,
                 StatusCode::UNAUTHORIZED,
             ),
             (

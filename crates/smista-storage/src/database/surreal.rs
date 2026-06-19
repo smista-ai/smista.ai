@@ -437,6 +437,18 @@ impl Database for SurrealDatabase {
             .map_err(StorageError::from)
     }
 
+    async fn get_token(&self, token_id: Uuid) -> StorageResult<Option<AuthToken>> {
+        tracing::debug!("getting token {token_id}");
+
+        self.0
+            .query("SELECT * FROM $table WHERE id = $id")
+            .bind(("table", AuthToken::table()))
+            .bind(("id", record_id::<AuthToken, _>(token_id)))
+            .await?
+            .take::<Option<AuthToken>>(0)
+            .map_err(StorageError::from)
+    }
+
     async fn revoke_token(&self, id: Uuid) -> StorageResult<()> {
         tracing::debug!("revoking auth token {id}");
 

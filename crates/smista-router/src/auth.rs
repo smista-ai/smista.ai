@@ -20,6 +20,8 @@ use crate::auth::token::{Token, TokenIssuer};
 /// Error type for authentication-related operations, such as user bootstrapping and API key validation.
 #[derive(Debug, thiserror::Error)]
 pub enum AuthenticatorError {
+    #[error("Expired token")]
+    ExpiredToken,
     #[error("Internal error: {0}")]
     InternalError(anyhow::Error),
     #[error("Invalid API key")]
@@ -28,6 +30,8 @@ pub enum AuthenticatorError {
     InvalidHash,
     #[error("Invalid token")]
     InvalidToken,
+    #[error("Revoked token")]
+    RevokedToken,
     #[error("User not found")]
     UserNotFound,
 }
@@ -144,14 +148,21 @@ impl Authenticator {
     /// that user.
     ///
     /// Returns [`AuthenticatorError::InvalidToken`] when the token is malformed,
-    /// unknown, expired, revoked or does not match the stored hash.
+    /// unknown or does not match the stored hash,
+    /// [`AuthenticatorError::ExpiredToken`] when it is past its expiry and
+    /// [`AuthenticatorError::RevokedToken`] when it has been signed out.
+    ///
+    /// The token is loaded regardless of its state and its secret is verified
+    /// against the stored hash *before* the state is inspected, so a caller who
+    /// does not hold the genuine secret only ever learns the token is invalid;
+    /// the expired or revoked status is disclosed only to the legitimate holder.
     pub async fn authenticate(&self, token: &SecretString) -> AuthenticationResult<Uuid> {
         tracing::debug!("parsing token from string");
         let parsed_token = Token::parse(token.expose_secret())?;
-        tracing::debug!("loading active token with id {}", parsed_token.token_id());
-        let active_token = self
+        tracing::debug!("loading token with id {}", parsed_token.token_id());
+        let stored_token = self
             .storage
-            .get_active_token(parsed_token.token_id())
+            .get_token(parsed_token.token_id())
             .await
             .map_err(|e| AuthenticatorError::InternalError(e.into()))?
             .ok_or(AuthenticatorError::InvalidToken)?;
@@ -160,7 +171,7 @@ impl Authenticator {
             parsed_token.token_id()
         );
 
-        if !SecretHasher::sha512_crypt().verify(token, &active_token.token_hash)? {
+        if !SecretHasher::sha512_crypt().verify(token, &stored_token.token_hash)? {
             tracing::debug!(
                 "token hash verification failed for token id {}",
                 parsed_token.token_id()
@@ -168,7 +179,19 @@ impl Authenticator {
             return Err(AuthenticatorError::InvalidToken);
         }
 
-        let user_id = active_token.user_id();
+        // The secret is genuine: now the holder may learn why a still-known token
+        // is no longer accepted. Revocation is checked before expiry because a
+        // sign-out is an explicit, stronger statement than a lapsed lifetime.
+        if stored_token.revoked_at.is_some() {
+            tracing::debug!("token id {} has been revoked", parsed_token.token_id());
+            return Err(AuthenticatorError::RevokedToken);
+        }
+        if stored_token.expires_at <= Utc::now() {
+            tracing::debug!("token id {} has expired", parsed_token.token_id());
+            return Err(AuthenticatorError::ExpiredToken);
+        }
+
+        let user_id = stored_token.user_id();
         tracing::info!(
             "validated token {} for user {user_id}",
             parsed_token.token_id()
@@ -183,10 +206,6 @@ impl Authenticator {
     /// revoked, after which [`Authenticator::authenticate`] rejects it.
     ///
     /// Returns [`AuthenticatorError::InvalidToken`] when the token is malformed.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by POST /auth/sign-out endpoint (#150)")
-    )]
     pub async fn sign_out(&self, token: &SecretString) -> AuthenticationResult<()> {
         tracing::debug!("parsing token from string");
         let parsed_token = Token::parse(token.expose_secret())?;
@@ -424,7 +443,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_reject_validation_after_sign_out() {
+    async fn should_reject_validation_of_a_revoked_token() {
         let authenticator = test_authenticator().await;
         let bootstrapped = authenticator
             .bootstrap_user()
@@ -441,10 +460,80 @@ mod tests {
             .await
             .expect("failed to sign out");
 
+        // The holder of a token that was signed out is told it was revoked, not
+        // that it is merely invalid, so a fresh sign-in is clearly the remedy.
         let error = authenticator
             .authenticate(&token)
             .await
             .expect_err("a revoked token still validated");
+        assert!(matches!(error, AuthenticatorError::RevokedToken));
+    }
+
+    #[tokio::test]
+    async fn should_reject_validation_of_an_expired_token() {
+        let authenticator = test_authenticator().await;
+        let bootstrapped = authenticator
+            .bootstrap_user()
+            .await
+            .expect("failed to bootstrap user");
+        let user = authenticator
+            .storage
+            .get_user(bootstrapped.user_id)
+            .await
+            .expect("failed to read user")
+            .expect("bootstrapped user not found");
+
+        // Persist a token whose secret we hold but whose expiry is already past.
+        let raw = TokenIssuer::generate_token();
+        let token = SecretString::from(raw.to_string());
+        let token_hash = SecretHasher::sha512_crypt()
+            .hash(&token)
+            .expect("failed to hash token");
+        let mut entity = AuthToken::new(
+            raw.token_id(),
+            token_hash.expose_secret().to_string(),
+            &user,
+            Duration::from_secs(3600),
+        );
+        entity.expires_at = Utc::now() - chrono::Duration::hours(1);
+        authenticator
+            .storage
+            .create_token(entity)
+            .await
+            .expect("failed to create token");
+
+        let error = authenticator
+            .authenticate(&token)
+            .await
+            .expect_err("an expired token still validated");
+        assert!(matches!(error, AuthenticatorError::ExpiredToken));
+    }
+
+    #[tokio::test]
+    async fn should_reject_validation_of_a_token_with_a_wrong_secret() {
+        let authenticator = test_authenticator().await;
+        let bootstrapped = authenticator
+            .bootstrap_user()
+            .await
+            .expect("failed to bootstrap user");
+        let issued = authenticator
+            .sign_in(&bootstrapped.api_key)
+            .await
+            .expect("failed to sign in")
+            .token;
+
+        // Same token id, different secret: the row exists but the hash will not
+        // verify, so the state of the real token is never revealed and the
+        // request is rejected as simply invalid.
+        let token_id = Token::parse(issued.expose_secret())
+            .expect("issued token is malformed")
+            .token_id();
+        let forged = SecretString::from(format!("{}-wrongsecretsegment", token_id.simple()));
+
+        let error = authenticator
+            .authenticate(&forged)
+            .await
+            .expect_err("a token with a wrong secret still validated");
         assert!(matches!(error, AuthenticatorError::InvalidToken));
     }
 

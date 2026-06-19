@@ -544,6 +544,60 @@ async fn should_not_get_expired_or_revoked_token() {
 }
 
 #[tokio::test]
+async fn should_get_token_regardless_of_expiry_or_revocation() {
+    let db = memory_db().await;
+    let user_id = Uuid::now_v7();
+    db.create_user(user(user_id))
+        .await
+        .expect("failed to create user");
+    let expired_id = Uuid::now_v7();
+    db.create_token(token_for(
+        expired_id,
+        user_id,
+        "expired",
+        Utc::now() - Duration::hours(1),
+        None,
+    ))
+    .await
+    .expect("failed to create expired token");
+    let revoked_id = Uuid::now_v7();
+    db.create_token(token_for(
+        revoked_id,
+        user_id,
+        "revoked",
+        Utc::now() + Duration::hours(1),
+        Some(Utc::now()),
+    ))
+    .await
+    .expect("failed to create revoked token");
+
+    // Unlike `get_active_token`, `get_token` returns the row whatever its state,
+    // so the auth layer can tell an expired or revoked token apart from one that
+    // was never issued.
+    let expired = db
+        .get_token(expired_id)
+        .await
+        .expect("failed to get token")
+        .expect("expired token not found");
+    assert!(expired.expires_at < Utc::now());
+    let revoked = db
+        .get_token(revoked_id)
+        .await
+        .expect("failed to get token")
+        .expect("revoked token not found");
+    assert!(revoked.revoked_at.is_some());
+
+    // An unknown id still yields nothing.
+    assert!(
+        db.get_token(Uuid::now_v7())
+            .await
+            .expect("failed to get token")
+            .is_none(),
+        "unknown token returned"
+    );
+}
+
+#[tokio::test]
 async fn should_revoke_token() {
     let db = memory_db().await;
     let user_id = Uuid::now_v7();

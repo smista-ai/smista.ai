@@ -86,6 +86,17 @@ pub trait Database: Send + Sync {
         token_id: Uuid,
     ) -> impl Future<Output = StorageResult<Option<AuthToken>>> + Send;
 
+    /// Returns the token with the given id whatever its state, if it exists.
+    ///
+    /// Unlike [`Database::get_active_token`], this does not filter out expired or
+    /// revoked tokens. The authentication layer uses it to tell an expired or
+    /// revoked token apart from one that was never issued, so each can be
+    /// reported with its own error.
+    fn get_token(
+        &self,
+        token_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<AuthToken>>> + Send;
+
     /// Revokes the token with the given id.
     fn revoke_token(&self, id: Uuid) -> impl Future<Output = StorageResult<()>> + Send;
 

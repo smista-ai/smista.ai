@@ -162,6 +162,12 @@ Revokes the current session token:
 { "revoked": true }
 ```
 
+After sign-out the token can no longer be used: presenting it again fails with
+`401` `token_revoked`. A token that simply lapses fails with `401`
+`token_expired` instead. Both are reported only to a caller holding the genuine
+token; an unknown or malformed token always fails with `401` `invalid_token`.
+Your API key is unaffected, so you can sign in again for a fresh token.
+
 ### Current user
 
 ```http
