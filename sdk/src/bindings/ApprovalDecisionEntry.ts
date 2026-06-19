@@ -2,9 +2,13 @@
 import type { ApprovalDecision } from "./ApprovalDecision.js";
 
 /**
- * Body of `POST /sessions/{id}/approvals/{approval_id}`.
+ * A decision for a [`PendingApproval`](super::PendingApproval) with no tool.
  */
-export type SubmitApprovalRequest = { 
+export type ApprovalDecisionEntry = { 
+/**
+ * Identifier of the approval the decision applies to.
+ */
+approval_id: string, 
 /**
  * The decision being submitted.
  */

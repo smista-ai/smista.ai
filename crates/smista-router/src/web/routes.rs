@@ -6,6 +6,7 @@
 //! and endpoints gated by the [`authenticate`](crate::web) middleware.
 
 mod bootstrap;
+mod continue_run;
 mod create_session;
 mod delete_session;
 mod execute;
@@ -22,10 +23,10 @@ mod sign_in;
 mod sign_out;
 mod status;
 mod stream;
-mod submit_approval;
 mod update_session;
 
 pub(crate) use self::bootstrap::bootstrap;
+pub(crate) use self::continue_run::continue_run;
 pub(crate) use self::create_session::create_session;
 pub(crate) use self::delete_session::delete_session;
 pub(crate) use self::execute::execute;
@@ -42,5 +43,4 @@ pub(crate) use self::sign_in::sign_in;
 pub(crate) use self::sign_out::sign_out;
 pub(crate) use self::status::status;
 pub(crate) use self::stream::stream;
-pub(crate) use self::submit_approval::submit_approval;
 pub(crate) use self::update_session::update_session;

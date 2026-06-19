@@ -1,21 +1,17 @@
-//! Request and response bodies for submitting an approval decision.
+//! The decision made on an approval.
 //!
-//! When a model-requested action needs user confirmation, the client submits a
-//! decision to `POST /sessions/{id}/approvals/{approval_id}` with a
-//! [`SubmitApprovalRequest`] and receives a [`SubmitApprovalResponse`] echoing
-//! the recorded decision.
+//! [`ApprovalDecision`] is `approved` or `rejected`. There is no standalone
+//! approval endpoint: a tool's approval rides the decision on its tool result,
+//! and an approval with no tool to run is decided in the `/continue` bundle. See
+//! [`ContinueRequest`](super::ContinueRequest).
 //!
 //! # Examples
 //!
 //! ```
-//! use smista_core::api::{ApprovalDecision, SubmitApprovalRequest};
+//! use smista_core::api::ApprovalDecision;
 //!
-//! let request = SubmitApprovalRequest {
-//!     decision: ApprovalDecision::Approved,
-//!     reason: None,
-//! };
-//! let json = serde_json::to_string(&request).unwrap();
-//! assert!(json.contains("\"decision\":\"approved\""));
+//! let json = serde_json::to_string(&ApprovalDecision::Approved).unwrap();
+//! assert_eq!(json, "\"approved\"");
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -38,28 +34,6 @@ pub enum ApprovalDecision {
     Rejected,
 }
 
-/// Body of `POST /sessions/{id}/approvals/{approval_id}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct SubmitApprovalRequest {
-    /// The decision being submitted.
-    pub decision: ApprovalDecision,
-    /// Optional human-readable reason for the decision.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub reason: Option<String>,
-}
-
-/// Response confirming the recorded approval decision.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct SubmitApprovalResponse {
-    /// Identifier of the approval the decision applies to.
-    pub approval_id: String,
-    /// The recorded decision.
-    pub decision: ApprovalDecision,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,35 +47,13 @@ mod tests {
     }
 
     #[test]
-    fn should_deserialize_spec_request() {
-        let request: SubmitApprovalRequest =
-            serde_json::from_str(r#"{"decision":"approved","reason":null}"#).unwrap();
-        assert_eq!(request.decision, ApprovalDecision::Approved);
-        assert_eq!(request.reason, None);
-    }
-
-    #[test]
-    fn should_omit_absent_reason() {
-        let request = SubmitApprovalRequest {
-            decision: ApprovalDecision::Approved,
-            reason: None,
-        };
-        assert_eq!(
-            serde_json::to_value(&request).unwrap(),
-            serde_json::json!({ "decision": "approved" })
-        );
-    }
-
-    #[test]
-    fn should_roundtrip_response() {
-        let response = SubmitApprovalResponse {
-            approval_id: "approval:abc".to_string(),
-            decision: ApprovalDecision::Approved,
-        };
-        let json = serde_json::to_string(&response).unwrap();
-        assert_eq!(
-            serde_json::from_str::<SubmitApprovalResponse>(&json).unwrap(),
-            response
-        );
+    fn should_roundtrip_every_variant() {
+        for decision in [ApprovalDecision::Approved, ApprovalDecision::Rejected] {
+            let json = serde_json::to_string(&decision).unwrap();
+            assert_eq!(
+                serde_json::from_str::<ApprovalDecision>(&json).unwrap(),
+                decision
+            );
+        }
     }
 }

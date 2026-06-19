@@ -17,6 +17,7 @@
   - [Executing a task](#executing-a-task)
     - [Policy](#policy)
     - [Execute the task](#execute-the-task)
+    - [Advance a run](#advance-a-run)
     - [Stream the task](#stream-the-task)
     - [Preview a route](#preview-a-route)
   - [Approvals](#approvals)
@@ -289,9 +290,14 @@ X-Smista-Provider-{provider}-Api-Key: <api-key>
 
 The body carries everything the router needs to make a deterministic decision:
 the user input, a workspace snapshot, the merged policy, local preferences, the
-available providers with their credential status, and the assembled context. The
-`policy` block is the same routing, tool-permission and privacy vocabulary the
-CLI loads from `config.toml` — sent verbatim, not a separate, lossy shape:
+available providers with their credential status, and the local `attachments`
+(files, instructions and skills) the router cannot read for itself. Session
+history, memory and the assembled context are **not** sent — the router owns
+them and recalls them from storage. The `policy` block is the same routing,
+tool-permission and privacy vocabulary the CLI loads from `config.toml` — sent
+verbatim, not a separate, lossy shape. For the full interaction model, the
+continuations and the streaming flow, see
+[the execution protocol](../technical/execution-protocol.md):
 
 ```json
 {
@@ -310,6 +316,12 @@ CLI loads from `config.toml` — sent verbatim, not a separate, lossy shape:
   "policy": {
     "version": 1,
     "source": "merged",
+    "classification": {
+      "default_intent": "chat",
+      "rules": [
+        { "intent": "review", "priority": 10, "keywords": ["review", "audit"], "requires_any_context": ["git_diff"] }
+      ]
+    },
     "routing": {
       "default": {
         "model": "anthropic/claude-sonnet",
@@ -344,38 +356,45 @@ CLI loads from `config.toml` — sent verbatim, not a separate, lossy shape:
     { "id": "anthropic", "models": [{ "model": "claude-sonnet", "requires_api_key": true, "credential_available": true }] },
     { "id": "ollama", "models": [{ "model": "qwen2.5-coder", "requires_api_key": false, "credential_available": true }] }
   ],
-  "context": {
-    "messages": [{ "role": "user", "content": "Previous relevant message..." }],
-    "files": [{ "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:..." }],
+  "attachments": {
+    "files": [{ "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true }],
     "instructions": [{ "source": "SMISTA.md", "content": "..." }],
-    "skills": [],
-    "prompt_template": null
+    "skills": []
   }
 }
 ```
 
 The top-level fields are:
 
-| Field               | Purpose                                                                         |
-| ------------------- | ------------------------------------------------------------------------------- |
-| `input`             | The prompt `text`, an optional `command` and an optional `explicit_model`.      |
-| `workspace`         | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced/active files. |
-| `policy`            | The deterministic `routing`, `tools` and `privacy` policy (see below).          |
-| `local_preferences` | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.    |
-| `providers`         | Providers offered for this request and per-model credential status.             |
-| `context`           | Assembled context: prior `messages`, `files`, `instructions` and `skills`.      |
+| Field               | Purpose                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| `input`             | The prompt `text`, an optional `command` and an optional `explicit_model`.                                |
+| `workspace`         | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced/active files.                           |
+| `policy`            | The deterministic `classification`, `routing`, `tools` and `privacy` policy (see below).                  |
+| `local_preferences` | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                              |
+| `providers`         | Providers offered for this request and per-model credential status.                                       |
+| `attachments`       | Local content the router cannot read: `files` (each `required` or discardable), `instructions`, `skills`. |
 
 `input.command` forces a task type (`edit`, `review`, …) and `input.explicit_model`
 forces a `provider/model`, bypassing routing entirely; both may be `null`.
 
+For an end-to-end encrypted session the body also carries `input_ciphertext`, the
+sealed form of the user prompt that the router persists; the plaintext in
+`input.text` is what calls the model. It is absent for a plaintext session. See
+[the execution protocol](../technical/execution-protocol.md).
+
 ### Policy
 
 `policy.version` is the snapshot schema version and `policy.source` records how
-it was assembled (e.g. `merged`). The three sub-blocks mirror the CLI's
-`[routing]`, `[tools]` and `[privacy]` config sections exactly.
+it was assembled (e.g. `merged`). The four sub-blocks mirror the CLI's
+`[classification]`, `[routing]`, `[tools]` and `[privacy]` config sections
+exactly.
 
-`routing` holds ordered `rules` plus an optional `default` route (`model` and
-ordered `fallbacks`) used when no rule matches. Each rule:
+`classification` holds the ordered intent rules and the `default_intent` the
+router applies when none match; see
+[Task intent classification](../technical/task-classification.md). `routing`
+holds ordered `rules` plus an optional `default` route (`model` and ordered
+`fallbacks`) used when no rule matches. Each rule:
 
 | Field                   | Type            | Purpose                                                                 |
 | ----------------------- | --------------- | ----------------------------------------------------------------------- |
@@ -409,12 +428,15 @@ POST /api/v1/sessions/{session_id}/execute
 ```
 
 The router classifies the task, applies the policy, selects a model, builds the
-request and returns the result with a routing explanation:
+request and runs one **turn**. A turn resolves to exactly one outcome, named by
+`status`. A `completed` turn carries the assistant message and a routing
+explanation:
 
 ```json
 {
   "status": "completed",
   "message": { "role": "assistant", "content": "..." },
+  "classification": { "intent": "edit", "source": "inferred", "reason": "keyword matched rule 0", "confidence": "high" },
   "routing": {
     "task_type": "edit",
     "provider": "anthropic",
@@ -437,8 +459,61 @@ request and returns the result with a routing explanation:
 }
 ```
 
-If the model requests a tool call that needs approval, the response returns a
-pending approval instead of a final message.
+When the model cannot be answered in one turn, `status` is a **continuation**
+instead — the router needs the client to do the next step:
+
+| `status`            | The router needs the client to                       |
+| ------------------- | ---------------------------------------------------- |
+| `completed`         | nothing; render and wait for the next prompt.        |
+| `awaiting_tool`     | run one or more tools and return the results.        |
+| `awaiting_approval` | decide a yes/no with no tool to run.                 |
+| `awaiting_decrypt`  | open sealed history so the prompt can be built.      |
+| `awaiting_encrypt`  | seal router-authored content before it is persisted. |
+| `error`             | nothing; the run is over.                            |
+
+An `awaiting_tool` turn lists the calls to run, correlated by `call_id`; each
+carries `requires_approval` of `allow` (run it) or `ask` (confirm first):
+
+```json
+{
+  "status": "awaiting_tool",
+  "tool_requests": [
+    { "call_id": "c1", "name": "shell", "arguments": { "command": "cargo test" }, "requires_approval": "ask" }
+  ],
+  "trace_id": "trace:xyz"
+}
+```
+
+The client does the work and resumes the run with [`/continue`](#advance-a-run).
+See the [execution protocol](../technical/execution-protocol.md) for the full
+set of continuation payloads.
+
+### Advance a run
+
+```http
+POST /api/v1/sessions/{session_id}/continue
+```
+
+Resumes the in-flight run after a continuation. The body is a bundle; every
+field is optional and several may be sent at once (for example tool results
+plus a queued user message). It returns the next turn in the same shape as
+`/execute`, buffered or streamed by the `Accept` header.
+
+| Field                | Answers                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| `tool_results`       | `awaiting_tool`: `{ call_id, content, is_error, decision }`; `decision` folds approval. |
+| `approval_decisions` | `awaiting_approval`: `{ approval_id, decision, reason }`.                               |
+| `decrypted`          | `awaiting_decrypt`: `{ record_id, plaintext }`.                                         |
+| `encrypted`          | `awaiting_encrypt`: `{ record_id, envelope }`.                                          |
+| `user_messages`      | Mid-run input the user typed while the run was working.                                 |
+| `interrupt`          | `true` to abort the in-flight turn (the Esc path).                                      |
+
+```json
+{
+  "tool_results": [{ "call_id": "c1", "content": "test result: ok", "is_error": false, "decision": "approved" }],
+  "interrupt": false
+}
+```
 
 ### Stream the task
 
@@ -446,16 +521,15 @@ pending approval instead of a final message.
 POST /api/v1/sessions/{session_id}/stream
 ```
 
-Same body as `/execute`. The response is a stream (Server-Sent Events) of
-structured events:
+Same body as `/execute`, and `/continue` streams the same way when asked. The
+response is a stream (Server-Sent Events) of structured events:
 
 ```json
 { "type": "text_delta", "delta": "The first step is..." }
 ```
 
 Event types: `text_delta`, `reasoning_delta`, `tool_call_started`,
-`tool_call_requested`, `approval_required`, `tool_result`, `usage`, `error`,
-`done`.
+`tool_call_requested`, `usage`, and the terminal `turn_end`.
 
 Models that expose their reasoning stream it as `reasoning_delta` chunks.
 When the model starts calling a tool, a `tool_call_started` event announces
@@ -463,9 +537,14 @@ the call's name as soon as it is known; the matching `tool_call_requested`
 event follows once the arguments are complete, correlated by `call_id`.
 
 The `usage` event reports token counts and, when the model declares prices,
-the actual cost of the invocation. Local models report a zero cost. Models
-that cannot stream still answer on this endpoint: the full response is
-replayed as a short stream of the same events.
+the actual cost of the invocation. Local models report a zero cost.
+
+Every stream ends with exactly one `turn_end` event, whose `status` is the
+same value the buffered response carries (`completed`, `awaiting_tool`,
+`awaiting_approval`, `awaiting_decrypt`, `awaiting_encrypt` or `error`). It
+tells the client whether the turn finished or paused for a continuation, so the
+client never has to infer it. Models that cannot stream still answer here: the
+full response is replayed as a short stream of the same events.
 
 ### Preview a route
 
@@ -480,6 +559,7 @@ estimated cost range and the required permissions:
 ```json
 {
   "task_type": "review",
+  "classification": { "intent": "review", "source": "inferred", "reason": "keyword 'review' matched rule 0", "confidence": "high" },
   "provider": "openai",
   "model": "gpt-5.5-thinking",
   "matched_rule": "task.review -> openai/gpt-5.5-thinking",
@@ -495,12 +575,21 @@ estimated cost range and the required permissions:
 
 ## Approvals
 
-When a model-requested action needs confirmation:
+Approvals travel through [`/continue`](#advance-a-run); there is no separate
+approval endpoint.
 
-```http
-POST /api/v1/sessions/{session_id}/approvals/{approval_id}
+For a tool that needs confirmation (`requires_approval: "ask"`), the client —
+the same machine that approves and executes — asks the user, then runs the tool
+if approved or reports a rejection, and returns the outcome in the tool result's
+`decision`. The approval and the result arrive together.
 
-{ "decision": "approved", "reason": null }
+A standalone `awaiting_approval` is raised only for a decision with **no tool to
+run**, such as disclosing context to a remote provider when
+`privacy.remote.mode` is `ask`. The client returns the decision in the
+`approval_decisions` bundle:
+
+```json
+{ "approval_decisions": [{ "approval_id": "a1", "decision": "approved", "reason": null }] }
 ```
 
 `decision` is `approved` or `rejected`.
