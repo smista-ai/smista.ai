@@ -101,8 +101,10 @@ credentials are formatted, hashed and verified, see
 POST /api/v1/auth/bootstrap
 ```
 
-Public endpoint. Creates a user and returns the user ID together with a
-long-lived API key, shown only this once:
+Public endpoint, and the only public write: it needs no token, because it mints
+the first credential you ever hold. It has no request body. Each call creates a
+new user and returns `201` with that user's ID and a freshly generated,
+long-lived API key:
 
 ```json
 { "user_id": "user:abc123", "api_key": "sk-smista-api01-<user-id>-<secret>" }
@@ -111,6 +113,11 @@ long-lived API key, shown only this once:
 The key is `sk-smista-api01-` followed by the user id and a random secret. It
 embeds the user id, so the router identifies the owner from the key alone — you
 never send the user id alongside it.
+
+The plaintext API key is shown **only** in this response and can never be
+retrieved again — the router stores it hashed. Save it now; if you lose it,
+bootstrap a new user. The response carries no other secrets. A failure to
+persist the user returns `500` with code `internal_error`.
 
 ### Sign in
 
@@ -817,6 +824,7 @@ Errors use a consistent JSON shape and never expose secrets:
 | 422  | Valid JSON that fails domain validation          |
 | 429  | Rate limited                                     |
 | 500  | Unexpected server error                          |
+| 501  | Endpoint recognized but not implemented yet      |
 | 502  | Provider error                                   |
 | 503  | Provider or storage unavailable                  |
 | 504  | Provider timeout                                 |
@@ -831,12 +839,15 @@ alongside for convenience.
 | --------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `context_length_exceeded`         | 422    | Request exceeds the provider model's context window.                                                                                                   |
 | `context_window_exceeded`         | 422    | Routing rejected a model whose context window cannot fit the input.                                                                                    |
+| `credentials_in_query`            | 400    | A credential was passed as a query parameter; credentials are accepted only in headers.                                                                |
 | `fallback_exhausted`              | 503    | Primary route failed and every configured fallback also failed.                                                                                        |
 | `forbidden`                       | 403    | Caller is authenticated but not the resource owner.                                                                                                    |
 | `internal_error`                  | 500    | Unexpected server-side failure. Details intentionally omitted.                                                                                         |
+| `invalid_api_key`                 | 401    | The API key presented to `POST /auth/sign-in` is malformed, unknown or does not match. Reported uniformly so it never leaks which users exist.         |
 | `invalid_model_reference`         | 422    | A model reference was not in the expected `provider/model` form.                                                                                       |
 | `invalid_provider_configuration`  | 500    | A provider was configured with contradictory settings, such as an OpenAI-compatible instance whose declared locality disagrees with one of its models. |
 | `invalid_provider_credentials`    | 503    | Provider rejected the configured credentials.                                                                                                          |
+| `invalid_provider_name`           | 422    | A provider identifier in a model or routing reference was not in the expected form.                                                                    |
 | `invalid_request`                 | 422    | Provider rejected the request body as malformed.                                                                                                       |
 | `invalid_token`                   | 401    | Session token is malformed or unknown.                                                                                                                 |
 | `missing_capability`              | 422    | Selected model lacks a capability the task requires.                                                                                                   |
@@ -844,6 +855,7 @@ alongside for convenience.
 | `missing_provider_credentials`    | 503    | The selected model requires provider credentials none were configured.                                                                                 |
 | `model_not_found`                 | 404    | The referenced model is not offered by the provider asked to resolve it.                                                                               |
 | `no_route`                        | 422    | No routing rule matched and no default route is configured.                                                                                            |
+| `not_implemented`                 | 501    | The endpoint is recognized but not implemented yet.                                                                                                    |
 | `override_not_allowed`            | 403    | Caller asked for a model override that policy forbids.                                                                                                 |
 | `permission_expansion`            | 422    | An override tried to loosen a tool permission that may only be tightened.                                                                              |
 | `provider_authentication`         | 503    | Provider rejected the request at the authentication layer.                                                                                             |

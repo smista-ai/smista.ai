@@ -5,9 +5,9 @@
 //! in the URL would expose them in logs, proxies and browser history.
 
 use axum::extract::Request;
-use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use smista_core::api::ApiErrorCode;
 
 use crate::web::error::WebError;
 
@@ -31,9 +31,8 @@ pub(crate) async fn reject_query_credentials(request: Request, next: Next) -> Re
     if let Some(query) = request.uri().query()
         && query_has_credential(query)
     {
-        return WebError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
+        return WebError::from_code(
+            ApiErrorCode::CredentialsInQuery,
             "Credentials must not be passed as query parameters.",
         )
         .into_response();
@@ -83,6 +82,6 @@ mod tests {
         let (status, body) = send(router, get("/status?api_key=leaked")).await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body["error"]["code"], "invalid_request");
+        assert_eq!(body["error"]["code"], "credentials_in_query");
     }
 }

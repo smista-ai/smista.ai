@@ -31,6 +31,8 @@
 //! assert!(json.contains("\"code\":\"missing_provider_credentials\""));
 //! ```
 
+use std::fmt;
+
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +40,178 @@ use crate::error::{
     AuthError, CapabilityError, CoreError, ParseError, PolicyError, ProviderError,
     ProviderErrorCategory, RoutingError,
 };
+
+/// The stable, machine-readable error codes carried in [`ApiErrorBody::code`].
+///
+/// The code is the part clients match on; it never changes for a given failure
+/// mode. Each code maps to exactly one HTTP status, returned by
+/// [`ApiErrorCode::status`], and to one stable wire string, returned by
+/// [`ApiErrorCode::as_str`]. This enum is the authoritative list of codes the
+/// router can emit and mirrors the table in `docs/api/http-api.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ApiErrorCode {
+    /// Request exceeds the provider model's context window.
+    ContextLengthExceeded,
+    /// Routing rejected a model whose context window cannot fit the input.
+    ContextWindowExceeded,
+    /// A credential was smuggled through a query parameter instead of a header.
+    CredentialsInQuery,
+    /// Primary route failed and every configured fallback also failed.
+    FallbackExhausted,
+    /// Caller is authenticated but not the resource owner.
+    Forbidden,
+    /// Unexpected server-side failure. Details are intentionally omitted.
+    InternalError,
+    /// The API key presented at sign-in is malformed, unknown or does not match.
+    InvalidApiKey,
+    /// A model reference was not in the expected `provider/model` form.
+    InvalidModelReference,
+    /// A provider was configured with contradictory settings.
+    InvalidProviderConfiguration,
+    /// The provider rejected the configured credentials.
+    InvalidProviderCredentials,
+    /// A provider identifier was not in the expected form.
+    InvalidProviderName,
+    /// The provider rejected the request body as malformed.
+    InvalidRequest,
+    /// The session token is malformed or unknown.
+    InvalidToken,
+    /// The selected model lacks a capability the task requires.
+    MissingCapability,
+    /// No session token was presented to a protected endpoint.
+    MissingCredentials,
+    /// The selected model requires provider credentials none were configured.
+    MissingProviderCredentials,
+    /// The referenced model is not offered by the provider asked to resolve it.
+    ModelNotFound,
+    /// No routing rule matched and no default route is configured.
+    NoRoute,
+    /// The endpoint is recognized but not implemented yet.
+    NotImplemented,
+    /// The caller asked for a model override that policy forbids.
+    OverrideNotAllowed,
+    /// An override tried to loosen a tool permission that may only be tightened.
+    PermissionExpansion,
+    /// The provider rejected the request at the authentication layer.
+    ProviderAuthentication,
+    /// The provider returned an error that did not match any known category.
+    ProviderError,
+    /// The provider returned a service-level error and may recover later.
+    ProviderUnavailable,
+    /// The provider reported it does not support a needed capability.
+    ProviderUnsupportedCapability,
+    /// The provider rate-limited the request.
+    RateLimited,
+    /// The call to the provider timed out before a response was returned.
+    RequestTimeout,
+    /// Routing rejected the selected model because it lacks a capability.
+    RoutingUnsupportedCapability,
+    /// An error occurred while reading or writing from memory storage.
+    StorageError,
+    /// The session token is past its expiry timestamp.
+    TokenExpired,
+    /// The session token was previously valid but has been revoked.
+    TokenRevoked,
+    /// A reasoning effort name in the request was not recognized.
+    UnknownEffort,
+    /// A task intent name in the request was not recognized.
+    UnknownIntent,
+    /// A referenced model is not configured on the router.
+    UnknownModel,
+    /// A provider identifier in the request was not recognized.
+    UnknownProvider,
+}
+
+impl ApiErrorCode {
+    /// Returns the stable wire string clients match on, such as `invalid_token`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ContextLengthExceeded => "context_length_exceeded",
+            Self::ContextWindowExceeded => "context_window_exceeded",
+            Self::CredentialsInQuery => "credentials_in_query",
+            Self::FallbackExhausted => "fallback_exhausted",
+            Self::Forbidden => "forbidden",
+            Self::InternalError => "internal_error",
+            Self::InvalidApiKey => "invalid_api_key",
+            Self::InvalidModelReference => "invalid_model_reference",
+            Self::InvalidProviderConfiguration => "invalid_provider_configuration",
+            Self::InvalidProviderCredentials => "invalid_provider_credentials",
+            Self::InvalidProviderName => "invalid_provider_name",
+            Self::InvalidRequest => "invalid_request",
+            Self::InvalidToken => "invalid_token",
+            Self::MissingCapability => "missing_capability",
+            Self::MissingCredentials => "missing_credentials",
+            Self::MissingProviderCredentials => "missing_provider_credentials",
+            Self::ModelNotFound => "model_not_found",
+            Self::NoRoute => "no_route",
+            Self::NotImplemented => "not_implemented",
+            Self::OverrideNotAllowed => "override_not_allowed",
+            Self::PermissionExpansion => "permission_expansion",
+            Self::ProviderAuthentication => "provider_authentication",
+            Self::ProviderError => "provider_error",
+            Self::ProviderUnavailable => "provider_unavailable",
+            Self::ProviderUnsupportedCapability => "provider_unsupported_capability",
+            Self::RateLimited => "rate_limited",
+            Self::RequestTimeout => "request_timeout",
+            Self::RoutingUnsupportedCapability => "routing_unsupported_capability",
+            Self::StorageError => "storage_error",
+            Self::TokenExpired => "token_expired",
+            Self::TokenRevoked => "token_revoked",
+            Self::UnknownEffort => "unknown_effort",
+            Self::UnknownIntent => "unknown_intent",
+            Self::UnknownModel => "unknown_model",
+            Self::UnknownProvider => "unknown_provider",
+        }
+    }
+
+    /// Returns the HTTP status that always accompanies this code.
+    #[must_use]
+    pub const fn status(self) -> StatusCode {
+        match self {
+            Self::ContextLengthExceeded
+            | Self::ContextWindowExceeded
+            | Self::InvalidModelReference
+            | Self::InvalidProviderName
+            | Self::InvalidRequest
+            | Self::MissingCapability
+            | Self::NoRoute
+            | Self::PermissionExpansion
+            | Self::ProviderUnsupportedCapability
+            | Self::RoutingUnsupportedCapability
+            | Self::UnknownEffort
+            | Self::UnknownIntent
+            | Self::UnknownModel
+            | Self::UnknownProvider => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::CredentialsInQuery => StatusCode::BAD_REQUEST,
+            Self::NotImplemented => StatusCode::NOT_IMPLEMENTED,
+            Self::FallbackExhausted
+            | Self::InvalidProviderCredentials
+            | Self::MissingProviderCredentials
+            | Self::ProviderAuthentication
+            | Self::ProviderUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Forbidden | Self::OverrideNotAllowed => StatusCode::FORBIDDEN,
+            Self::InternalError | Self::InvalidProviderConfiguration => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            Self::InvalidApiKey
+            | Self::InvalidToken
+            | Self::MissingCredentials
+            | Self::TokenExpired
+            | Self::TokenRevoked => StatusCode::UNAUTHORIZED,
+            Self::ModelNotFound => StatusCode::NOT_FOUND,
+            Self::ProviderError | Self::StorageError => StatusCode::BAD_GATEWAY,
+            Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            Self::RequestTimeout => StatusCode::GATEWAY_TIMEOUT,
+        }
+    }
+}
+
+impl fmt::Display for ApiErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 /// Envelope wrapping the error body under an `error` key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
@@ -93,6 +267,12 @@ impl ApiErrorResponse {
         }
     }
 
+    /// Creates an [`ApiErrorResponse`] from a typed [`ApiErrorCode`], using the
+    /// code's canonical HTTP status and the given message, and no details.
+    pub fn from_code(code: ApiErrorCode, message: impl Into<String>) -> Self {
+        Self::new(code.status(), code.as_str(), message)
+    }
+
     /// Adds details to the error response, returning a new instance.
     /// Details should be machine-readable context about the error, and must never contain secrets.
     pub fn with_details(mut self, details: serde_json::Value) -> Self {
@@ -106,11 +286,9 @@ impl From<CoreError> for ApiErrorResponse {
         match error {
             CoreError::Auth(error) => map_auth(&error),
             CoreError::Capability(error) => map_capability(&error),
-            CoreError::Internal(_) => Self::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "An internal error occurred.",
-            ),
+            CoreError::Internal(_) => {
+                Self::from_code(ApiErrorCode::InternalError, "An internal error occurred.")
+            }
             CoreError::Parse(error) => map_parse(&error),
             CoreError::Policy(error) => map_policy(&error),
             CoreError::Provider(error) => map_provider(error),
@@ -121,14 +299,14 @@ impl From<CoreError> for ApiErrorResponse {
 
 fn map_auth(error: &AuthError) -> ApiErrorResponse {
     let message = error.to_string();
-    let (status, code) = match error {
-        AuthError::Expired => (StatusCode::UNAUTHORIZED, "token_expired"),
-        AuthError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
-        AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "invalid_token"),
-        AuthError::MissingCredentials => (StatusCode::UNAUTHORIZED, "missing_credentials"),
-        AuthError::Revoked => (StatusCode::UNAUTHORIZED, "token_revoked"),
+    let code = match error {
+        AuthError::Expired => ApiErrorCode::TokenExpired,
+        AuthError::Forbidden => ApiErrorCode::Forbidden,
+        AuthError::InvalidToken => ApiErrorCode::InvalidToken,
+        AuthError::MissingCredentials => ApiErrorCode::MissingCredentials,
+        AuthError::Revoked => ApiErrorCode::TokenRevoked,
     };
-    ApiErrorResponse::new(status, code, message)
+    ApiErrorResponse::from_code(code, message)
 }
 
 fn map_capability(error: &CapabilityError) -> ApiErrorResponse {
@@ -137,34 +315,28 @@ fn map_capability(error: &CapabilityError) -> ApiErrorResponse {
         CapabilityError::ContextWindowExceeded {
             estimated_tokens,
             max_context_tokens,
-        } => ApiErrorResponse::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "context_window_exceeded",
-            message,
-        )
-        .with_details(serde_json::json!({
-            "estimated_tokens": estimated_tokens,
-            "max_context_tokens": max_context_tokens,
-        })),
-        CapabilityError::MissingCapability(capability) => ApiErrorResponse::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "missing_capability",
-            message,
-        )
-        .with_details(serde_json::json!({ "capability": capability })),
+        } => ApiErrorResponse::from_code(ApiErrorCode::ContextWindowExceeded, message)
+            .with_details(serde_json::json!({
+                "estimated_tokens": estimated_tokens,
+                "max_context_tokens": max_context_tokens,
+            })),
+        CapabilityError::MissingCapability(capability) => {
+            ApiErrorResponse::from_code(ApiErrorCode::MissingCapability, message)
+                .with_details(serde_json::json!({ "capability": capability }))
+        }
     }
 }
 
 fn map_parse(error: &ParseError) -> ApiErrorResponse {
     let message = error.to_string();
     let code = match error {
-        ParseError::InvalidModelReference(_) => "invalid_model_reference",
-        ParseError::InvalidProviderName(_) => "invalid_provider_name",
-        ParseError::UnknownEffort(_) => "unknown_effort",
-        ParseError::UnknownIntent(_) => "unknown_intent",
-        ParseError::UnknownProvider(_) => "unknown_provider",
+        ParseError::InvalidModelReference(_) => ApiErrorCode::InvalidModelReference,
+        ParseError::InvalidProviderName(_) => ApiErrorCode::InvalidProviderName,
+        ParseError::UnknownEffort(_) => ApiErrorCode::UnknownEffort,
+        ParseError::UnknownIntent(_) => ApiErrorCode::UnknownIntent,
+        ParseError::UnknownProvider(_) => ApiErrorCode::UnknownProvider,
     };
-    ApiErrorResponse::new(StatusCode::UNPROCESSABLE_ENTITY, code, message)
+    ApiErrorResponse::from_code(code, message)
 }
 
 fn map_policy(error: &PolicyError) -> ApiErrorResponse {
@@ -174,89 +346,60 @@ fn map_policy(error: &PolicyError) -> ApiErrorResponse {
             base,
             requested,
             tool,
-        } => ApiErrorResponse::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "permission_expansion",
-            message,
-        )
-        .with_details(serde_json::json!({
-            "tool": tool,
-            "base": base,
-            "requested": requested,
-        })),
+        } => ApiErrorResponse::from_code(ApiErrorCode::PermissionExpansion, message).with_details(
+            serde_json::json!({
+                "tool": tool,
+                "base": base,
+                "requested": requested,
+            }),
+        ),
     }
 }
 
 fn map_routing(error: RoutingError) -> ApiErrorResponse {
     let message = error.to_string();
     match error {
-        RoutingError::FallbackExhausted => ApiErrorResponse::new(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "fallback_exhausted",
-            message,
-        ),
-        RoutingError::NoRoute => {
-            ApiErrorResponse::new(StatusCode::UNPROCESSABLE_ENTITY, "no_route", message)
+        RoutingError::FallbackExhausted => {
+            ApiErrorResponse::from_code(ApiErrorCode::FallbackExhausted, message)
         }
+        RoutingError::NoRoute => ApiErrorResponse::from_code(ApiErrorCode::NoRoute, message),
         RoutingError::OverrideNotAllowed(model) => {
-            ApiErrorResponse::new(StatusCode::FORBIDDEN, "override_not_allowed", message)
+            ApiErrorResponse::from_code(ApiErrorCode::OverrideNotAllowed, message)
                 .with_details(serde_json::json!({ "model": model }))
         }
         RoutingError::UnknownModel(model) => {
-            ApiErrorResponse::new(StatusCode::UNPROCESSABLE_ENTITY, "unknown_model", message)
+            ApiErrorResponse::from_code(ApiErrorCode::UnknownModel, message)
                 .with_details(serde_json::json!({ "model": model }))
         }
-        RoutingError::UnsupportedCapability(capability) => ApiErrorResponse::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "routing_unsupported_capability",
-            message,
-        )
-        .with_details(serde_json::json!({ "capability": capability })),
+        RoutingError::UnsupportedCapability(capability) => {
+            ApiErrorResponse::from_code(ApiErrorCode::RoutingUnsupportedCapability, message)
+                .with_details(serde_json::json!({ "capability": capability }))
+        }
     }
 }
 
 fn map_provider(error: ProviderError) -> ApiErrorResponse {
     let message = error.to_string();
-    let (status, code) = match error.category {
-        ProviderErrorCategory::Authentication => {
-            (StatusCode::SERVICE_UNAVAILABLE, "provider_authentication")
-        }
-        ProviderErrorCategory::ContextLength => {
-            (StatusCode::UNPROCESSABLE_ENTITY, "context_length_exceeded")
-        }
-        ProviderErrorCategory::InvalidConfiguration => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "invalid_provider_configuration",
-        ),
-        ProviderErrorCategory::InvalidCredentials => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "invalid_provider_credentials",
-        ),
-        ProviderErrorCategory::InvalidRequest => {
-            (StatusCode::UNPROCESSABLE_ENTITY, "invalid_request")
-        }
-        ProviderErrorCategory::MissingCredentials => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "missing_provider_credentials",
-        ),
-        ProviderErrorCategory::ModelNotFound => (StatusCode::NOT_FOUND, "model_not_found"),
-        ProviderErrorCategory::ProviderUnavailable => {
-            (StatusCode::SERVICE_UNAVAILABLE, "provider_unavailable")
-        }
-        ProviderErrorCategory::RateLimit => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
-        ProviderErrorCategory::Storage => (StatusCode::INTERNAL_SERVER_ERROR, "storage_error"),
-        ProviderErrorCategory::Timeout => (StatusCode::GATEWAY_TIMEOUT, "request_timeout"),
-        ProviderErrorCategory::Unknown => (StatusCode::BAD_GATEWAY, "provider_error"),
-        ProviderErrorCategory::UnsupportedCapability => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "provider_unsupported_capability",
-        ),
+    let code = match error.category {
+        ProviderErrorCategory::Authentication => ApiErrorCode::ProviderAuthentication,
+        ProviderErrorCategory::ContextLength => ApiErrorCode::ContextLengthExceeded,
+        ProviderErrorCategory::InvalidConfiguration => ApiErrorCode::InvalidProviderConfiguration,
+        ProviderErrorCategory::InvalidCredentials => ApiErrorCode::InvalidProviderCredentials,
+        ProviderErrorCategory::InvalidRequest => ApiErrorCode::InvalidRequest,
+        ProviderErrorCategory::MissingCredentials => ApiErrorCode::MissingProviderCredentials,
+        ProviderErrorCategory::ModelNotFound => ApiErrorCode::ModelNotFound,
+        ProviderErrorCategory::ProviderUnavailable => ApiErrorCode::ProviderUnavailable,
+        ProviderErrorCategory::RateLimit => ApiErrorCode::RateLimited,
+        ProviderErrorCategory::Storage => ApiErrorCode::StorageError,
+        ProviderErrorCategory::Timeout => ApiErrorCode::RequestTimeout,
+        ProviderErrorCategory::Unknown => ApiErrorCode::ProviderError,
+        ProviderErrorCategory::UnsupportedCapability => ApiErrorCode::ProviderUnsupportedCapability,
     };
     let mut details = serde_json::json!({ "provider": error.provider });
     if let Some(model) = error.model {
         details["model"] = serde_json::Value::String(model);
     }
-    ApiErrorResponse::new(status, code, message).with_details(details)
+    ApiErrorResponse::from_code(code, message).with_details(details)
 }
 
 #[cfg(test)]
@@ -264,6 +407,25 @@ mod tests {
     use super::*;
     use crate::model::{Capability, Provider};
     use crate::policy::PermissionMode;
+
+    #[test]
+    fn should_build_response_from_typed_code() {
+        let response = ApiErrorResponse::from_code(ApiErrorCode::InvalidApiKey, "nope");
+        assert_eq!(response.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(response.body.error.code, "invalid_api_key");
+        assert_eq!(response.body.error.message, "nope");
+        assert!(response.body.error.details.is_none());
+    }
+
+    #[test]
+    fn should_render_code_as_its_wire_string() {
+        assert_eq!(ApiErrorCode::InternalError.as_str(), "internal_error");
+        assert_eq!(ApiErrorCode::InternalError.to_string(), "internal_error");
+        assert_eq!(
+            ApiErrorCode::ProviderUnsupportedCapability.status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
 
     #[test]
     fn should_construct_response_with_code_and_message() {
@@ -483,7 +645,7 @@ mod tests {
             ),
             (
                 ProviderErrorCategory::Storage,
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::BAD_GATEWAY,
                 "storage_error",
             ),
             (

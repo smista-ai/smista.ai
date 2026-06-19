@@ -2,29 +2,27 @@
 //!
 //! Reports that the service is up together with its version, taken from the
 //! crate's `CARGO_PKG_VERSION` at compile time. This endpoint sits at the root,
-//! outside `/api/v1`, and requires no authentication.
+//! outside `/api/v1`, and requires no authentication. The response shape is
+//! [`StatusResponse`].
 
 use axum::Json;
-use serde::Serialize;
+use axum::http::StatusCode;
+use smista_core::api::StatusResponse;
+
+use crate::web::routes::ApiResult;
 
 /// The running service version, from the crate's `CARGO_PKG_VERSION`.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Body of a successful `GET /status` response.
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct StatusResponse {
-    /// Service liveness indicator; always `"ok"` when the server answers.
-    pub(crate) status: &'static str,
-    /// The running service version.
-    pub(crate) version: &'static str,
-}
-
 /// Handles `GET /status`.
-pub(crate) async fn status() -> Json<StatusResponse> {
-    Json(StatusResponse {
-        status: "ok",
-        version: VERSION,
-    })
+pub(crate) async fn status() -> ApiResult<StatusResponse> {
+    Ok((
+        StatusCode::OK,
+        Json(StatusResponse {
+            status: "ok".to_string(),
+            version: VERSION.to_string(),
+        }),
+    ))
 }
 
 #[cfg(test)]
