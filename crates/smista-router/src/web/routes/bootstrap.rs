@@ -103,13 +103,18 @@ mod tests {
             Uuid::parse_str(body["user_id"].as_str().expect("user_id missing")).expect("bad uuid");
         let api_key = SecretString::from(body["api_key"].as_str().expect("api_key missing"));
 
-        // The persisted hash verifies against the issued key end to end.
+        // The persisted hash verifies against the issued key end to end, and the
+        // issued token authenticates the same user that was bootstrapped.
         let authenticator = Authenticator::new(db, Duration::from_secs(3600));
         let session = authenticator
             .sign_in(&api_key)
             .await
             .expect("the issued key failed to sign in");
-        assert_eq!(session.user_id, user_id);
+        let authenticated = authenticator
+            .authenticate(&session.token)
+            .await
+            .expect("the issued token failed to authenticate");
+        assert_eq!(authenticated, user_id);
     }
 
     #[tokio::test]
