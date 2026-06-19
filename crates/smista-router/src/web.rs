@@ -189,8 +189,8 @@ fn build_router(state: AppState) -> Router {
         .route("/sessions/{session_id}/stream", post(routes::stream))
         .route("/sessions/{session_id}/preview", post(routes::preview))
         .route(
-            "/sessions/{session_id}/approvals/{approval_id}",
-            post(routes::submit_approval),
+            "/sessions/{session_id}/continue",
+            post(routes::continue_run),
         )
         .route(
             "/sessions/{session_id}/traces/latest",

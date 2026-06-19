@@ -6,10 +6,11 @@
 //! evaluated to produce a [`TaskIntent`]. The first matching rule wins; if
 //! none matches, [`ClassificationConfig::default_intent`] is used.
 //!
-//! Classification is purely deterministic — it never calls an LLM — and lives
-//! client-side in the CLI configuration (`[classification]` in `config.toml`).
-//! The resulting [`TaskIntent`] is then sent to the router, where a separate
-//! set of [`RoutingRule`](super::RoutingRule)s selects the model.
+//! Classification is purely deterministic — it never calls an LLM. The rules
+//! are authored in the CLI configuration (`[classification]` in `config.toml`)
+//! and sent to the router, which evaluates them: the router classifies on each
+//! turn to produce a [`TaskIntent`], then a separate set of
+//! [`RoutingRule`](super::RoutingRule)s selects the model.
 //!
 //! This module only defines the configuration and result shapes; the
 //! classifier implementation lives elsewhere.
@@ -40,7 +41,8 @@ const DEFAULT_PRIORITY: u32 = 1000;
 /// assert_eq!(config.default_intent, TaskIntent::Chat);
 /// assert!(config.rules.is_empty());
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ClassificationConfig {
     /// Intent used when no rule matches.
     #[serde(default = "default_intent")]
@@ -79,7 +81,8 @@ pub struct ClassificationConfig {
 /// assert_eq!(rule.intent, TaskIntent::Review);
 /// assert_eq!(rule.priority, 10);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ClassificationRule {
     /// Intent assigned when the rule matches.
     pub intent: TaskIntent,
@@ -103,7 +106,8 @@ pub struct ClassificationRule {
 /// intent, [`matched_rule`](Self::matched_rule) carries the index of the
 /// matching entry in [`ClassificationConfig::rules`] so traces can point back
 /// to the configured rule.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Classification {
     /// The detected task intent.
     pub intent: TaskIntent,
@@ -115,17 +119,20 @@ pub struct Classification {
     ///
     /// Refers to a [`ClassificationRule`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub matched_rule: Option<usize>,
     /// Optional deterministic confidence category for an inferred intent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub confidence: Option<Confidence>,
 }
 
 /// Deterministic confidence category for an inferred intent.
 ///
 /// This is a coarse signal-strength label, not a probability.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum Confidence {
     /// Weak signal.
     Low,
@@ -136,8 +143,9 @@ pub enum Confidence {
 }
 
 /// Origin of the intent attached to a request.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum IntentSource {
     /// The user named the intent (for example via `--intent`).
     Explicit,

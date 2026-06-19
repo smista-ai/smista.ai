@@ -26,6 +26,10 @@
 # Technical
 
 - [Architecture](technical/architecture.md)
+- [Execution protocol](technical/execution-protocol.md)
+- [Task intent classification](technical/task-classification.md)
+- [Routing and model selection](technical/routing.md)
+- [Context selection](technical/context-selection.md)
 - [Router authentication](technical/authentication.md)
 - [Memory](technical/memory.md)
 - [Schema](technical/schema.md)

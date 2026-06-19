@@ -36,23 +36,29 @@
 //! echoed back. Credential headers are handled at the HTTP boundary and never
 //! enter these types.
 
+mod advance;
 mod approval;
 mod auth;
+mod crypto;
 mod error;
 mod execute;
 mod llm;
 mod preview;
 mod session;
 mod trace;
+mod turn_event;
 mod usage;
 
-pub use approval::{ApprovalDecision, SubmitApprovalRequest, SubmitApprovalResponse};
+pub use advance::{ApprovalDecisionEntry, ContinueRequest, ToolResult, UserMessage};
+pub use approval::ApprovalDecision;
 pub use auth::{BootstrapResponse, MeResponse, SignInRequest, SignInResponse, SignOutResponse};
+pub use crypto::{EncryptedPayload, PlainRecord, SealedRecord};
 pub use error::{ApiError, ApiErrorBody, ApiErrorResponse};
 pub use execute::{
-    ContextFile, ContextInstruction, ContextOutcome, ExecuteContext, ExecutePolicy, ExecuteRequest,
-    ExecuteResponse, ExecutionStatus, LocalPreferences, ProviderCredentialInfo, ProviderModelInfo,
-    RoutingOutcome, TaskInput, Workspace,
+    ApprovalKind, Attachments, CompletedTurn, ContextFile, ContextInstruction, ContextOutcome,
+    ExecutePolicy, ExecuteRequest, LocalPreferences, PendingApproval, ProviderCredentialInfo,
+    ProviderModelInfo, RoutingOutcome, TaskInput, ToolApproval, ToolRequest, TurnResponse,
+    Workspace,
 };
 pub use llm::{ListModelsResponse, ListProvidersResponse, UnavailableProvider};
 pub use preview::{CostRange, PreviewResponse, RequiredPermission};
@@ -61,4 +67,5 @@ pub use session::{
     SessionDetail, SessionSummary, UpdateSessionRequest,
 };
 pub use trace::TraceResponse;
+pub use turn_event::TurnEvent;
 pub use usage::{ModelUsage, SessionUsageResponse, TaskTypeUsage, UsageBreakdown};

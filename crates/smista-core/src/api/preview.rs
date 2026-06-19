@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::intent::TaskIntent;
 use crate::model::Provider;
-use crate::policy::PermissionMode;
+use crate::policy::{Classification, PermissionMode};
 
 /// The predicted routing of a task, without calling the model.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
@@ -32,6 +32,8 @@ use crate::policy::PermissionMode;
 pub struct PreviewResponse {
     /// Task type that would be detected.
     pub task_type: TaskIntent,
+    /// How the task would be classified.
+    pub classification: Classification,
     /// Provider that would serve the task.
     pub provider: Provider,
     /// Model that would serve the task.
@@ -79,11 +81,13 @@ pub struct RequiredPermission {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::policy::{Confidence, IntentSource};
 
     #[test]
     fn should_deserialize_spec_preview_response() {
         let json = r#"{
             "task_type": "review",
+            "classification": { "intent": "review", "source": "inferred", "reason": "keyword 'review' matched", "confidence": "high" },
             "provider": "openai",
             "model": "gpt-5.5-thinking",
             "matched_rule": "task.review -> openai/gpt-5.5-thinking",
@@ -98,6 +102,7 @@ mod tests {
         let preview: PreviewResponse = serde_json::from_str(json).unwrap();
 
         assert_eq!(preview.task_type, TaskIntent::Review);
+        assert_eq!(preview.classification.intent, TaskIntent::Review);
         assert_eq!(preview.provider, Provider::OpenAI);
         assert_eq!(
             preview.estimated_cost.max,
@@ -116,6 +121,13 @@ mod tests {
     fn should_roundtrip_preview_response() {
         let preview = PreviewResponse {
             task_type: TaskIntent::Review,
+            classification: Classification {
+                intent: TaskIntent::Review,
+                source: IntentSource::Inferred,
+                reason: "keyword matched".to_string(),
+                matched_rule: Some(0),
+                confidence: Some(Confidence::High),
+            },
             provider: Provider::OpenAI,
             model: "gpt-5.5-thinking".to_string(),
             matched_rule: None,

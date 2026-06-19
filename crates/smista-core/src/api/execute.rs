@@ -1,20 +1,27 @@
 //! Request and response bodies for running a task in a session.
 //!
-//! [`ExecuteRequest`] is the full input to `POST /sessions/{id}/execute` (and,
-//! unchanged, to `/stream` and `/preview`): the user's input, the workspace
-//! snapshot, the deterministic routing/permission/privacy policy, local
-//! preferences, the available providers and credentials, and the assembled
-//! context. [`ExecuteResponse`] reports the outcome: the routed model, what
-//! context was used, the assistant message, usage, and the trace id.
+//! [`ExecuteRequest`] is the input to `POST /sessions/{id}/execute` and,
+//! unchanged, to `/stream` and `/preview`: the user's input, the workspace
+//! snapshot, the deterministic policy, local preferences, the available
+//! providers, and the local [`Attachments`] (files, instructions and skills)
+//! the router cannot read for itself. Session history, memory and the assembled
+//! context are never sent — the router owns them and recalls them from storage.
+//!
+//! [`TurnResponse`] is the outcome of one turn, shared by `/execute` and
+//! `/continue`: a `completed` turn carrying the assistant message, or a
+//! continuation the client must act on — a tool to run ([`ToolRequest`]) or an
+//! approval to decide ([`PendingApproval`]) — before the run proceeds. See the
+//! execution protocol reference for the full interaction model.
 //!
 //! The `policy` block is the deterministic policy the CLI assembles from its
-//! config layers and sends verbatim: it embeds the very same
+//! config layers and sends verbatim: it embeds the same
+//! [`ClassificationConfig`](crate::policy::ClassificationConfig),
 //! [`RoutingPolicy`](crate::policy::RoutingPolicy),
 //! [`ToolsConfig`](crate::policy::ToolsConfig) and
 //! [`PrivacyPolicy`](crate::policy::PrivacyPolicy) the router evaluates, so
 //! there is one policy vocabulary instead of a separate, lossy wire model.
 //!
-//! Provider credentials are never part of this body; they travel as request
+//! Provider credentials are never part of these bodies; they travel as request
 //! headers and are handled at the HTTP boundary.
 //!
 //! # Examples
@@ -36,10 +43,13 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use super::{ApiErrorBody, EncryptedPayload, PlainRecord, SealedRecord};
 use crate::intent::TaskIntent;
 use crate::message::Message;
 use crate::model::{ModelReference, Provider};
-use crate::policy::{PrivacyPolicy, RoutingPolicy, ToolsConfig};
+use crate::policy::{
+    Classification, ClassificationConfig, PrivacyPolicy, RoutingPolicy, ToolsConfig,
+};
 use crate::skill::Skill;
 use crate::usage::Usage;
 
@@ -51,14 +61,20 @@ pub struct ExecuteRequest {
     pub input: TaskInput,
     /// Snapshot of the workspace the task runs against.
     pub workspace: Workspace,
-    /// Routing, permission and privacy policy snapshot.
+    /// Classification, routing, permission and privacy policy snapshot.
     pub policy: ExecutePolicy,
     /// Client-side execution preferences.
     pub local_preferences: LocalPreferences,
     /// Providers available for this request and their credential status.
     pub providers: Vec<ProviderCredentialInfo>,
-    /// The assembled context for the task.
-    pub context: ExecuteContext,
+    /// Local content the router cannot read for itself.
+    pub attachments: Attachments,
+    /// For an encrypted session, the sealed form of the user prompt, persisted
+    /// as the user message; the plaintext in `input.text` is what calls the
+    /// model. Absent for a plaintext session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub input_ciphertext: Option<EncryptedPayload>,
 }
 
 /// The user's request: prompt text, optional command and explicit model.
@@ -102,9 +118,9 @@ pub struct Workspace {
 /// The deterministic policy snapshot the client sends with a task.
 ///
 /// `version` is the schema version of the snapshot; `source` records how it was
-/// assembled (for example `merged`). The `routing`, `tools` and `privacy`
-/// blocks are the canonical [`crate::policy`] types — the same vocabulary the
-/// router evaluates and the CLI loads from `config.toml`.
+/// assembled (for example `merged`). The `classification`, `routing`, `tools`
+/// and `privacy` blocks are the canonical [`crate::policy`] types — the same
+/// vocabulary the router evaluates and the CLI loads from `config.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ExecutePolicy {
@@ -112,6 +128,8 @@ pub struct ExecutePolicy {
     pub version: u32,
     /// How the snapshot was assembled, for example `merged`.
     pub source: String,
+    /// Intent-classification rules and the default intent.
+    pub classification: ClassificationConfig,
     /// Routing rules and default route.
     pub routing: RoutingPolicy,
     /// Tool permission modes, keyed by tool name.
@@ -156,25 +174,23 @@ pub struct ProviderModelInfo {
     pub credential_available: bool,
 }
 
-/// The assembled context for a task.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+/// Local content the client supplies because the router has no filesystem.
+///
+/// Every file, instruction and skill the task may need from disk travels here.
+/// History, memory and the assembled context are not part of this — the router
+/// owns them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
-pub struct ExecuteContext {
-    /// Relevant prior conversation messages.
-    pub messages: Vec<Message>,
-    /// Files included as context.
+pub struct Attachments {
+    /// Explicit `@path` files included with their content.
     pub files: Vec<ContextFile>,
-    /// Instruction documents included as context.
+    /// Instruction documents the client read from disk.
     pub instructions: Vec<ContextInstruction>,
-    /// Skills made available to the task.
+    /// Invoked skills, as name plus the `SKILL.md` body.
     pub skills: Vec<Skill>,
-    /// Prompt template applied to the input, if any.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub prompt_template: Option<String>,
 }
 
-/// A file included as context, with a content hash for cache validation.
+/// A file the client attached, with a content hash and whether it is required.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ContextFile {
@@ -184,9 +200,12 @@ pub struct ContextFile {
     pub content: String,
     /// Hash of the content, for example `sha256:...`.
     pub content_hash: String,
+    /// Whether the file is required (referenced or route-driving) and so cannot
+    /// be dropped, as opposed to discardable supplementary context.
+    pub required: bool,
 }
 
-/// An instruction document included as context.
+/// An instruction document the client attached as context.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ContextInstruction {
@@ -196,40 +215,126 @@ pub struct ContextInstruction {
     pub content: String,
 }
 
-/// Outcome of executing a task.
+/// The outcome of one turn, returned by `/execute` and `/continue`.
 ///
-/// `message` is the assistant's reply on completion; it may be absent when the
-/// task is awaiting an approval instead.
+/// Internally tagged by `status`. A [`Completed`](Self::Completed) turn carries
+/// the assistant message and routing explanation; every other variant is a
+/// continuation the client must act on before resuming the run with
+/// `/continue`, or a terminal [`Error`](Self::Error).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(tag = "status", rename_all = "snake_case")]
+#[ts(export)]
+pub enum TurnResponse {
+    /// The model finished; an assistant message is included.
+    ///
+    /// Boxed because this is by far the largest variant.
+    Completed(Box<CompletedTurn>),
+    /// The model requested one or more client-executed tools.
+    AwaitingTool {
+        /// The tool calls the client must run, correlated by `call_id`.
+        tool_requests: Vec<ToolRequest>,
+        /// Identifier of the recorded trace.
+        trace_id: String,
+    },
+    /// The router needs a yes/no decision with no tool to run.
+    AwaitingApproval {
+        /// The decision the client must obtain.
+        approval: PendingApproval,
+        /// Identifier of the recorded trace.
+        trace_id: String,
+    },
+    /// The router needs sealed history opened to build the prompt.
+    AwaitingDecrypt {
+        /// Records the client must decrypt, correlated by `record_id`.
+        records: Vec<SealedRecord>,
+        /// Identifier of the recorded trace.
+        trace_id: String,
+    },
+    /// The router needs its own output sealed before it can be persisted.
+    AwaitingEncrypt {
+        /// Records the client must encrypt, correlated by `record_id`.
+        records: Vec<PlainRecord>,
+        /// Identifier of the recorded trace.
+        trace_id: String,
+    },
+    /// A terminal error ended the turn.
+    Error {
+        /// The structured error body.
+        error: ApiErrorBody,
+    },
+}
+
+/// The payload of a [`completed`](TurnResponse::Completed) turn.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
-pub struct ExecuteResponse {
-    /// Terminal status of the execution.
-    pub status: ExecutionStatus,
-    /// The assistant's reply, when the task produced one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub message: Option<Message>,
+pub struct CompletedTurn {
+    /// The assistant's reply.
+    pub message: Message,
+    /// How the task was classified.
+    pub classification: Classification,
     /// How the task was routed.
     pub routing: RoutingOutcome,
     /// What context was included and excluded.
     pub context: ContextOutcome,
-    /// Token usage and cost for the execution.
+    /// Token usage and cost for the turn.
     pub usage: Usage,
     /// Identifier of the recorded trace.
     pub trace_id: String,
 }
 
-/// Terminal status of a task execution.
+/// A tool the client must execute on the user's machine.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ToolRequest {
+    /// Identifier correlating this call with its later result.
+    pub call_id: String,
+    /// Name of the tool to invoke.
+    pub name: String,
+    /// Arguments for the tool, as a provider-agnostic JSON value.
+    pub arguments: serde_json::Value,
+    /// Whether the user must approve the call before it runs.
+    pub requires_approval: ToolApproval,
+}
+
+/// Whether a client-executed tool needs the user's approval first.
 ///
-/// Each variant serializes to its snake_case name.
+/// A tool denied by policy never reaches the client, so `deny` is not a value
+/// here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
-pub enum ExecutionStatus {
-    /// The task completed and produced an assistant message.
-    Completed,
-    /// The task is paused awaiting an approval decision.
-    PendingApproval,
+pub enum ToolApproval {
+    /// Run the tool without confirmation.
+    Allow,
+    /// Confirm with the user before running the tool.
+    Ask,
+}
+
+/// A decision the router needs that has no tool to execute.
+///
+/// Raised for disclosures and limits — for example sending context to a remote
+/// model under an `ask` privacy mode, or confirming a cost ceiling. The
+/// `detail` shape depends on `kind`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct PendingApproval {
+    /// Identifier the approval decision refers to.
+    pub approval_id: String,
+    /// What kind of decision is being asked for.
+    pub kind: ApprovalKind,
+    /// Machine-readable context for the decision; its shape depends on `kind`.
+    pub detail: serde_json::Value,
+}
+
+/// The kind of a [`PendingApproval`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ApprovalKind {
+    /// Disclosing context to a remote provider.
+    RemoteDisclosure,
+    /// Confirming a per-task cost ceiling would be exceeded.
+    CostLimit,
 }
 
 /// How a task was routed to a model.
@@ -266,7 +371,7 @@ pub struct ContextOutcome {
 mod tests {
     use super::*;
     use crate::effort::Effort;
-    use crate::policy::PermissionMode;
+    use crate::policy::{IntentSource, PermissionMode};
 
     /// The `/execute` request body from the API specification.
     const SPEC_REQUEST: &str = r#"{
@@ -281,6 +386,12 @@ mod tests {
         "policy": {
             "version": 1,
             "source": "merged",
+            "classification": {
+                "default_intent": "chat",
+                "rules": [
+                    { "intent": "review", "priority": 10, "keywords": ["review", "audit"], "requires_any_context": ["git_diff"] }
+                ]
+            },
             "routing": {
                 "default": {
                     "model": "anthropic/claude-sonnet",
@@ -310,12 +421,10 @@ mod tests {
             { "id": "anthropic", "models": [ { "model": "claude-sonnet", "requires_api_key": true, "credential_available": true } ] },
             { "id": "ollama", "models": [ { "model": "qwen2.5-coder", "requires_api_key": false, "credential_available": true } ] }
         ],
-        "context": {
-            "messages": [ { "role": "user", "content": "Previous relevant message..." } ],
-            "files": [ { "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:..." } ],
+        "attachments": {
+            "files": [ { "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true } ],
             "instructions": [ { "source": "SMISTA.md", "content": "..." } ],
-            "skills": [],
-            "prompt_template": null
+            "skills": []
         }
     }"#;
 
@@ -329,19 +438,20 @@ mod tests {
             request.workspace.root,
             PathBuf::from("/Users/christian/project")
         );
-        assert_eq!(request.workspace.active_file, None);
         assert_eq!(request.policy.version, 1);
+        assert_eq!(
+            request.policy.classification.default_intent,
+            TaskIntent::Chat
+        );
+        assert_eq!(request.policy.classification.rules.len(), 1);
+        assert_eq!(
+            request.policy.classification.rules[0].intent,
+            TaskIntent::Review
+        );
         let default_route = request.policy.routing.default.as_ref().unwrap();
         assert_eq!(
             default_route.model,
             "anthropic/claude-sonnet".parse().unwrap()
-        );
-        assert_eq!(
-            default_route.fallbacks,
-            vec![
-                "openai/gpt-5.5-thinking".parse().unwrap(),
-                "ollama/qwen2.5-coder".parse().unwrap(),
-            ]
         );
         assert_eq!(
             request.policy.tools.mode_for("network"),
@@ -349,11 +459,12 @@ mod tests {
         );
         assert_eq!(request.policy.privacy.remote.mode(), PermissionMode::Ask);
         let rule = &request.policy.routing.rules[0];
-        assert_eq!(rule.name, "auth edits use Claude");
         assert_eq!(rule.intent, Some(TaskIntent::Edit));
         assert_eq!(rule.effort, Effort::High);
-        assert_eq!(rule.paths, vec!["src/auth/**".to_string()]);
-        assert!(request.context.skills.is_empty());
+        let file = &request.attachments.files[0];
+        assert_eq!(file.path, PathBuf::from("src/auth/middleware.rs"));
+        assert!(file.required);
+        assert!(request.attachments.skills.is_empty());
         assert_eq!(request.providers.len(), 2);
     }
 
@@ -368,10 +479,11 @@ mod tests {
     }
 
     #[test]
-    fn should_deserialize_spec_execute_response() {
+    fn should_deserialize_completed_turn() {
         let json = r#"{
             "status": "completed",
             "message": { "role": "assistant", "content": "..." },
+            "classification": { "intent": "edit", "source": "inferred", "reason": "keyword matched", "confidence": "high" },
             "routing": {
                 "task_type": "edit",
                 "provider": "anthropic",
@@ -380,26 +492,108 @@ mod tests {
                 "fallback_used": false,
                 "override_used": false
             },
-            "context": {
-                "included": ["src/auth/middleware.rs", "SMISTA.md", "current git diff"],
-                "excluded": [".env", "secrets/**"]
-            },
+            "context": { "included": ["src/auth/middleware.rs"], "excluded": [".env"] },
             "usage": { "input_tokens": 1200, "output_tokens": 500, "estimated_cost": "0.08", "currency": "USD" },
             "trace_id": "trace:xyz"
         }"#;
-        let response: ExecuteResponse = serde_json::from_str(json).unwrap();
+        let response: TurnResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.status, ExecutionStatus::Completed);
-        assert_eq!(response.routing.provider, Provider::Anthropic);
-        assert_eq!(response.usage.input_tokens, Some(1200));
-        assert_eq!(response.trace_id, "trace:xyz");
+        let TurnResponse::Completed(completed) = response else {
+            panic!("expected a completed turn");
+        };
+        assert_eq!(completed.classification.intent, TaskIntent::Edit);
+        assert_eq!(completed.classification.source, IntentSource::Inferred);
+        assert_eq!(completed.routing.provider, Provider::Anthropic);
+        assert_eq!(completed.usage.input_tokens, Some(1200));
+        assert_eq!(completed.trace_id, "trace:xyz");
     }
 
     #[test]
-    fn should_serialize_execution_status_as_snake_case() {
+    fn should_serialize_awaiting_tool_with_status_tag() {
+        let response = TurnResponse::AwaitingTool {
+            tool_requests: vec![ToolRequest {
+                call_id: "c1".to_string(),
+                name: "shell".to_string(),
+                arguments: serde_json::json!({ "command": "cargo test" }),
+                requires_approval: ToolApproval::Ask,
+            }],
+            trace_id: "trace:xyz".to_string(),
+        };
         assert_eq!(
-            serde_json::to_value(ExecutionStatus::PendingApproval).unwrap(),
-            serde_json::json!("pending_approval")
+            serde_json::to_value(&response).unwrap(),
+            serde_json::json!({
+                "status": "awaiting_tool",
+                "tool_requests": [
+                    { "call_id": "c1", "name": "shell", "arguments": { "command": "cargo test" }, "requires_approval": "ask" }
+                ],
+                "trace_id": "trace:xyz"
+            })
+        );
+    }
+
+    #[test]
+    fn should_serialize_awaiting_approval_with_kind() {
+        let response = TurnResponse::AwaitingApproval {
+            approval: PendingApproval {
+                approval_id: "a1".to_string(),
+                kind: ApprovalKind::RemoteDisclosure,
+                detail: serde_json::json!({ "provider": "anthropic" }),
+            },
+            trace_id: "trace:xyz".to_string(),
+        };
+        let value = serde_json::to_value(&response).unwrap();
+        assert_eq!(value["status"], "awaiting_approval");
+        assert_eq!(value["approval"]["kind"], "remote_disclosure");
+    }
+
+    #[test]
+    fn should_roundtrip_error_turn() {
+        let response = TurnResponse::Error {
+            error: ApiErrorBody {
+                code: "no_route".to_string(),
+                message: "No routing rule matched.".to_string(),
+                details: None,
+            },
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert_eq!(
+            serde_json::from_str::<TurnResponse>(&json).unwrap(),
+            response
+        );
+    }
+
+    #[test]
+    fn should_roundtrip_awaiting_decrypt() {
+        let response = TurnResponse::AwaitingDecrypt {
+            records: vec![SealedRecord {
+                record_id: "session_message:0194".to_string(),
+                envelope: EncryptedPayload {
+                    version: 1,
+                    algorithm: "xchacha20poly1305".to_string(),
+                    key_id: "kf_ab12".to_string(),
+                    nonce: "bm9uY2U".to_string(),
+                    ciphertext: "Y2lwaGVydGV4dA".to_string(),
+                },
+            }],
+            trace_id: "trace:xyz".to_string(),
+        };
+        let value = serde_json::to_value(&response).unwrap();
+        assert_eq!(value["status"], "awaiting_decrypt");
+        assert_eq!(
+            serde_json::from_value::<TurnResponse>(value).unwrap(),
+            response
+        );
+    }
+
+    #[test]
+    fn should_serialize_tool_approval_as_snake_case() {
+        assert_eq!(
+            serde_json::to_value(ToolApproval::Allow).unwrap(),
+            serde_json::json!("allow")
+        );
+        assert_eq!(
+            serde_json::to_value(ToolApproval::Ask).unwrap(),
+            serde_json::json!("ask")
         );
     }
 }
