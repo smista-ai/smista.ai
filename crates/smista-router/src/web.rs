@@ -50,13 +50,6 @@ use crate::router::Router as SmistaRouter;
 /// Put inside request Extensions so handlers can access it without re-authenticating.
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "later request handlers will read the user id from the request extensions"
-        )
-    )]
     pub user_id: Uuid,
     pub token: SecretString,
 }
@@ -441,6 +434,13 @@ pub(crate) mod test_support {
     /// authenticated routes end to end. Returns the router and the raw token
     /// string to place in the `Authorization` header.
     pub(crate) async fn authenticated_router() -> (Router, String) {
+        let (router, token, _user_id) = authenticated_router_with_user().await;
+        (router, token)
+    }
+
+    /// Like [`authenticated_router`] but also returns the bootstrapped user's
+    /// [`Uuid`](uuid::Uuid), so a test can assert which user a token resolves to.
+    pub(crate) async fn authenticated_router_with_user() -> (Router, String, uuid::Uuid) {
         let database = test_database().await;
         let config = RouterConfig::default();
         let token_ttl = std::time::Duration::from_secs(config.auth.token_ttl_seconds);
@@ -460,7 +460,7 @@ pub(crate) mod test_support {
             database,
             router: test_smista_router(),
         };
-        (build_router(state), token)
+        (build_router(state), token, user.user_id)
     }
 }
 
@@ -611,13 +611,13 @@ mod tests {
 
     #[tokio::test]
     async fn should_allow_protected_routes_with_a_valid_token() {
-        // A valid token clears the guard, so the request reaches the (scaffolded)
-        // handler and gets its placeholder response rather than a 401.
+        // A valid token clears the guard, so the request reaches the handler and
+        // gets its real response rather than a 401.
         let (router, token) = authenticated_router().await;
         let (status, body) = send(router, get_with_token("/api/v1/auth/me", &token)).await;
 
-        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
-        assert_eq!(body["error"]["code"], "not_implemented");
+        assert_eq!(status, StatusCode::OK);
+        assert!(body["user_id"].is_string());
     }
 
     #[tokio::test]
