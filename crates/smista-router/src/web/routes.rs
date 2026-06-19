@@ -25,6 +25,9 @@ mod status;
 mod stream;
 mod update_session;
 
+use axum::Json;
+use axum::http::StatusCode;
+
 pub(crate) use self::bootstrap::bootstrap;
 pub(crate) use self::continue_run::continue_run;
 pub(crate) use self::create_session::create_session;
@@ -44,3 +47,7 @@ pub(crate) use self::sign_out::sign_out;
 pub(crate) use self::status::status;
 pub(crate) use self::stream::stream;
 pub(crate) use self::update_session::update_session;
+use crate::web::error::WebError;
+
+/// Result type for API endpoints, returning a JSON body and a status code.
+type ApiResult<T> = Result<(StatusCode, Json<T>), WebError>;

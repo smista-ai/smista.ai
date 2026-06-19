@@ -45,6 +45,7 @@ mod execute;
 mod llm;
 mod preview;
 mod session;
+mod status;
 mod trace;
 mod turn_event;
 mod usage;
@@ -53,7 +54,7 @@ pub use advance::{ApprovalDecisionEntry, ContinueRequest, ToolResult, UserMessag
 pub use approval::ApprovalDecision;
 pub use auth::{BootstrapResponse, MeResponse, SignInRequest, SignInResponse, SignOutResponse};
 pub use crypto::{EncryptedPayload, PlainRecord, SealedRecord};
-pub use error::{ApiError, ApiErrorBody, ApiErrorResponse};
+pub use error::{ApiError, ApiErrorBody, ApiErrorCode, ApiErrorResponse};
 pub use execute::{
     ApprovalKind, Attachments, CompletedTurn, ContextFile, ContextInstruction, ContextOutcome,
     ExecutePolicy, ExecuteRequest, LocalPreferences, PendingApproval, ProviderCredentialInfo,
@@ -66,6 +67,7 @@ pub use session::{
     CreateSessionRequest, CreateSessionResponse, DeleteSessionResponse, GetSessionResponse,
     SessionDetail, SessionSummary, UpdateSessionRequest,
 };
+pub use status::StatusResponse;
 pub use trace::TraceResponse;
 pub use turn_event::TurnEvent;
 pub use usage::{ModelUsage, SessionUsageResponse, TaskTypeUsage, UsageBreakdown};

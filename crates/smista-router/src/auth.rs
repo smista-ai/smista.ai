@@ -6,7 +6,6 @@ mod token;
 
 use std::time::Duration;
 
-use axum::http;
 use chrono::{DateTime, Utc};
 use secrecy::{ExposeSecret as _, SecretString};
 use smista_storage::database::Database as _;
@@ -31,25 +30,6 @@ pub enum AuthenticatorError {
     InvalidToken,
     #[error("User not found")]
     UserNotFound,
-}
-
-impl AuthenticatorError {
-    /// Maps each error variant to an appropriate HTTP status code for API responses.
-    pub fn status_code(&self) -> http::StatusCode {
-        match self {
-            AuthenticatorError::UserNotFound
-            | AuthenticatorError::InvalidToken
-            | AuthenticatorError::InvalidApiKey => http::StatusCode::UNAUTHORIZED,
-            AuthenticatorError::InvalidHash => http::StatusCode::BAD_REQUEST,
-            AuthenticatorError::InternalError(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
-
-impl From<AuthenticatorError> for http::StatusCode {
-    fn from(error: AuthenticatorError) -> Self {
-        error.status_code()
-    }
 }
 
 type AuthenticationResult<T> = std::result::Result<T, AuthenticatorError>;
@@ -94,10 +74,6 @@ impl Authenticator {
     /// The user is then registered in the database with the generated user ID and API key.
     ///
     /// Returns a [`BootstrappedUser`] containing the user ID and the generated API key.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by POST /auth/bootstrap endpoint (#149)")
-    )]
     pub async fn bootstrap_user(&self) -> AuthenticationResult<BootstrappedUser> {
         let user_id = Uuid::now_v7();
         tracing::debug!("Bootstrapping new user with ID: {user_id}");
@@ -244,10 +220,6 @@ impl Authenticator {
 
 /// Result of bootstrapping a new user, containing the user ID and the generated API key.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by POST /auth/bootstrap endpoint (#149)")
-)]
 pub struct BootstrappedUser {
     pub user_id: Uuid,
     pub api_key: SecretString,

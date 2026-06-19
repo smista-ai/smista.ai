@@ -12,30 +12,58 @@
 //! [`ApiErrorBody`]: smista_core::api::ApiErrorBody
 
 use axum::Json;
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use smista_core::api::ApiErrorResponse;
+use smista_core::api::{ApiErrorCode, ApiErrorResponse};
 use smista_core::error::CoreError;
+
+use crate::auth::AuthenticatorError;
 
 /// An error rendered as a structured JSON response.
 #[derive(Debug, Clone)]
 pub(crate) struct WebError(ApiErrorResponse);
 
 impl WebError {
-    /// Builds a [`WebError`] with the given status, machine-readable code and
-    /// human-readable message, and no details.
-    pub(crate) fn new(status: StatusCode, code: &str, message: impl Into<String>) -> Self {
-        Self(ApiErrorResponse::new(status, code, message))
+    /// Builds a [`WebError`] from a typed [`ApiErrorCode`], using the code's
+    /// canonical HTTP status and the given message, and no details.
+    ///
+    /// Codes are only ever produced through [`ApiErrorCode`] so the wire code
+    /// and its status can never drift from the documented contract.
+    pub(crate) fn from_code(code: ApiErrorCode, message: impl Into<String>) -> Self {
+        Self(ApiErrorResponse::from_code(code, message))
     }
 
     /// Builds the placeholder error returned by endpoints that are scaffolded
     /// but not yet implemented.
     pub(crate) fn not_implemented() -> Self {
-        Self::new(
-            StatusCode::NOT_IMPLEMENTED,
-            "not_implemented",
+        Self::from_code(
+            ApiErrorCode::NotImplemented,
             "This endpoint is not implemented yet.",
         )
+    }
+}
+
+impl From<AuthenticatorError> for WebError {
+    fn from(err: AuthenticatorError) -> Self {
+        // The HTTP status is derived from the code, not from `err`: a malformed
+        // stored hash is a server-side fault (500), and an unknown user is
+        // reported as an invalid API key so sign-in never leaks which users
+        // exist.
+        let (code, message) = match err {
+            AuthenticatorError::InternalError(_) => {
+                (ApiErrorCode::InternalError, "An internal error occurred.")
+            }
+            AuthenticatorError::InvalidHash => {
+                (ApiErrorCode::InternalError, "An internal error occurred.")
+            }
+            AuthenticatorError::InvalidApiKey | AuthenticatorError::UserNotFound => {
+                (ApiErrorCode::InvalidApiKey, "The API key is invalid.")
+            }
+            AuthenticatorError::InvalidToken => {
+                (ApiErrorCode::InvalidToken, "The session token is invalid.")
+            }
+        };
+
+        Self::from_code(code, message)
     }
 }
 
@@ -59,12 +87,13 @@ impl IntoResponse for WebError {
 
 #[cfg(test)]
 mod tests {
+    use axum::http::StatusCode;
+
     use super::*;
 
     #[test]
     fn should_render_status_and_body() {
-        let response =
-            WebError::new(StatusCode::BAD_REQUEST, "invalid_request", "bad").into_response();
+        let response = WebError::from_code(ApiErrorCode::CredentialsInQuery, "bad").into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
@@ -79,5 +108,38 @@ mod tests {
         let error = WebError::from(CoreError::Internal("boom".to_string()));
         let response = error.into_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn should_map_authenticator_errors_to_codes_and_statuses() {
+        let cases = [
+            (
+                AuthenticatorError::InvalidToken,
+                ApiErrorCode::InvalidToken,
+                StatusCode::UNAUTHORIZED,
+            ),
+            (
+                AuthenticatorError::InvalidApiKey,
+                ApiErrorCode::InvalidApiKey,
+                StatusCode::UNAUTHORIZED,
+            ),
+            // An unknown user is reported as an invalid key, never leaking existence.
+            (
+                AuthenticatorError::UserNotFound,
+                ApiErrorCode::InvalidApiKey,
+                StatusCode::UNAUTHORIZED,
+            ),
+            // A malformed stored hash is a server-side fault, not a client error.
+            (
+                AuthenticatorError::InvalidHash,
+                ApiErrorCode::InternalError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ];
+        for (error, expected_code, expected_status) in cases {
+            let WebError(response) = WebError::from(error);
+            assert_eq!(response.status, expected_status);
+            assert_eq!(response.body.error.code, expected_code.as_str());
+        }
     }
 }

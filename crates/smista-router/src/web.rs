@@ -309,16 +309,22 @@ pub(crate) mod test_support {
     /// mocked providers will be injected here so handler tests can exercise the
     /// provider and model endpoints without reaching a real backend.
     pub(crate) async fn test_router() -> Router {
+        test_router_with_database().await.0
+    }
+
+    /// Like [`test_router`] but also returns the [`SurrealDatabase`] handle the
+    /// router writes through, so a test can assert what an endpoint persisted.
+    pub(crate) async fn test_router_with_database() -> (Router, SurrealDatabase) {
         let database = test_database().await;
         let config = RouterConfig::default();
         let token_ttl = std::time::Duration::from_secs(config.auth.token_ttl_seconds);
         let state = AppState {
             authenticator: Arc::new(super::Authenticator::new(database.clone(), token_ttl)),
             config: Arc::new(config),
-            database,
+            database: database.clone(),
             router: test_smista_router(),
         };
-        build_router(state)
+        (build_router(state), database)
     }
 
     /// Sends a request through the router and returns the status code together
@@ -544,13 +550,13 @@ mod tests {
     #[tokio::test]
     async fn should_allow_public_routes_without_a_token() {
         // Bootstrap is public: with no `Authorization` header the request must
-        // reach the (scaffolded) handler rather than being rejected by the auth
+        // reach the handler and succeed rather than being rejected by the auth
         // guard, proving the guard does not wrap the public routes.
         let (router, _token) = authenticated_router().await;
         let (status, body) = send(router, post("/api/v1/auth/bootstrap")).await;
 
-        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
-        assert_eq!(body["error"]["code"], "not_implemented");
+        assert_eq!(status, StatusCode::CREATED);
+        assert!(body["api_key"].is_string());
     }
 
     #[tokio::test]
@@ -559,7 +565,7 @@ mod tests {
         let (status, body) = send(router, get("/api/v1/auth/me")).await;
 
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-        assert_eq!(body["error"]["code"], "missing_token");
+        assert_eq!(body["error"]["code"], "missing_credentials");
     }
 
     #[tokio::test]

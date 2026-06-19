@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse as _, Response};
 use secrecy::SecretString;
+use smista_core::api::ApiErrorCode;
 
 use crate::auth::Authenticator;
 use crate::web::error::WebError;
@@ -28,21 +28,21 @@ const API_KEY_PREFIX: &str = "Bearer ";
 /// The error response is a structured [`WebError`] whose status and machine
 /// readable code are:
 ///
-/// - `401 missing_token` when the `Authorization` header is absent.
-/// - `400 invalid_token` when the header is not valid text or does not start
+/// - `401 missing_credentials` when the `Authorization` header is absent.
+/// - `401 invalid_token` when the header is not valid text or does not start
 ///   with the `Bearer ` scheme.
-/// - the status from [`Authenticator::authenticate`] with code `invalid_token`
-///   (typically `401`) when the token is unknown, expired, revoked or does not
-///   match the stored hash.
+/// - `401 invalid_token` when the token is unknown, expired, revoked or does
+///   not match the stored hash, and `500 internal_error` when authentication
+///   fails for a server-side reason (the mapping from
+///   [`Authenticator::authenticate`]'s error).
 pub(crate) async fn authenticate(
     State(authenticator): State<Arc<Authenticator>>,
     mut request: Request,
     next: Next,
 ) -> Response {
     let Some(auth_header) = request.headers().get(AUTHORIZATION_HEADER) else {
-        return WebError::new(
-            StatusCode::UNAUTHORIZED,
-            "missing_token",
+        return WebError::from_code(
+            ApiErrorCode::MissingCredentials,
             "Authorization header is missing.",
         )
         .into_response();
@@ -52,9 +52,8 @@ pub(crate) async fn authenticate(
     let token: SecretString = match auth_header.to_str().map(|s| s.strip_prefix(API_KEY_PREFIX)) {
         Ok(Some(s)) => s.into(),
         _ => {
-            return WebError::new(
-                StatusCode::BAD_REQUEST,
-                "invalid_token",
+            return WebError::from_code(
+                ApiErrorCode::InvalidToken,
                 "Authorization header must start with 'Bearer '.",
             )
             .into_response();
@@ -66,7 +65,7 @@ pub(crate) async fn authenticate(
         Ok(user) => user,
         Err(e) => {
             tracing::debug!("authentication failed: {e}");
-            return WebError::new(e.status_code(), "invalid_token", e.to_string()).into_response();
+            return WebError::from(e).into_response();
         }
     };
 
@@ -136,7 +135,7 @@ mod tests {
         let (status, body) = send(router, probe_request(None)).await;
 
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-        assert_eq!(body["error"]["code"], "missing_token");
+        assert_eq!(body["error"]["code"], "missing_credentials");
     }
 
     #[tokio::test]
@@ -145,7 +144,7 @@ mod tests {
         let request = probe_request(Some(HeaderValue::from_static("Basic dXNlcjpwYXNz")));
         let (status, body) = send(router, request).await;
 
-        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
         assert_eq!(body["error"]["code"], "invalid_token");
     }
 
@@ -157,7 +156,7 @@ mod tests {
         let value = HeaderValue::from_bytes(&[0xff]).expect("failed to build header value");
         let (status, body) = send(router, probe_request(Some(value))).await;
 
-        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
         assert_eq!(body["error"]["code"], "invalid_token");
     }
 
