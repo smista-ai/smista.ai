@@ -48,19 +48,13 @@ pub struct Authenticator {
     token_ttl: Duration,
 }
 
-/// Represents a user session, including the session token and its expiration time.
+/// A session token issued at sign-in, together with the moment it expires.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used by POST /auth/sign-in endpoint (#150)")
-)]
-pub struct UserSession {
+pub struct SessionToken {
     /// The expiration time of the session token.
     pub expires_at: DateTime<Utc>,
     /// The session token issued to the user.
     pub token: SecretString,
-    /// The user ID associated with the session.
-    pub user_id: Uuid,
 }
 
 impl Authenticator {
@@ -94,13 +88,9 @@ impl Authenticator {
     ///
     /// A session token is issued, stored in the database and returned to the caller if the API key is valid.
     ///
-    /// Returns a [`UserSession`] containing the issued token, its expiration time, and the user ID.
+    /// Returns a [`SessionToken`] containing the issued token and its expiration time.
     /// Returns an error if the user is not found or if the API key is invalid.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used by POST /auth/sign-in endpoint (#150)")
-    )]
-    pub async fn sign_in(&self, api_key: &SecretString) -> AuthenticationResult<UserSession> {
+    pub async fn sign_in(&self, api_key: &SecretString) -> AuthenticationResult<SessionToken> {
         tracing::debug!("parsing user id from api key");
         let user_id = ApiKeyIssuer::parse_user_id(api_key)?;
         tracing::debug!("loading user from database with id {user_id}");
@@ -139,10 +129,9 @@ impl Authenticator {
             token = token.token_id()
         );
 
-        Ok(UserSession {
+        Ok(SessionToken {
             expires_at,
             token: token_str,
-            user_id,
         })
     }
 
@@ -328,8 +317,6 @@ mod tests {
         let now = Utc::now();
         assert!(user_session.expires_at > now);
         assert!(user_session.expires_at < now + chrono::Duration::seconds(3600));
-        // check user_id
-        assert_eq!(user_session.user_id, bootstrapped.user_id);
 
         // The issued token authenticates the same user that signed in.
         let user_id = authenticator

@@ -143,6 +143,12 @@ verbatim as `Authorization: Bearer <token>`. Its lifetime comes from
 [Router authentication](../technical/authentication.md#session-tokens) for the
 format and hashing details.
 
+A missing `X-Smista-Api-Key` header returns `401` with code
+`missing_credentials`. A malformed, unknown or non-matching key returns `401`
+with code `invalid_api_key`, reported uniformly so it never reveals which users
+exist. The API key is never logged, echoed back, or accepted as a query
+parameter.
+
 ### Sign out
 
 ```http
@@ -851,7 +857,7 @@ alongside for convenience.
 | `invalid_request`                 | 422    | Provider rejected the request body as malformed.                                                                                                       |
 | `invalid_token`                   | 401    | Session token is malformed or unknown.                                                                                                                 |
 | `missing_capability`              | 422    | Selected model lacks a capability the task requires.                                                                                                   |
-| `missing_credentials`             | 401    | No session token was presented to a protected endpoint.                                                                                                |
+| `missing_credentials`             | 401    | No credential was presented: a session token on a protected endpoint, or the `X-Smista-Api-Key` header on `POST /auth/sign-in`.                        |
 | `missing_provider_credentials`    | 503    | The selected model requires provider credentials none were configured.                                                                                 |
 | `model_not_found`                 | 404    | The referenced model is not offered by the provider asked to resolve it.                                                                               |
 | `no_route`                        | 422    | No routing rule matched and no default route is configured.                                                                                            |

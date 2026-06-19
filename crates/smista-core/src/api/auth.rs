@@ -8,15 +8,6 @@
 //! (returned only at user creation) and [`SignInResponse::token`]. They must
 //! never be logged, traced, or persisted unredacted.
 //!
-//! # Examples
-//!
-//! ```
-//! use smista_core::api::SignInRequest;
-//!
-//! let request = SignInRequest { user_id: "user:abc123".to_string() };
-//! let json = serde_json::to_string(&request).unwrap();
-//! assert_eq!(json, r#"{"user_id":"user:abc123"}"#);
-//! ```
 
 use std::fmt;
 
@@ -49,14 +40,6 @@ impl fmt::Debug for BootstrapResponse {
             .field("api_key", &REDACTED)
             .finish()
     }
-}
-
-/// Body of `POST /auth/sign-in`, naming the user to authenticate.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct SignInRequest {
-    /// Identifier of the user signing in.
-    pub user_id: String,
 }
 
 /// Response to `POST /auth/sign-in`, carrying the session token.
@@ -125,18 +108,6 @@ mod tests {
         assert_eq!(
             response.expires_at,
             "2026-05-25T12:00:00Z".parse::<DateTime<Utc>>().unwrap()
-        );
-    }
-
-    #[test]
-    fn should_roundtrip_sign_in_request() {
-        let request = SignInRequest {
-            user_id: "user:abc123".to_string(),
-        };
-        let json = serde_json::to_string(&request).unwrap();
-        assert_eq!(
-            serde_json::from_str::<SignInRequest>(&json).unwrap(),
-            request
         );
     }
 

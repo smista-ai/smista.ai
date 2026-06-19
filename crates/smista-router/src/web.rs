@@ -381,6 +381,17 @@ pub(crate) mod test_support {
             .expect("failed to build request")
     }
 
+    /// Builds an empty `POST` request for `uri` carrying `api_key` in the
+    /// `X-Smista-Api-Key` header, as the sign-in endpoint expects.
+    pub(crate) fn post_with_api_key(uri: &str, api_key: &str) -> Request<Body> {
+        Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("X-Smista-Api-Key", api_key)
+            .body(Body::empty())
+            .expect("failed to build request")
+    }
+
     /// Builds an empty `GET` request for `uri` carrying `token` as a Bearer
     /// credential in the `Authorization` header.
     pub(crate) fn get_with_token(uri: &str, token: &str) -> Request<Body> {

@@ -52,7 +52,7 @@ mod usage;
 
 pub use advance::{ApprovalDecisionEntry, ContinueRequest, ToolResult, UserMessage};
 pub use approval::ApprovalDecision;
-pub use auth::{BootstrapResponse, MeResponse, SignInRequest, SignInResponse, SignOutResponse};
+pub use auth::{BootstrapResponse, MeResponse, SignInResponse, SignOutResponse};
 pub use crypto::{EncryptedPayload, PlainRecord, SealedRecord};
 pub use error::{ApiError, ApiErrorBody, ApiErrorCode, ApiErrorResponse};
 pub use execute::{
