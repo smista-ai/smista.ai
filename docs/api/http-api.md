@@ -107,7 +107,10 @@ new user and returns `201` with that user's ID and a freshly generated,
 long-lived API key:
 
 ```json
-{ "user_id": "user:abc123", "api_key": "sk-smista-api01-<user-id>-<secret>" }
+{
+  "user_id": "018f9c3e-7a2b-7c4d-8e5f-1a2b3c4d5e6f",
+  "api_key": "sk-smista-api01-<user-id>-<secret>"
+}
 ```
 
 The key is `sk-smista-api01-` followed by the user id and a random secret. It
@@ -178,7 +181,7 @@ Authorization: Bearer <session-token>
 Confirms the session token is valid and reports who you are:
 
 ```json
-{ "user_id": "user:abc123" }
+{ "user_id": "018f9c3e-7a2b-7c4d-8e5f-1a2b3c4d5e6f" }
 ```
 
 To list a user's sessions, use `GET /api/v1/sessions`.

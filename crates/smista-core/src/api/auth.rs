@@ -14,8 +14,6 @@ use std::fmt;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::session::SessionSummary;
-
 /// Placeholder rendered in place of a secret field by `Debug`.
 const REDACTED: &str = "<redacted>";
 
@@ -73,12 +71,15 @@ pub struct SignOutResponse {
     pub revoked: bool,
 }
 
-/// Response to `GET /auth/me`, listing the authenticated user's sessions.
+/// Response to `GET /auth/me`, identifying the authenticated user.
+///
+/// Carries only the caller's user ID; it lists no sessions and exposes no
+/// secret values. To enumerate sessions, use `GET /sessions` instead.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct MeResponse {
-    /// Summaries of the user's sessions.
-    pub sessions: Vec<SessionSummary>,
+    /// The authenticated user's unique identifier.
+    pub user_id: String,
 }
 
 #[cfg(test)]
@@ -143,13 +144,13 @@ mod tests {
     }
 
     #[test]
-    fn should_serialize_empty_me_response() {
+    fn should_serialize_me_response_to_spec_shape() {
         assert_eq!(
             serde_json::to_value(MeResponse {
-                sessions: Vec::new()
+                user_id: "018f9c3e-7a2b-7c4d-8e5f-1a2b3c4d5e6f".to_string(),
             })
             .unwrap(),
-            serde_json::json!({ "sessions": [] })
+            serde_json::json!({ "user_id": "018f9c3e-7a2b-7c4d-8e5f-1a2b3c4d5e6f" })
         );
     }
 }
