@@ -30,6 +30,7 @@ use std::time::Duration;
 
 use axum::Router;
 use axum::routing::{get, post};
+use secrecy::SecretString;
 use smista_storage::database::surreal::SurrealDatabase;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
@@ -37,10 +38,28 @@ use tokio_util::sync::CancellationToken;
 use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::key_extractor::SmartIpKeyExtractor;
+use uuid::Uuid;
 
 use crate::auth::Authenticator;
 use crate::config::RouterConfig;
 use crate::router::Router as SmistaRouter;
+
+/// Authenticated user identity extracted from a request by the
+/// [`middleware::authenticate`] middleware.
+///
+/// Put inside request Extensions so handlers can access it without re-authenticating.
+#[derive(Debug, Clone)]
+pub struct AuthenticatedUser {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "later request handlers will read the user id from the request extensions"
+        )
+    )]
+    pub user_id: Uuid,
+    pub token: SecretString,
+}
 
 /// Shared state threaded into every request handler.
 ///
@@ -397,6 +416,17 @@ pub(crate) mod test_support {
     pub(crate) fn get_with_token(uri: &str, token: &str) -> Request<Body> {
         Request::builder()
             .method(Method::GET)
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .expect("failed to build request")
+    }
+
+    /// Builds an empty `POST` request for `uri` carrying `token` as a Bearer
+    /// credential in the `Authorization` header.
+    pub(crate) fn post_with_token(uri: &str, token: &str) -> Request<Body> {
+        Request::builder()
+            .method(Method::POST)
             .uri(uri)
             .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())

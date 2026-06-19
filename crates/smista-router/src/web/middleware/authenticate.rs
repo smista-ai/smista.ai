@@ -9,6 +9,7 @@ use secrecy::SecretString;
 use smista_core::api::ApiErrorCode;
 
 use crate::auth::Authenticator;
+use crate::web::AuthenticatedUser;
 use crate::web::error::WebError;
 
 /// The request header carrying the credential.
@@ -21,7 +22,7 @@ const API_KEY_PREFIX: &str = "Bearer ";
 /// malformed or invalid.
 ///
 /// On success the resolved user id is inserted into the request extensions
-/// (readable downstream as an `Extension<Uuid>`) and the request is forwarded to
+/// (readable downstream as an `Extension<AuthenticatedUser>`) and the request is forwarded to
 /// `next`. This guards only the protected routes, so it is attached with
 /// `route_layer` rather than wrapping the whole application.
 ///
@@ -31,10 +32,12 @@ const API_KEY_PREFIX: &str = "Bearer ";
 /// - `401 missing_credentials` when the `Authorization` header is absent.
 /// - `401 invalid_token` when the header is not valid text or does not start
 ///   with the `Bearer ` scheme.
-/// - `401 invalid_token` when the token is unknown, expired, revoked or does
-///   not match the stored hash, and `500 internal_error` when authentication
-///   fails for a server-side reason (the mapping from
-///   [`Authenticator::authenticate`]'s error).
+/// - `401 invalid_token` when the token is malformed, unknown or does not match
+///   the stored hash; `401 token_expired` when it is past its expiry and
+///   `401 token_revoked` when it has been signed out; and `500 internal_error`
+///   when authentication fails for a server-side reason (the mapping from
+///   [`Authenticator::authenticate`]'s error). The expired and revoked codes are
+///   disclosed only to a caller presenting the genuine secret.
 pub(crate) async fn authenticate(
     State(authenticator): State<Arc<Authenticator>>,
     mut request: Request,
@@ -70,7 +73,9 @@ pub(crate) async fn authenticate(
     };
 
     tracing::debug!("authenticated user {user_id}");
-    request.extensions_mut().insert(user_id);
+    request
+        .extensions_mut()
+        .insert(AuthenticatedUser { user_id, token });
     next.run(request).await
 }
 
@@ -86,12 +91,13 @@ mod tests {
     use super::authenticate;
     use crate::auth::Authenticator;
     use crate::config::RouterConfig;
+    use crate::web::AuthenticatedUser;
     use crate::web::test_support::{send, test_database};
 
     /// Probe handler that echoes the user id the middleware stored in the
     /// request extensions, so a test can assert the identity is propagated.
-    async fn probe(Extension(user_id): Extension<Uuid>) -> Json<Uuid> {
-        Json(user_id)
+    async fn probe(Extension(user): Extension<AuthenticatedUser>) -> Json<Uuid> {
+        Json(user.user_id)
     }
 
     /// Builds a single-route router guarded by [`authenticate`], returning it
