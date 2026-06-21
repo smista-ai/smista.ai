@@ -54,9 +54,10 @@ use crate::skill::Skill;
 use crate::usage::Usage;
 
 /// Full input to executing, streaming, or previewing a task.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ExecuteRequest {
     /// What the user is asking for.
     pub input: TaskInput,
@@ -74,49 +75,51 @@ pub struct ExecuteRequest {
     /// as the user message; the plaintext in `input.text` is what calls the
     /// model. Absent for a plaintext session.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub input_ciphertext: Option<EncryptedPayload>,
 }
 
 /// The user's request: prompt text, optional command and explicit model.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct TaskInput {
     /// The prompt text.
     pub text: String,
     /// Explicit task command, overriding intent detection when set.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub command: Option<TaskIntent>,
     /// Explicit model to use, bypassing routing when set.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub explicit_model: Option<ModelReference>,
 }
 
 /// Snapshot of the workspace a task runs against.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct Workspace {
     /// Absolute path to the workspace root.
     #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub root: PathBuf,
     /// Current git branch, if the workspace is a git repository.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub git_branch: Option<String>,
     /// Current git diff, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub git_diff: Option<String>,
     /// Paths the user explicitly referenced.
     #[cfg_attr(feature = "openapi", schema(value_type = Vec<String>))]
     pub referenced_paths: Vec<PathBuf>,
     /// The file the user is actively editing, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     #[cfg_attr(feature = "openapi", schema(value_type = Option<String>, nullable = true))]
     pub active_file: Option<PathBuf>,
 }
@@ -127,9 +130,10 @@ pub struct Workspace {
 /// assembled (for example `merged`). The `classification`, `routing`, `tools`
 /// and `privacy` blocks are the canonical [`crate::policy`] types — the same
 /// vocabulary the router evaluates and the CLI loads from `config.toml`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ExecutePolicy {
     /// Schema version of the policy snapshot.
     pub version: u32,
@@ -146,9 +150,10 @@ pub struct ExecutePolicy {
 }
 
 /// Client-side execution preferences.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct LocalPreferences {
     /// Apply edits automatically without confirmation.
     pub auto_apply: bool,
@@ -161,9 +166,10 @@ pub struct LocalPreferences {
 }
 
 /// A provider available to the request and the credential status of its models.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ProviderCredentialInfo {
     /// Provider identifier.
     pub id: Provider,
@@ -172,9 +178,10 @@ pub struct ProviderCredentialInfo {
 }
 
 /// A model offered by a provider and whether its credential is available.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ProviderModelInfo {
     /// Model name.
     pub model: String,
@@ -189,9 +196,10 @@ pub struct ProviderModelInfo {
 /// Every file, instruction and skill the task may need from disk travels here.
 /// History, memory and the assembled context are not part of this — the router
 /// owns them.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct Attachments {
     /// Explicit `@path` files included with their content.
     pub files: Vec<ContextFile>,
@@ -202,9 +210,10 @@ pub struct Attachments {
 }
 
 /// A file the client attached, with a content hash and whether it is required.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ContextFile {
     /// Path of the file.
     #[cfg_attr(feature = "openapi", schema(value_type = String))]
@@ -219,9 +228,10 @@ pub struct ContextFile {
 }
 
 /// An instruction document the client attached as context.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ContextInstruction {
     /// Where the instruction came from, for example `SMISTA.md`.
     pub source: String,
@@ -235,10 +245,11 @@ pub struct ContextInstruction {
 /// the assistant message and routing explanation; every other variant is a
 /// continuation the client must act on before resuming the run with
 /// `/continue`, or a terminal [`Error`](Self::Error).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "status", rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum TurnResponse {
     /// The model finished; an assistant message is included.
     ///
@@ -280,9 +291,10 @@ pub enum TurnResponse {
 }
 
 /// The payload of a [`completed`](TurnResponse::Completed) turn.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct CompletedTurn {
     /// The assistant's reply.
     pub message: Message,
@@ -299,9 +311,10 @@ pub struct CompletedTurn {
 }
 
 /// A tool the client must execute on the user's machine.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ToolRequest {
     /// Identifier correlating this call with its later result.
     pub call_id: String,
@@ -318,10 +331,11 @@ pub struct ToolRequest {
 ///
 /// A tool denied by policy never reaches the client, so `deny` is not a value
 /// here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum ToolApproval {
     /// Run the tool without confirmation.
     Allow,
@@ -334,9 +348,10 @@ pub enum ToolApproval {
 /// Raised for disclosures and limits — for example sending context to a remote
 /// model under an `ask` privacy mode, or confirming a cost ceiling. The
 /// `detail` shape depends on `kind`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct PendingApproval {
     /// Identifier the approval decision refers to.
     pub approval_id: String,
@@ -348,10 +363,11 @@ pub struct PendingApproval {
 }
 
 /// The kind of a [`PendingApproval`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum ApprovalKind {
     /// Disclosing context to a remote provider.
     RemoteDisclosure,
@@ -360,9 +376,10 @@ pub enum ApprovalKind {
 }
 
 /// How a task was routed to a model.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct RoutingOutcome {
     /// Detected task type that drove routing.
     pub task_type: TaskIntent,
@@ -372,7 +389,7 @@ pub struct RoutingOutcome {
     pub model: String,
     /// Description of the routing rule that matched, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub matched_rule: Option<String>,
     /// Whether a fallback model was used.
     pub fallback_used: bool,
@@ -381,9 +398,10 @@ pub struct RoutingOutcome {
 }
 
 /// What context the router included and excluded for a task.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ContextOutcome {
     /// Human-readable descriptions of included context.
     pub included: Vec<String>,

@@ -42,9 +42,10 @@ use crate::error::{CoreError, ParseError};
 /// routed to independently.
 ///
 /// The type is intentionally not `Copy`: the named variant owns a `String`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
-#[ts(type = "string")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[cfg_attr(feature = "ts", ts(type = "string"))]
 pub enum Provider {
     /// Anthropic, serving the Claude family of models.
     Anthropic,
@@ -231,9 +232,10 @@ impl utoipa::ToSchema for Provider {
 /// credentials (or a base URL, for local providers). A provider that is not
 /// available is omitted from the listing entirely, so this descriptor carries
 /// no availability flag.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ProviderDescriptor {
     /// The provider this descriptor refers to.
     pub id: Provider,

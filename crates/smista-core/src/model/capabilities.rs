@@ -34,9 +34,10 @@ use serde::{Deserialize, Serialize};
 ///
 /// Every flag defaults to `false`, so a [`Default`] value advertises no
 /// capabilities — a conservative starting point a descriptor builds upon.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ModelCapabilities {
     /// The model can stream its response incrementally.
     #[serde(default)]
@@ -122,10 +123,11 @@ impl From<Vec<Capability>> for ModelCapabilities {
 /// A single model capability, used to report which one a task requires.
 ///
 /// Each variant serializes to its lowercase snake_case name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum Capability {
     /// Incremental streaming of the response.
     Streaming,

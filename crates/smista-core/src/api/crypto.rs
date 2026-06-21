@@ -38,9 +38,10 @@ use serde::{Deserialize, Serialize};
 /// tag) — and never carries the key itself. It mirrors the envelope storage
 /// persists but is a distinct serialization-first type; the router converts
 /// between the two when it persists or returns content.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct EncryptedPayload {
     /// Envelope schema version, so the format can evolve.
     pub version: u8,
@@ -59,9 +60,10 @@ pub struct EncryptedPayload {
 /// The router sends these in an `awaiting_decrypt` turn (history to open); the
 /// client returns them in the `/continue` bundle after sealing the content of
 /// an `awaiting_encrypt` turn. Correlated by `record_id`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct SealedRecord {
     /// Identifier of the storage record the envelope belongs to.
     pub record_id: String,
@@ -74,9 +76,10 @@ pub struct SealedRecord {
 /// The router sends these in an `awaiting_encrypt` turn (content to seal); the
 /// client returns them in the `/continue` bundle after opening the records of
 /// an `awaiting_decrypt` turn. Correlated by `record_id`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct PlainRecord {
     /// Identifier of the storage record the cleartext belongs to.
     pub record_id: String,

@@ -25,9 +25,10 @@ use super::{ApprovalDecision, PlainRecord, SealedRecord};
 ///
 /// Every field defaults to empty, so a bare `{}` is a valid no-op and a bare
 /// `{ "interrupt": true }` aborts the in-flight turn with no other input.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ContinueRequest {
     /// Results of tools the client ran, answering an `awaiting_tool` turn.
     #[serde(default)]
@@ -54,9 +55,10 @@ pub struct ContinueRequest {
 ///
 /// For an `ask`-mode tool the user's decision rides [`Self::decision`], so the
 /// approval and the result arrive together.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ToolResult {
     /// Identifier matching the originating tool request.
     pub call_id: String,
@@ -67,14 +69,15 @@ pub struct ToolResult {
     pub is_error: bool,
     /// The user's decision for an `ask`-mode tool, if one was required.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub decision: Option<ApprovalDecision>,
 }
 
 /// A decision for a [`PendingApproval`](super::PendingApproval) with no tool.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ApprovalDecisionEntry {
     /// Identifier of the approval the decision applies to.
     pub approval_id: String,
@@ -82,14 +85,15 @@ pub struct ApprovalDecisionEntry {
     pub decision: ApprovalDecision,
     /// Optional human-readable reason for the decision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub reason: Option<String>,
 }
 
 /// A message the user typed while the run was working.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct UserMessage {
     /// The message text.
     pub text: String,

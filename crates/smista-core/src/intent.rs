@@ -35,13 +35,14 @@ use crate::error::{CoreError, ParseError};
 ///
 /// Used by smista-router to match a prompt against the user's routing policy.
 /// Each variant serializes to its lowercase name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
 #[cfg_attr(feature = "surrealdb", surreal(crate = "::surrealdb_types"))]
 #[cfg_attr(feature = "surrealdb", surreal(rename_all = "lowercase", untagged))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum TaskIntent {
     /// Free-form conversation with no specialized objective.
     Chat,

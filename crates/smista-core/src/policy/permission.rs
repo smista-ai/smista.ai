@@ -18,12 +18,11 @@ use serde::{Deserialize, Serialize};
 /// assert!(PermissionMode::Deny > PermissionMode::Ask);
 /// assert_eq!(PermissionMode::Ask.max(PermissionMode::Allow), PermissionMode::Ask);
 /// ```
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, ts_rs::TS,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum PermissionMode {
     /// The action runs without confirmation.
     Allow,

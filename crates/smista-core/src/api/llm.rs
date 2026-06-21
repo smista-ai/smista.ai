@@ -50,18 +50,20 @@ use crate::error::ProviderErrorCategory;
 use crate::model::{ModelDescriptor, Provider, ProviderDescriptor};
 
 /// Response to `GET /llm/providers`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ListProvidersResponse {
     /// Available providers.
     pub providers: Vec<ProviderDescriptor>,
 }
 
 /// Response to `GET /llm/models`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ListModelsResponse {
     /// Available models across providers.
     pub models: Vec<ModelDescriptor>,
@@ -79,9 +81,10 @@ pub struct ListModelsResponse {
 
 /// A provider left out of [`ListModelsResponse::models`] because its models
 /// could not be listed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct UnavailableProvider {
     /// The provider whose models could not be listed.
     pub provider: Provider,
