@@ -1,0 +1,3521 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "smista-router HTTP API",
+    "description": "Local-first deterministic model-routing API. See docs/api/http-api.md.",
+    "contact": {
+      "name": "Christian Visintin",
+      "email": "christian.visintin@veeso.dev"
+    },
+    "license": {
+      "name": "Elastic-2.0"
+    },
+    "version": "0.0.0"
+  },
+  "paths": {
+    "/api/v1/auth/bootstrap": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Handles `POST /api/v1/auth/bootstrap`.",
+        "operationId": "bootstrap",
+        "responses": {
+          "201": {
+            "description": "User created and API key issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Handles `GET /api/v1/auth/me`.",
+        "operationId": "getCurrentUser",
+        "responses": {
+          "200": {
+            "description": "The authenticated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/sign-in": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Handles `POST /api/v1/auth/sign-in`.",
+        "operationId": "signIn",
+        "responses": {
+          "200": {
+            "description": "Session token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/sign-out": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Handles `POST /api/v1/auth/sign-out`.",
+        "operationId": "signOut",
+        "responses": {
+          "200": {
+            "description": "Session revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignOutResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/llm/models": {
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "Handles `GET /api/v1/llm/models`.",
+        "description": "The credential-extraction middleware installs the [`RequestCredentials`]\nextension only when the caller sent at least one provider key, so the\nextractor is optional: its absence simply means no credentials, which still\nlists keyless local providers.",
+        "operationId": "listModels",
+        "parameters": [
+          {
+            "name": "X-Smista-Timeout-Ms",
+            "in": "header",
+            "description": "Per-request timeout, default 10000, max 60000",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Available models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListModelsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/llm/providers": {
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "Handles `GET /api/v1/llm/providers`.",
+        "description": "Reads the live provider registry off the router and returns one descriptor\nper available provider. The order is unspecified, as the registry is keyed\nby provider id.",
+        "operationId": "listProviders",
+        "responses": {
+          "200": {
+            "description": "Available providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListProvidersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Handles `GET /api/v1/sessions`.",
+        "operationId": "listSessions",
+        "responses": {
+          "200": {
+            "description": "List of sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Handles `POST /api/v1/sessions`.",
+        "operationId": "createSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Handles `GET /api/v1/sessions/{session_id}`.",
+        "operationId": "getSession",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Handles `PUT /api/v1/sessions/{session_id}`.",
+        "operationId": "updateSession",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated session summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Handles `DELETE /api/v1/sessions/{session_id}`.",
+        "operationId": "deleteSession",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session deleted"
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/continue": {
+      "post": {
+        "tags": [
+          "execution"
+        ],
+        "summary": "Handles `POST /api/v1/sessions/{session_id}/continue`.",
+        "operationId": "continueTurn",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContinueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Turn completed or awaiting input. Buffered as a single `TurnResponse` (`application/json`) or, when the client sends `Accept: text/event-stream`, streamed as Server-Sent Events of `TurnEvent` whose terminal `turn_end` carries the `TurnResponse`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnResponse"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnEvent"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Routing rejected the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Provider credentials missing or fallbacks exhausted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Provider timed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/execute": {
+      "post": {
+        "tags": [
+          "execution"
+        ],
+        "summary": "Handles `POST /api/v1/sessions/{session_id}/execute`.",
+        "operationId": "executeTurn",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Turn completed or awaiting input. Buffered as a single `TurnResponse` (`application/json`) or, when the client sends `Accept: text/event-stream`, streamed as Server-Sent Events of `TurnEvent` whose terminal `turn_end` carries the `TurnResponse`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnResponse"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnEvent"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Routing rejected the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Provider credentials missing or fallbacks exhausted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Provider timed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/preview": {
+      "post": {
+        "tags": [
+          "execution"
+        ],
+        "summary": "Handles `POST /api/v1/sessions/{session_id}/preview`.",
+        "operationId": "previewTurn",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Routing preview without model invocation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Routing rejected the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Provider credentials missing or fallbacks exhausted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Provider timed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/stream": {
+      "post": {
+        "tags": [
+          "execution"
+        ],
+        "summary": "Handles `POST /api/v1/sessions/{session_id}/stream`.",
+        "operationId": "streamTurn",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Server-Sent Events stream. Each `data:` line is one TurnEvent (internally tagged by `type`, snake_case). Exactly one terminal `turn_end` event carries the TurnResponse payload.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnEvent"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Routing rejected the request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/traces/latest": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "Handles `GET /api/v1/sessions/{session_id}/traces/latest`.",
+        "operationId": "getLatestTrace",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest routing trace for the session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session or trace not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/traces/{trace_id}": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "Handles `GET /api/v1/sessions/{session_id}/traces/{trace_id}`.",
+        "operationId": "getTrace",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trace_id",
+            "in": "path",
+            "description": "Trace id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Routing trace for the given id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session or trace not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/sessions/{session_id}/usage": {
+      "get": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "Handles `GET /api/v1/sessions/{session_id}/usage`.",
+        "operationId": "getSessionUsage",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session usage totals and breakdowns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionUsageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/status": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Handles `GET /status`.",
+        "operationId": "getStatus",
+        "responses": {
+          "200": {
+            "description": "Router is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "description": "Envelope wrapping the error body under an `error` key.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ApiErrorBody",
+            "description": "The structured error payload."
+          }
+        }
+      },
+      "ApiErrorBody": {
+        "type": "object",
+        "description": "The structured payload of an [`ApiError`].\n\n`details` carries machine-readable context (such as the offending provider\nand model) and is omitted when there is none. It must never contain secrets.",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable error code, for example `missing_provider_credentials`."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable, actionable description of what went wrong."
+          },
+          "details": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Optional structured context; never carries secrets."
+          }
+        }
+      },
+      "ApprovalDecision": {
+        "type": "string",
+        "description": "The decision made on a pending approval.\n\nEach variant serializes to its lowercase name.",
+        "enum": [
+          "approved",
+          "rejected"
+        ]
+      },
+      "ApprovalDecisionEntry": {
+        "type": "object",
+        "description": "A decision for a [`PendingApproval`](super::PendingApproval) with no tool.",
+        "required": [
+          "approval_id",
+          "decision"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "description": "Identifier of the approval the decision applies to."
+          },
+          "decision": {
+            "$ref": "#/components/schemas/ApprovalDecision",
+            "description": "The decision being submitted."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional human-readable reason for the decision."
+          }
+        }
+      },
+      "ApprovalKind": {
+        "type": "string",
+        "description": "The kind of a [`PendingApproval`].",
+        "enum": [
+          "remote_disclosure",
+          "cost_limit"
+        ]
+      },
+      "Attachments": {
+        "type": "object",
+        "description": "Local content the client supplies because the router has no filesystem.\n\nEvery file, instruction and skill the task may need from disk travels here.\nHistory, memory and the assembled context are not part of this — the router\nowns them.",
+        "required": [
+          "files",
+          "instructions",
+          "skills"
+        ],
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContextFile"
+            },
+            "description": "Explicit `@path` files included with their content."
+          },
+          "instructions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContextInstruction"
+            },
+            "description": "Instruction documents the client read from disk."
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Skill"
+            },
+            "description": "Invoked skills, as name plus the `SKILL.md` body."
+          }
+        }
+      },
+      "BootstrapResponse": {
+        "type": "object",
+        "description": "Response to `POST /auth/bootstrap`, returned once at user creation.\n\n`api_key` is a secret shown only here; the caller must store it securely.\n`Debug` is implemented by hand to redact `api_key`, so the credential is\nnever leaked through `{:?}` formatting, logs, or traces.",
+        "required": [
+          "user_id",
+          "api_key"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "description": "Identifier of the created user, for example `user:abc123`."
+          },
+          "api_key": {
+            "type": "string",
+            "description": "Long-lived smista API key. Secret; shown only in this response."
+          }
+        }
+      },
+      "Classification": {
+        "type": "object",
+        "description": "The outcome of intent classification for one request.\n\nEither the user supplied an explicit intent (see [`IntentSource::Explicit`])\nor one was inferred deterministically from a matching\n[`ClassificationRule`] (see [`IntentSource::Inferred`]). For an inferred\nintent, [`matched_rule`](Self::matched_rule) carries the index of the\nmatching entry in [`ClassificationConfig::rules`] so traces can point back\nto the configured rule.",
+        "required": [
+          "intent",
+          "source",
+          "reason"
+        ],
+        "properties": {
+          "intent": {
+            "$ref": "#/components/schemas/TaskIntent",
+            "description": "The detected task intent."
+          },
+          "source": {
+            "$ref": "#/components/schemas/IntentSource",
+            "description": "Whether the intent was given explicitly by the user or inferred."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Human-readable explanation of why this intent was chosen."
+          },
+          "matched_rule": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Index of the matched rule in [`ClassificationConfig::rules`], if any.\n\nRefers to a [`ClassificationRule`].",
+            "minimum": 0
+          },
+          "confidence": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Confidence",
+                "description": "Optional deterministic confidence category for an inferred intent."
+              }
+            ]
+          }
+        }
+      },
+      "ClassificationConfig": {
+        "type": "object",
+        "description": "Configuration for intent classification.\n\nHolds the ordered set of [`rules`](Self::rules) used to infer a\n[`TaskIntent`] from a prompt and its available context kinds, plus the\n[`default_intent`](Self::default_intent) returned when no rule matches.\n\n# Examples\n\n```\nuse smista_core::intent::TaskIntent;\nuse smista_core::policy::ClassificationConfig;\n\nlet config = ClassificationConfig::default();\nassert_eq!(config.default_intent, TaskIntent::Chat);\nassert!(config.rules.is_empty());\n```",
+        "properties": {
+          "default_intent": {
+            "$ref": "#/components/schemas/TaskIntent",
+            "description": "Intent used when no rule matches."
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClassificationRule"
+            },
+            "description": "Ordered intent-classification rules."
+          }
+        }
+      },
+      "ClassificationRule": {
+        "type": "object",
+        "description": "A single intent-classification rule.\n\nA rule maps observable signals in the request to a [`TaskIntent`]. All\npresent conditions must hold for the rule to match:\n\n- [`keywords`](Self::keywords) — at least one keyword appears in the prompt.\n- [`requires_any_context`](Self::requires_any_context) — at least one of the\n  named context kinds (for example `git_diff` or `pull_request`) is\n  available for the task.\n\nAbsent conditions are ignored; a rule with no conditions matches every\nrequest.\n\n# Examples\n\n```\nuse smista_core::intent::TaskIntent;\nuse smista_core::policy::ClassificationRule;\n\nlet rule: ClassificationRule = serde_json::from_value(serde_json::json!({\n    \"intent\": \"review\",\n    \"priority\": 10,\n    \"keywords\": [\"review\", \"audit\", \"check\"],\n    \"requires_any_context\": [\"git_diff\", \"pull_request\"],\n}))\n.unwrap();\nassert_eq!(rule.intent, TaskIntent::Review);\nassert_eq!(rule.priority, 10);\n```",
+        "required": [
+          "intent"
+        ],
+        "properties": {
+          "intent": {
+            "$ref": "#/components/schemas/TaskIntent",
+            "description": "Intent assigned when the rule matches."
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Evaluation priority; rules are evaluated in ascending order (lower\nfirst). Defaults to `1000` when unset.",
+            "minimum": 0
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Keywords; the rule matches when any appears in the prompt."
+          },
+          "requires_any_context": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Required context kinds; the rule matches when any is available."
+          }
+        }
+      },
+      "CompletedTurn": {
+        "type": "object",
+        "description": "The payload of a [`completed`](TurnResponse::Completed) turn.",
+        "required": [
+          "message",
+          "classification",
+          "routing",
+          "context",
+          "usage",
+          "trace_id"
+        ],
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/Message",
+            "description": "The assistant's reply."
+          },
+          "classification": {
+            "$ref": "#/components/schemas/Classification",
+            "description": "How the task was classified."
+          },
+          "routing": {
+            "$ref": "#/components/schemas/RoutingOutcome",
+            "description": "How the task was routed."
+          },
+          "context": {
+            "$ref": "#/components/schemas/ContextOutcome",
+            "description": "What context was included and excluded."
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage",
+            "description": "Token usage and cost for the turn."
+          },
+          "trace_id": {
+            "type": "string",
+            "description": "Identifier of the recorded trace."
+          }
+        }
+      },
+      "Confidence": {
+        "type": "string",
+        "description": "Deterministic confidence category for an inferred intent.\n\nThis is a coarse signal-strength label, not a probability.",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "ContextFile": {
+        "type": "object",
+        "description": "A file the client attached, with a content hash and whether it is required.",
+        "required": [
+          "path",
+          "content",
+          "content_hash",
+          "required"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path of the file."
+          },
+          "content": {
+            "type": "string",
+            "description": "File content."
+          },
+          "content_hash": {
+            "type": "string",
+            "description": "Hash of the content, for example `sha256:...`."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether the file is required (referenced or route-driving) and so cannot\nbe dropped, as opposed to discardable supplementary context."
+          }
+        }
+      },
+      "ContextInstruction": {
+        "type": "object",
+        "description": "An instruction document the client attached as context.",
+        "required": [
+          "source",
+          "content"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Where the instruction came from, for example `SMISTA.md`."
+          },
+          "content": {
+            "type": "string",
+            "description": "The instruction content."
+          }
+        }
+      },
+      "ContextOutcome": {
+        "type": "object",
+        "description": "What context the router included and excluded for a task.",
+        "required": [
+          "included",
+          "excluded"
+        ],
+        "properties": {
+          "included": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Human-readable descriptions of included context."
+          },
+          "excluded": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Human-readable descriptions of excluded context."
+          }
+        }
+      },
+      "ContinueRequest": {
+        "type": "object",
+        "description": "Bundle that advances an in-flight run after a continuation.\n\nEvery field defaults to empty, so a bare `{}` is a valid no-op and a bare\n`{ \"interrupt\": true }` aborts the in-flight turn with no other input.",
+        "properties": {
+          "tool_results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolResult"
+            },
+            "description": "Results of tools the client ran, answering an `awaiting_tool` turn."
+          },
+          "approval_decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalDecisionEntry"
+            },
+            "description": "Decisions for approvals with no tool to run, answering an\n`awaiting_approval` turn."
+          },
+          "decrypted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlainRecord"
+            },
+            "description": "Records the client decrypted, answering an `awaiting_decrypt` turn."
+          },
+          "encrypted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SealedRecord"
+            },
+            "description": "Records the client encrypted, answering an `awaiting_encrypt` turn."
+          },
+          "user_messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserMessage"
+            },
+            "description": "User input typed while the run was working, delivered at this boundary."
+          },
+          "interrupt": {
+            "type": "boolean",
+            "description": "Whether to abort the in-flight turn (the Esc path)."
+          }
+        }
+      },
+      "CostRange": {
+        "type": "object",
+        "description": "An estimated cost range in a given currency.\n\n`min` and `max` serialize as decimal strings to preserve monetary precision.",
+        "required": [
+          "min",
+          "max",
+          "currency"
+        ],
+        "properties": {
+          "min": {
+            "type": "string",
+            "description": "Lower bound of the estimate, as a decimal string.",
+            "example": "0.0021"
+          },
+          "max": {
+            "type": "string",
+            "description": "Upper bound of the estimate, as a decimal string.",
+            "example": "0.0021"
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code for the bounds."
+          }
+        }
+      },
+      "CreateSessionRequest": {
+        "type": "object",
+        "description": "Body of `POST /sessions`. The title is mandatory.\n\n`encrypted` opts the session into end-to-end encryption and defaults to\n`false` when omitted. When it is `true`, `key_id` is required and names the\nfingerprint of the per-session key the client holds; when it is `false`,\n`key_id` must be absent. The pairing is validated by the router, not by this\ntype. The choice is fixed for the life of the session.",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Title for the new session."
+          },
+          "encrypted": {
+            "type": "boolean",
+            "description": "Whether the new session is end-to-end encrypted."
+          },
+          "key_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Fingerprint of the per-session key, required when `encrypted` is `true`."
+          }
+        }
+      },
+      "CreateSessionResponse": {
+        "type": "object",
+        "description": "Response to `POST /sessions`, wrapping the created session.",
+        "required": [
+          "session"
+        ],
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/SessionSummary",
+            "description": "The created session."
+          }
+        }
+      },
+      "DefaultRoute": {
+        "type": "object",
+        "description": "The default route, applied when no routing rule matches.\n\nMirrors the `[routing.default]` table.\n\n# Examples\n\n```\nuse smista_core::policy::DefaultRoute;\n\nlet route: DefaultRoute = serde_json::from_value(serde_json::json!({\n    \"model\": \"openai/gpt-5.5-mini\",\n    \"fallbacks\": [\"ollama/qwen2.5-coder\"],\n}))\n.unwrap();\nassert_eq!(route.model.to_string(), \"openai/gpt-5.5-mini\");\n```",
+        "required": [
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/ModelReference",
+            "description": "Model used when no rule matches."
+          },
+          "fallbacks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelReference"
+            },
+            "description": "Models tried, in order, when the default model is unavailable."
+          }
+        }
+      },
+      "Effort": {
+        "type": "string",
+        "description": "The reasoning effort a model should spend on a routed task.\n\nDeclared per routing rule and passed through to the model as its effort\nsetting. Each variant serializes to its lowercase name. The default is\n[`Effort::Medium`].",
+        "enum": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "EncryptedPayload": {
+        "type": "object",
+        "description": "The sealed wire form of one content payload: an AEAD ciphertext envelope.\n\nSelf-describing — it names the algorithm and the key that sealed it, and\ncarries the one-time nonce and the ciphertext (including its authentication\ntag) — and never carries the key itself. It mirrors the envelope storage\npersists but is a distinct serialization-first type; the router converts\nbetween the two when it persists or returns content.",
+        "required": [
+          "version",
+          "algorithm",
+          "key_id",
+          "nonce",
+          "ciphertext"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Envelope schema version, so the format can evolve.",
+            "minimum": 0
+          },
+          "algorithm": {
+            "type": "string",
+            "description": "AEAD algorithm identifier, for example `xchacha20poly1305`."
+          },
+          "key_id": {
+            "type": "string",
+            "description": "Fingerprint of the per-session key that sealed this payload."
+          },
+          "nonce": {
+            "type": "string",
+            "description": "Base64-encoded one-time nonce used for this payload."
+          },
+          "ciphertext": {
+            "type": "string",
+            "description": "Base64-encoded ciphertext, including the AEAD authentication tag."
+          }
+        }
+      },
+      "ExecutePolicy": {
+        "type": "object",
+        "description": "The deterministic policy snapshot the client sends with a task.\n\n`version` is the schema version of the snapshot; `source` records how it was\nassembled (for example `merged`). The `classification`, `routing`, `tools`\nand `privacy` blocks are the canonical [`crate::policy`] types — the same\nvocabulary the router evaluates and the CLI loads from `config.toml`.",
+        "required": [
+          "version",
+          "source",
+          "classification",
+          "routing",
+          "tools",
+          "privacy"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Schema version of the policy snapshot.",
+            "minimum": 0
+          },
+          "source": {
+            "type": "string",
+            "description": "How the snapshot was assembled, for example `merged`."
+          },
+          "classification": {
+            "$ref": "#/components/schemas/ClassificationConfig",
+            "description": "Intent-classification rules and the default intent."
+          },
+          "routing": {
+            "$ref": "#/components/schemas/RoutingPolicy",
+            "description": "Routing rules and default route."
+          },
+          "tools": {
+            "$ref": "#/components/schemas/ToolsConfig",
+            "description": "Tool permission modes, keyed by tool name."
+          },
+          "privacy": {
+            "$ref": "#/components/schemas/PrivacyPolicy",
+            "description": "Privacy constraints on the context sent to models."
+          }
+        }
+      },
+      "ExecuteRequest": {
+        "type": "object",
+        "description": "Full input to executing, streaming, or previewing a task.",
+        "required": [
+          "input",
+          "workspace",
+          "policy",
+          "local_preferences",
+          "providers",
+          "attachments"
+        ],
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/TaskInput",
+            "description": "What the user is asking for."
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/Workspace",
+            "description": "Snapshot of the workspace the task runs against."
+          },
+          "policy": {
+            "$ref": "#/components/schemas/ExecutePolicy",
+            "description": "Classification, routing, permission and privacy policy snapshot."
+          },
+          "local_preferences": {
+            "$ref": "#/components/schemas/LocalPreferences",
+            "description": "Client-side execution preferences."
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderCredentialInfo"
+            },
+            "description": "Providers available for this request and their credential status."
+          },
+          "attachments": {
+            "$ref": "#/components/schemas/Attachments",
+            "description": "Local content the router cannot read for itself."
+          },
+          "input_ciphertext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EncryptedPayload",
+                "description": "For an encrypted session, the sealed form of the user prompt, persisted\nas the user message; the plaintext in `input.text` is what calls the\nmodel. Absent for a plaintext session."
+              }
+            ]
+          }
+        }
+      },
+      "GetSessionResponse": {
+        "type": "object",
+        "description": "Response to `GET /sessions/{id}`, wrapping the full session.",
+        "required": [
+          "session"
+        ],
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/SessionDetail",
+            "description": "The fetched session."
+          }
+        }
+      },
+      "IntentSource": {
+        "type": "string",
+        "description": "Origin of the intent attached to a request.",
+        "enum": [
+          "explicit",
+          "inferred"
+        ]
+      },
+      "ListModelsResponse": {
+        "type": "object",
+        "description": "Response to `GET /llm/models`.",
+        "required": [
+          "models"
+        ],
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelDescriptor"
+            },
+            "description": "Available models across providers."
+          },
+          "unavailable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnavailableProvider"
+            },
+            "description": "Providers omitted from `models` because listing their models failed,\neach with the reason it dropped out.\n\nThe router queries every configured provider when listing models. A\nprovider that cannot be listed — most often because its credentials are\nmissing or were rejected — is left out of `models` and reported here, so\na caller can tell an incomplete result from a genuinely empty one and act\non the cause. Empty when every configured provider was listed."
+          }
+        }
+      },
+      "ListProvidersResponse": {
+        "type": "object",
+        "description": "Response to `GET /llm/providers`.",
+        "required": [
+          "providers"
+        ],
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderDescriptor"
+            },
+            "description": "Available providers."
+          }
+        }
+      },
+      "LocalPreferences": {
+        "type": "object",
+        "description": "Client-side execution preferences.",
+        "required": [
+          "auto_apply",
+          "stream",
+          "local_only",
+          "no_network"
+        ],
+        "properties": {
+          "auto_apply": {
+            "type": "boolean",
+            "description": "Apply edits automatically without confirmation."
+          },
+          "stream": {
+            "type": "boolean",
+            "description": "Prefer a streaming response."
+          },
+          "local_only": {
+            "type": "boolean",
+            "description": "Restrict routing to local models only."
+          },
+          "no_network": {
+            "type": "boolean",
+            "description": "Forbid any network access for this request."
+          }
+        }
+      },
+      "LocalPrivacy": {
+        "type": "object",
+        "description": "Privacy constraints for local models.\n\nThe effective [`mode`](Self::mode) defaults to [`PermissionMode::Allow`] when\nunset: local models may receive context without prompting.",
+        "properties": {
+          "mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PermissionMode",
+                "description": "How sending context to local models is mediated, if set."
+              }
+            ]
+          }
+        }
+      },
+      "MeResponse": {
+        "type": "object",
+        "description": "Response to `GET /auth/me`, identifying the authenticated user.\n\nCarries only the caller's user ID; it lists no sessions and exposes no\nsecret values. To enumerate sessions, use `GET /sessions` instead.",
+        "required": [
+          "user_id"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "description": "The authenticated user's unique identifier."
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "description": "A single message in a conversation.\n\n`provider` and `model` identify which model produced an assistant turn; they\nare `None` for user, system and tool messages, and may be `None` for an\nassistant turn whose origin is unknown.",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/MessageRole",
+            "description": "The role of the message's author."
+          },
+          "content": {
+            "type": "string",
+            "description": "The textual content of the message."
+          },
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Provider",
+                "description": "Provider that produced the message, if applicable."
+              }
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Model that produced the message, if applicable."
+          }
+        }
+      },
+      "MessageRole": {
+        "type": "string",
+        "description": "The role an author plays in a conversation.\n\nEach variant serializes to its lowercase name.",
+        "enum": [
+          "system",
+          "user",
+          "assistant",
+          "tool"
+        ]
+      },
+      "ModelAuthRequirement": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "No authentication is needed, e.g. a local model.",
+            "enum": [
+              "none"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "An API key is required.",
+            "enum": [
+              "api_key"
+            ]
+          },
+          {
+            "type": "string",
+            "description": "An API key may be supplied but is not required.",
+            "enum": [
+              "optional_api_key"
+            ]
+          },
+          {
+            "type": "object",
+            "description": "A provider-specific scheme, named by the contained string.",
+            "required": [
+              "custom"
+            ],
+            "properties": {
+              "custom": {
+                "type": "string",
+                "description": "A provider-specific scheme, named by the contained string."
+              }
+            }
+          }
+        ],
+        "description": "How a model is authenticated.\n\nEach variant serializes to its snake_case name; [`Self::Custom`] carries the\nscheme name as its payload (e.g. `{\"custom\": \"aws-sigv4\"}`)."
+      },
+      "ModelCapabilities": {
+        "type": "object",
+        "description": "The capabilities a model exposes.\n\nEvery flag defaults to `false`, so a [`Default`] value advertises no\ncapabilities — a conservative starting point a descriptor builds upon.",
+        "properties": {
+          "streaming": {
+            "type": "boolean",
+            "description": "The model can stream its response incrementally."
+          },
+          "tools": {
+            "type": "boolean",
+            "description": "The model can call tools."
+          },
+          "json_output": {
+            "type": "boolean",
+            "description": "The model can be constrained to emit JSON."
+          },
+          "system_prompt": {
+            "type": "boolean",
+            "description": "The model honors a separate system prompt."
+          },
+          "images": {
+            "type": "boolean",
+            "description": "The model accepts image inputs."
+          },
+          "reasoning": {
+            "type": "boolean",
+            "description": "The model performs explicit reasoning."
+          },
+          "memory": {
+            "type": "boolean",
+            "description": "The model can drive the memory tool to record and update memory.\n\nSatisfied by tool calling, or — on providers that offer it, such as\nOpenAI structured outputs — by a constrained-output equivalent. The\nrouter gates memory orchestration on this flag."
+          }
+        }
+      },
+      "ModelDescriptor": {
+        "type": "object",
+        "description": "A complete description of a model offered by a provider.\n\nThis is also the shape returned for each model by `GET /llm/models`.",
+        "required": [
+          "provider",
+          "model",
+          "local",
+          "auth",
+          "capabilities",
+          "max_context_tokens",
+          "default_parameters"
+        ],
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/Provider",
+            "description": "Provider that offers the model."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model name, as defined by the provider."
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Human-friendly name, if different from `model`."
+          },
+          "local": {
+            "type": "boolean",
+            "description": "Whether the model runs locally (no network call)."
+          },
+          "auth": {
+            "$ref": "#/components/schemas/ModelAuthRequirement",
+            "description": "How the model is authenticated."
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/ModelCapabilities",
+            "description": "What the model can do."
+          },
+          "max_context_tokens": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum number of context tokens the model accepts.",
+            "minimum": 0
+          },
+          "max_output_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum number of tokens the model emits, if bounded.",
+            "minimum": 0
+          },
+          "input_cost_per_million_tokens": {
+            "type": "string",
+            "description": "Input price per million tokens, serialized as a string for exact precision.",
+            "example": "3.00"
+          },
+          "output_cost_per_million_tokens": {
+            "type": "string",
+            "description": "Output price per million tokens, serialized as a string for exact precision.",
+            "example": "15.00"
+          },
+          "default_parameters": {
+            "$ref": "#/components/schemas/ModelParameters",
+            "description": "Default generation parameters applied when none are supplied."
+          },
+          "provider_options": {
+            "type": "object",
+            "description": "Provider-specific options, preserved verbatim."
+          }
+        }
+      },
+      "ModelParameters": {
+        "allOf": [
+          {
+            "type": "object",
+            "description": "Provider-specific knobs, preserved verbatim."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "temperature": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "float",
+                "description": "Sampling temperature."
+              },
+              "top_p": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "float",
+                "description": "Nucleus sampling probability mass."
+              },
+              "max_tokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32",
+                "description": "Maximum number of tokens to generate.",
+                "minimum": 0
+              }
+            }
+          }
+        ],
+        "description": "Sampling and generation parameters for a model invocation.\n\nThe typed fields are omitted from serialization when unset. Any keys not\nmatching a typed field are collected into [`Self::extra`] and re-emitted as\nthey were, so provider-specific options pass through untouched."
+      },
+      "ModelReference": {
+        "type": "string",
+        "description": "A model reference in the form `provider/model`, e.g. `anthropic/claude-sonnet`."
+      },
+      "ModelUsage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Usage",
+            "description": "Token and cost totals for the model."
+          },
+          {
+            "type": "object",
+            "required": [
+              "provider",
+              "model",
+              "request_count"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/Provider",
+                "description": "Provider that served the requests."
+              },
+              "model": {
+                "type": "string",
+                "description": "Model that served the requests."
+              },
+              "request_count": {
+                "type": "integer",
+                "format": "int32",
+                "description": "Number of requests served by the model.",
+                "minimum": 0
+              }
+            }
+          }
+        ],
+        "description": "Usage attributed to a single model."
+      },
+      "PendingApproval": {
+        "type": "object",
+        "description": "A decision the router needs that has no tool to execute.\n\nRaised for disclosures and limits — for example sending context to a remote\nmodel under an `ask` privacy mode, or confirming a cost ceiling. The\n`detail` shape depends on `kind`.",
+        "required": [
+          "approval_id",
+          "kind",
+          "detail"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "description": "Identifier the approval decision refers to."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ApprovalKind",
+            "description": "What kind of decision is being asked for."
+          },
+          "detail": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Machine-readable context for the decision; its shape depends on `kind`."
+          }
+        }
+      },
+      "PermissionMode": {
+        "type": "string",
+        "description": "How an action is mediated: allowed outright, gated on approval, or blocked.\n\nUsed by both tool permissions and privacy (remote/local) policies. Variants\nserialize to their lowercase name. The ordering `Allow < Ask < Deny` reflects\nincreasing strictness, so the stricter of two modes is the greater one — the\nlayered merge relies on this to ensure a higher layer can only tighten, never\nweaken, a mode.\n\n# Examples\n\n```\nuse smista_core::policy::PermissionMode;\n\nassert!(PermissionMode::Deny > PermissionMode::Ask);\nassert_eq!(PermissionMode::Ask.max(PermissionMode::Allow), PermissionMode::Ask);\n```",
+        "enum": [
+          "allow",
+          "ask",
+          "deny"
+        ]
+      },
+      "PlainRecord": {
+        "type": "object",
+        "description": "A storage record paired with its cleartext.\n\nThe router sends these in an `awaiting_encrypt` turn (content to seal); the\nclient returns them in the `/continue` bundle after opening the records of\nan `awaiting_decrypt` turn. Correlated by `record_id`.",
+        "required": [
+          "record_id",
+          "plaintext"
+        ],
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "description": "Identifier of the storage record the cleartext belongs to."
+          },
+          "plaintext": {
+            "type": "string",
+            "description": "The cleartext payload."
+          }
+        }
+      },
+      "PreviewResponse": {
+        "type": "object",
+        "description": "The predicted routing of a task, without calling the model.",
+        "required": [
+          "task_type",
+          "classification",
+          "provider",
+          "model",
+          "included_context",
+          "excluded_context",
+          "estimated_cost",
+          "required_permissions"
+        ],
+        "properties": {
+          "task_type": {
+            "$ref": "#/components/schemas/TaskIntent",
+            "description": "Task type that would be detected."
+          },
+          "classification": {
+            "$ref": "#/components/schemas/Classification",
+            "description": "How the task would be classified."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/Provider",
+            "description": "Provider that would serve the task."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model that would serve the task."
+          },
+          "matched_rule": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Description of the routing rule that would match, if any."
+          },
+          "included_context": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Human-readable descriptions of context that would be included."
+          },
+          "excluded_context": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Human-readable descriptions of context that would be excluded."
+          },
+          "estimated_cost": {
+            "$ref": "#/components/schemas/CostRange",
+            "description": "Estimated cost range for the task."
+          },
+          "required_permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequiredPermission"
+            },
+            "description": "Permissions the task would require."
+          }
+        }
+      },
+      "PrivacyPolicy": {
+        "type": "object",
+        "description": "Privacy policy controlling what context may reach which model classes.\n\nMirrors the `[privacy]` configuration: top-level `restricted_paths`, plus a\n[`remote`](Self::remote) and [`local`](Self::local) sub-policy. These are\n**safety-critical**: a higher *preference* layer must never silently weaken\nthem, so the CLI merge unions path lists and only lets preference layers\ntighten the modes (see `smista-cli`'s `config::layers`).\n\nPaths are glob patterns kept verbatim; the matcher owns interpretation.\n\n# Examples\n\n```\nuse smista_core::policy::{PermissionMode, PrivacyPolicy};\n\nlet policy: PrivacyPolicy = serde_json::from_value(serde_json::json!({\n    \"restricted_paths\": [\".env\", \"secrets/**\"],\n    \"remote\": { \"mode\": \"ask\", \"blocked_paths\": [\".env\"] },\n    \"local\": { \"mode\": \"allow\" },\n}))\n.unwrap();\nassert_eq!(policy.remote.mode(), PermissionMode::Ask);\nassert_eq!(policy.local.mode(), PermissionMode::Allow);\n```",
+        "properties": {
+          "restricted_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Paths treated as sensitive across all model classes."
+          },
+          "remote": {
+            "$ref": "#/components/schemas/RemotePrivacy",
+            "description": "Constraints applied when sending context to remote providers."
+          },
+          "local": {
+            "$ref": "#/components/schemas/LocalPrivacy",
+            "description": "Constraints applied when sending context to local models."
+          }
+        }
+      },
+      "Provider": {
+        "type": "string",
+        "description": "A provider identifier, e.g. `anthropic`, `openai`, or `openai-compat:<name>`."
+      },
+      "ProviderCredentialInfo": {
+        "type": "object",
+        "description": "A provider available to the request and the credential status of its models.",
+        "required": [
+          "id",
+          "models"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Provider",
+            "description": "Provider identifier."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderModelInfo"
+            },
+            "description": "Models offered by the provider and their credential status."
+          }
+        }
+      },
+      "ProviderDescriptor": {
+        "type": "object",
+        "description": "A provider that is available for routing.\n\nThis is the shape returned by `GET /llm/providers`, which lists only the\nproviders that are currently available — those configured with usable\ncredentials (or a base URL, for local providers). A provider that is not\navailable is omitted from the listing entirely, so this descriptor carries\nno availability flag.",
+        "required": [
+          "id",
+          "display_name",
+          "local"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Provider",
+            "description": "The provider this descriptor refers to."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Human-friendly name shown to users."
+          },
+          "local": {
+            "type": "boolean",
+            "description": "Whether the provider serves its models locally, with no request leaving\nthe host or network.\n\nThis is the provider-level source of truth for locality: every model the\nprovider offers inherits it, so a provider can never report itself local\nwhile a model it advertises routes to the cloud. The router uses it as a\nrouting discriminant to keep sensitive work on local models."
+          }
+        }
+      },
+      "ProviderErrorCategory": {
+        "type": "string",
+        "description": "Classification of a normalized [`ProviderError`].\n\nEach variant captures a category of failure that the router and API layer\ncan reason about independently of the provider-specific HTTP status or\nSDK error code that produced it. The categories follow the smista.ai\nspecification (Model interfaces → Error handling).",
+        "enum": [
+          "authentication",
+          "context_length",
+          "invalid_configuration",
+          "invalid_credentials",
+          "invalid_request",
+          "missing_credentials",
+          "model_not_found",
+          "provider_unavailable",
+          "rate_limit",
+          "storage",
+          "timeout",
+          "unknown",
+          "unsupported_capability"
+        ]
+      },
+      "ProviderModelInfo": {
+        "type": "object",
+        "description": "A model offered by a provider and whether its credential is available.",
+        "required": [
+          "model",
+          "requires_api_key",
+          "credential_available"
+        ],
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Model name."
+          },
+          "requires_api_key": {
+            "type": "boolean",
+            "description": "Whether the model requires an API key."
+          },
+          "credential_available": {
+            "type": "boolean",
+            "description": "Whether a credential for the model is available to the request."
+          }
+        }
+      },
+      "RemotePrivacy": {
+        "type": "object",
+        "description": "Privacy constraints for remote providers.\n\nThe effective [`mode`](Self::mode) defaults to [`PermissionMode::Ask`] when\nunset: disclosing context to a remote provider requires approval unless\nexplicitly allowed.",
+        "properties": {
+          "mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PermissionMode",
+                "description": "How sending context to remote providers is mediated, if set."
+              }
+            ]
+          },
+          "blocked_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Paths that must never be sent to remote providers."
+          }
+        }
+      },
+      "RequiredPermission": {
+        "type": "object",
+        "description": "A permission the task requires and the mode that would apply.",
+        "required": [
+          "permission",
+          "mode"
+        ],
+        "properties": {
+          "permission": {
+            "type": "string",
+            "description": "Name of the permission, for example `write_files`."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PermissionMode",
+            "description": "Mode that would apply to the permission."
+          }
+        }
+      },
+      "RoutingOutcome": {
+        "type": "object",
+        "description": "How a task was routed to a model.",
+        "required": [
+          "task_type",
+          "provider",
+          "model",
+          "fallback_used",
+          "override_used"
+        ],
+        "properties": {
+          "task_type": {
+            "$ref": "#/components/schemas/TaskIntent",
+            "description": "Detected task type that drove routing."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/Provider",
+            "description": "Provider that served the task."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model that served the task."
+          },
+          "matched_rule": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Description of the routing rule that matched, if any."
+          },
+          "fallback_used": {
+            "type": "boolean",
+            "description": "Whether a fallback model was used."
+          },
+          "override_used": {
+            "type": "boolean",
+            "description": "Whether an explicit model override was used."
+          }
+        }
+      },
+      "RoutingPolicy": {
+        "type": "object",
+        "description": "The routing policy: a set of rules plus a default route.\n\nRules are evaluated in ascending priority order; the first match wins. When\nno rule matches, the [`default`](Self::default) route is used. A complete\npolicy must define a default route; its absence is a validation error,\nso it is modelled as optional here.\n\n# Examples\n\n```\nuse smista_core::policy::RoutingPolicy;\n\nlet policy = RoutingPolicy::default();\nassert!(policy.rules.is_empty());\nassert!(policy.default.is_none());\n```",
+        "properties": {
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoutingRule"
+            },
+            "description": "Routing rules; evaluated in ascending priority order, first match wins."
+          },
+          "default": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DefaultRoute",
+                "description": "Route used when no rule matches."
+              }
+            ]
+          }
+        }
+      },
+      "RoutingRule": {
+        "type": "object",
+        "description": "A single deterministic routing rule.\n\nA rule selects [`model`](Self::model) (with optional per-rule\n[`fallbacks`](Self::fallbacks)) when all of its present match conditions\nhold. Matching is LLM-free. The match conditions are flat and all optional:\n\n- [`intent`](Self::intent): the classified task intent.\n- [`skill`](Self::skill): the invoked skill name.\n- [`paths`](Self::paths): file-path globs; a rule with paths matches when a\n  relevant path matches any glob.\n\nA rule with no conditions matches everything (useful as a low-priority\ncatch-all). Rules are evaluated in ascending [`priority`](Self::priority)\norder; the first match wins.\n\nWhen [`local_only`](Self::local_only) is set, a matched rule must not fall\nback to remote models — its fallback chain is restricted to local models.\n\nA matched rule also declares the [`effort`](Self::effort) the model should\nspend on the task, defaulting to [`Effort::Medium`].\n\n# Examples\n\n```\nuse smista_core::effort::Effort;\nuse smista_core::policy::RoutingRule;\n\nlet rule: RoutingRule = serde_json::from_value(serde_json::json!({\n    \"name\": \"auth code uses Claude\",\n    \"priority\": 30,\n    \"effort\": \"high\",\n    \"intent\": \"edit\",\n    \"paths\": [\"src/auth/**\"],\n    \"model\": \"anthropic/claude-sonnet\",\n    \"fallbacks\": [\"openai/gpt-5.5-thinking\"],\n}))\n.unwrap();\nassert_eq!(rule.name, \"auth code uses Claude\");\nassert_eq!(rule.priority, 30);\nassert_eq!(rule.effort, Effort::High);\nassert_eq!(rule.model.model, \"claude-sonnet\");\nassert_eq!(rule.paths, vec![\"src/auth/**\".to_string()]);\n```",
+        "required": [
+          "name",
+          "model"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable rule name."
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Evaluation priority; rules are evaluated in ascending order (lower\nfirst). Defaults to `1000` when unset.",
+            "minimum": 0
+          },
+          "effort": {
+            "$ref": "#/components/schemas/Effort",
+            "description": "Reasoning effort the model should spend on a matched task. Defaults to\n[`Effort::Medium`] when unset."
+          },
+          "intent": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TaskIntent",
+                "description": "Required task intent, if any."
+              }
+            ]
+          },
+          "skill": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required skill name, if any."
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "File-path globs; when non-empty, a relevant path must match one of them."
+          },
+          "local_only": {
+            "type": "boolean",
+            "description": "When set, a matched rule must not fall back to remote models; its\nfallback chain is restricted to local models."
+          },
+          "requires_capabilities": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ModelCapabilities",
+                "description": "Capability gate: when set, the matched model must satisfy every\ncapability flagged `true` here."
+              }
+            ]
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelReference",
+            "description": "Model selected when the rule matches. Using syntax supported by [`ModelReference`] (e.g. `\"ollama/llama3\"`)."
+          },
+          "fallbacks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelReference"
+            },
+            "description": "Models tried, in order, when the selected model is unavailable. Subject\nto [`local_only`](Self::local_only)."
+          },
+          "required_permissions": {
+            "$ref": "#/components/schemas/ToolsConfig",
+            "description": "Tool permissions the matched route requires.\n\nMerged over project defaults via [`ToolsConfig::narrow`]."
+          },
+          "cost_limit": {
+            "type": "string",
+            "description": "Per-task cost ceiling for the matched route, in account currency.\n\nSerialized as a string for exact precision.",
+            "example": "0.50"
+          }
+        }
+      },
+      "SealedRecord": {
+        "type": "object",
+        "description": "A storage record paired with its sealed payload.\n\nThe router sends these in an `awaiting_decrypt` turn (history to open); the\nclient returns them in the `/continue` bundle after sealing the content of\nan `awaiting_encrypt` turn. Correlated by `record_id`.",
+        "required": [
+          "record_id",
+          "envelope"
+        ],
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "description": "Identifier of the storage record the envelope belongs to."
+          },
+          "envelope": {
+            "$ref": "#/components/schemas/EncryptedPayload",
+            "description": "The sealed envelope."
+          }
+        }
+      },
+      "SessionDetail": {
+        "type": "object",
+        "description": "Full view of a session, returned when it is fetched to be resumed.\n\nCarries the session's `messages` and free-form `metadata`. It omits\n`archived`, since archived sessions are not returned on fetch.",
+        "required": [
+          "id",
+          "title",
+          "encrypted",
+          "created_at",
+          "updated_at",
+          "messages",
+          "metadata"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique session identifier."
+          },
+          "title": {
+            "type": "string",
+            "description": "Human-readable session title."
+          },
+          "encrypted": {
+            "type": "boolean",
+            "description": "Whether the session's content is end-to-end encrypted."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the session was created."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the session was last updated."
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            },
+            "description": "The session's conversation history."
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Free-form session metadata."
+          }
+        }
+      },
+      "SessionSummary": {
+        "type": "object",
+        "description": "Lightweight view of a session, used in listings and on creation.",
+        "required": [
+          "id",
+          "title",
+          "encrypted",
+          "created_at",
+          "updated_at",
+          "archived"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique session identifier."
+          },
+          "title": {
+            "type": "string",
+            "description": "Human-readable session title."
+          },
+          "encrypted": {
+            "type": "boolean",
+            "description": "Whether the session's content is end-to-end encrypted."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the session was created."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the session was last updated."
+          },
+          "archived": {
+            "type": "boolean",
+            "description": "Whether the session is archived."
+          }
+        }
+      },
+      "SessionUsageResponse": {
+        "type": "object",
+        "description": "Response to `GET /sessions/{id}/usage`.",
+        "required": [
+          "session_id",
+          "usage"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session the usage belongs to."
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageBreakdown",
+            "description": "Usage totals and breakdowns."
+          }
+        }
+      },
+      "SignInResponse": {
+        "type": "object",
+        "description": "Response to `POST /auth/sign-in`, carrying the session token.\n\n`token` is a secret bearer credential; `expires_at` is when it stops being\nvalid. `Debug` is implemented by hand to redact `token`, so the credential\nis never leaked through `{:?}` formatting, logs, or traces.",
+        "required": [
+          "token",
+          "expires_at"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Session bearer token. Secret; sent as `Authorization: Bearer`."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Instant at which the token expires."
+          }
+        }
+      },
+      "SignOutResponse": {
+        "type": "object",
+        "description": "Response to `POST /auth/sign-out`, confirming token revocation.",
+        "required": [
+          "revoked"
+        ],
+        "properties": {
+          "revoked": {
+            "type": "boolean",
+            "description": "Whether the session token was revoked."
+          }
+        }
+      },
+      "Skill": {
+        "type": "object",
+        "description": "A reusable execution profile defined by a `SKILL.md` file.\n\n`name` and `description` come from the file's front matter; `instructions`\nis its Markdown body, which frames the model's behavior for the task.",
+        "required": [
+          "name",
+          "description",
+          "instructions"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Machine-readable identifier used to resolve the skill by name."
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable summary of what the skill does."
+          },
+          "instructions": {
+            "type": "string",
+            "description": "Behavioral instructions from the skill's Markdown body."
+          }
+        }
+      },
+      "StatusResponse": {
+        "type": "object",
+        "description": "Body of a successful `GET /status` response.",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Service liveness indicator; `\"ok\"` when the server answers."
+          },
+          "version": {
+            "type": "string",
+            "description": "The running service version."
+          }
+        }
+      },
+      "TaskInput": {
+        "type": "object",
+        "description": "The user's request: prompt text, optional command and explicit model.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The prompt text."
+          },
+          "command": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TaskIntent",
+                "description": "Explicit task command, overriding intent detection when set."
+              }
+            ]
+          },
+          "explicit_model": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ModelReference",
+                "description": "Explicit model to use, bypassing routing when set."
+              }
+            ]
+          }
+        }
+      },
+      "TaskIntent": {
+        "type": "string",
+        "description": "The kind of work a single step of an AI workflow performs.\n\nUsed by smista-router to match a prompt against the user's routing policy.\nEach variant serializes to its lowercase name.",
+        "enum": [
+          "chat",
+          "plan",
+          "edit",
+          "review",
+          "summarize",
+          "prompt",
+          "skill"
+        ]
+      },
+      "TaskTypeUsage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Usage",
+            "description": "Token and cost totals for the task type."
+          },
+          {
+            "type": "object",
+            "required": [
+              "task_type",
+              "request_count"
+            ],
+            "properties": {
+              "task_type": {
+                "$ref": "#/components/schemas/TaskIntent",
+                "description": "Task type the requests were classified as."
+              },
+              "request_count": {
+                "type": "integer",
+                "format": "int32",
+                "description": "Number of requests of this task type.",
+                "minimum": 0
+              }
+            }
+          }
+        ],
+        "description": "Usage attributed to a single task type."
+      },
+      "ToolApproval": {
+        "type": "string",
+        "description": "Whether a client-executed tool needs the user's approval first.\n\nA tool denied by policy never reaches the client, so `deny` is not a value\nhere.",
+        "enum": [
+          "allow",
+          "ask"
+        ]
+      },
+      "ToolRequest": {
+        "type": "object",
+        "description": "A tool the client must execute on the user's machine.",
+        "required": [
+          "call_id",
+          "name",
+          "arguments",
+          "requires_approval"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "description": "Identifier correlating this call with its later result."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the tool to invoke."
+          },
+          "arguments": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Arguments for the tool, as a provider-agnostic JSON value."
+          },
+          "requires_approval": {
+            "$ref": "#/components/schemas/ToolApproval",
+            "description": "Whether the user must approve the call before it runs."
+          }
+        }
+      },
+      "ToolResult": {
+        "type": "object",
+        "description": "The result of one client-executed tool, correlated by `call_id`.\n\nFor an `ask`-mode tool the user's decision rides [`Self::decision`], so the\napproval and the result arrive together.",
+        "required": [
+          "call_id",
+          "content"
+        ],
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "description": "Identifier matching the originating tool request."
+          },
+          "content": {
+            "type": "string",
+            "description": "The tool's output."
+          },
+          "is_error": {
+            "type": "boolean",
+            "description": "Whether the tool call failed."
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApprovalDecision",
+                "description": "The user's decision for an `ask`-mode tool, if one was required."
+              }
+            ]
+          }
+        }
+      },
+      "ToolsConfig": {
+        "type": "object",
+        "description": "Tool permissions: the mode required for each named tool.\n\nMirrors the `[tools.permissions]` table, a flat map of tool name to\n[`PermissionMode`] (e.g. `file_write = \"ask\"`). A tool with no entry has no\nexplicitly configured mode; callers decide the safe fallback.\n\n# Examples\n\n```\nuse smista_core::policy::{PermissionMode, ToolsConfig};\n\nlet config: ToolsConfig = serde_json::from_value(serde_json::json!({\n    \"permissions\": { \"file_read\": \"allow\", \"shell\": \"ask\", \"network\": \"deny\" }\n}))\n.unwrap();\nassert_eq!(config.mode_for(\"file_read\"), Some(PermissionMode::Allow));\nassert_eq!(config.mode_for(\"network\"), Some(PermissionMode::Deny));\nassert_eq!(config.mode_for(\"unlisted\"), None);\n```",
+        "properties": {
+          "permissions": {
+            "type": "object",
+            "description": "Per-tool permission mode, keyed by tool name.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PermissionMode"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Trace": {
+        "type": "object",
+        "description": "The recorded outcome of routing and running a session's tasks.\n\n`events` holds the session's ordered execution events, oldest first. Each\n[`TraceEvent`] is self-describing — it carries its own routing context — so\nthe trace needs no top-level routing fields.",
+        "required": [
+          "session_id",
+          "events"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session the traced tasks belong to."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraceEvent"
+            },
+            "description": "Ordered execution events, oldest first."
+          }
+        }
+      },
+      "TraceEvent": {
+        "type": "object",
+        "description": "A single recorded execution event within a [`Trace`].\n\nEach event carries the routing context of the task that emitted it\n(`task_type`, `provider`, `model`, `matched_rule`) and a free-form `payload`\nwhose shape depends on `event_type`. The payload is opaque here while the\ntrace vocabulary is still being designed.",
+        "required": [
+          "event_type",
+          "task_type",
+          "provider",
+          "model",
+          "created_at",
+          "payload"
+        ],
+        "properties": {
+          "event_type": {
+            "$ref": "#/components/schemas/TraceEventType",
+            "description": "Kind of trace event."
+          },
+          "task_type": {
+            "$ref": "#/components/schemas/TaskIntent",
+            "description": "Detected intent that drove routing for this event's task."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/Provider",
+            "description": "Provider that served the task."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model that served the task."
+          },
+          "matched_rule": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Description of the routing rule that matched, if any."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the event occurred."
+          },
+          "payload": {
+            "type": "object",
+            "description": "Free-form event payload, as an opaque JSON value."
+          }
+        }
+      },
+      "TraceEventType": {
+        "type": "string",
+        "description": "The kind of a trace event.\n\n**Provisional**: these variants are a placeholder until the private spec\npins the trace taxonomy. Serialized as `snake_case`.",
+        "enum": [
+          "message",
+          "routing_decision",
+          "context_selection",
+          "tool_call",
+          "approval",
+          "cost"
+        ]
+      },
+      "TraceResponse": {
+        "type": "object",
+        "description": "Envelope wrapping a [`Trace`] under a `trace` key.",
+        "required": [
+          "trace"
+        ],
+        "properties": {
+          "trace": {
+            "$ref": "#/components/schemas/Trace",
+            "description": "The execution trace."
+          }
+        }
+      },
+      "TurnEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "An incremental chunk of generated text.",
+            "required": [
+              "delta",
+              "type"
+            ],
+            "properties": {
+              "delta": {
+                "type": "string",
+                "description": "The text appended by this event."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text_delta"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "An incremental chunk of reasoning text, for models that stream it.",
+            "required": [
+              "delta",
+              "type"
+            ],
+            "properties": {
+              "delta": {
+                "type": "string",
+                "description": "The reasoning text appended by this event."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "reasoning_delta"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A tool call is forming: its name is known, its arguments still streaming.",
+            "required": [
+              "call_id",
+              "name",
+              "type"
+            ],
+            "properties": {
+              "call_id": {
+                "type": "string",
+                "description": "Identifier correlating this event with its later\n[`ToolCallRequested`](Self::ToolCallRequested)."
+              },
+              "name": {
+                "type": "string",
+                "description": "Name of the tool being called."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "tool_call_started"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The model requested a tool call the client must run.",
+            "required": [
+              "call_id",
+              "name",
+              "arguments",
+              "requires_approval",
+              "type"
+            ],
+            "properties": {
+              "call_id": {
+                "type": "string",
+                "description": "Identifier correlating this call with its later result."
+              },
+              "name": {
+                "type": "string",
+                "description": "Name of the tool to invoke."
+              },
+              "arguments": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Arguments for the tool, as a provider-agnostic JSON value."
+              },
+              "requires_approval": {
+                "$ref": "#/components/schemas/ToolApproval",
+                "description": "Whether the user must approve the call before it runs."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "tool_call_requested"
+                ]
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Usage",
+                "description": "Token usage and cost totals for the turn."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "usage"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Token usage and cost totals for the turn."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TurnResponse",
+                "description": "The terminal event: the turn's outcome, carrying the same\n[`TurnResponse`] the buffered call returns (its `status` included)."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "turn_end"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "The terminal event: the turn's outcome, carrying the same\n[`TurnResponse`] the buffered call returns (its `status` included)."
+          }
+        ],
+        "description": "A single event in a streamed turn.\n\nSerialized with an internally tagged `type` discriminator in snake_case."
+      },
+      "TurnResponse": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CompletedTurn",
+                "description": "The model finished; an assistant message is included.\n\nBoxed because this is by far the largest variant."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "completed"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "The model finished; an assistant message is included.\n\nBoxed because this is by far the largest variant."
+          },
+          {
+            "type": "object",
+            "description": "The model requested one or more client-executed tools.",
+            "required": [
+              "tool_requests",
+              "trace_id",
+              "status"
+            ],
+            "properties": {
+              "tool_requests": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ToolRequest"
+                },
+                "description": "The tool calls the client must run, correlated by `call_id`."
+              },
+              "trace_id": {
+                "type": "string",
+                "description": "Identifier of the recorded trace."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "awaiting_tool"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The router needs a yes/no decision with no tool to run.",
+            "required": [
+              "approval",
+              "trace_id",
+              "status"
+            ],
+            "properties": {
+              "approval": {
+                "$ref": "#/components/schemas/PendingApproval",
+                "description": "The decision the client must obtain."
+              },
+              "trace_id": {
+                "type": "string",
+                "description": "Identifier of the recorded trace."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "awaiting_approval"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The router needs sealed history opened to build the prompt.",
+            "required": [
+              "records",
+              "trace_id",
+              "status"
+            ],
+            "properties": {
+              "records": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SealedRecord"
+                },
+                "description": "Records the client must decrypt, correlated by `record_id`."
+              },
+              "trace_id": {
+                "type": "string",
+                "description": "Identifier of the recorded trace."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "awaiting_decrypt"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The router needs its own output sealed before it can be persisted.",
+            "required": [
+              "records",
+              "trace_id",
+              "status"
+            ],
+            "properties": {
+              "records": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PlainRecord"
+                },
+                "description": "Records the client must encrypt, correlated by `record_id`."
+              },
+              "trace_id": {
+                "type": "string",
+                "description": "Identifier of the recorded trace."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "awaiting_encrypt"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A terminal error ended the turn.",
+            "required": [
+              "error",
+              "status"
+            ],
+            "properties": {
+              "error": {
+                "$ref": "#/components/schemas/ApiErrorBody",
+                "description": "The structured error body."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "error"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "The outcome of one turn, returned by `/execute` and `/continue`.\n\nInternally tagged by `status`. A [`Completed`](Self::Completed) turn carries\nthe assistant message and routing explanation; every other variant is a\ncontinuation the client must act on before resuming the run with\n`/continue`, or a terminal [`Error`](Self::Error)."
+      },
+      "UnavailableProvider": {
+        "type": "object",
+        "description": "A provider left out of [`ListModelsResponse::models`] because its models\ncould not be listed.",
+        "required": [
+          "provider",
+          "reason"
+        ],
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/Provider",
+            "description": "The provider whose models could not be listed."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ProviderErrorCategory",
+            "description": "The classification of the failure that left the provider out."
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Human-readable, redacted detail describing the failure, when the\nprovider reported one. Never contains credentials."
+          }
+        }
+      },
+      "UpdateSessionRequest": {
+        "type": "object",
+        "description": "Body of `PUT /sessions/{id}`, updating title and/or archive state.\n\nEach field is optional; omit a field to leave it unchanged.",
+        "properties": {
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New title, if changing it."
+          },
+          "archived": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "New archive state, if changing it."
+          }
+        }
+      },
+      "Usage": {
+        "type": "object",
+        "description": "Token usage and cost metadata for a single model invocation.\n\nAll fields are optional and omitted from serialization when unset.",
+        "properties": {
+          "input_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Tokens in the input/prompt.",
+            "minimum": 0
+          },
+          "output_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Tokens generated in the output.",
+            "minimum": 0
+          },
+          "cached_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Input tokens served from a provider cache.",
+            "minimum": 0
+          },
+          "reasoning_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Tokens spent on reasoning, when reported separately.",
+            "minimum": 0
+          },
+          "total_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Total tokens, when the provider reports a combined count.",
+            "minimum": 0
+          },
+          "estimated_cost": {
+            "type": "string",
+            "description": "Cost estimated before the invocation, serialized as a decimal string.",
+            "example": "0.001"
+          },
+          "actual_cost": {
+            "type": "string",
+            "description": "Cost reconciled after the invocation, serialized as a decimal string.",
+            "example": "0.001"
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO 4217 currency code for the costs; defaults to `USD` when absent."
+          }
+        }
+      },
+      "UsageBreakdown": {
+        "type": "object",
+        "description": "A session's usage total and its per-model and per-task-type breakdowns.",
+        "required": [
+          "total",
+          "by_model",
+          "by_task_type"
+        ],
+        "properties": {
+          "total": {
+            "$ref": "#/components/schemas/Usage",
+            "description": "Combined usage across the whole session."
+          },
+          "by_model": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelUsage"
+            },
+            "description": "Usage attributed to each model."
+          },
+          "by_task_type": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskTypeUsage"
+            },
+            "description": "Usage attributed to each task type."
+          }
+        }
+      },
+      "UserMessage": {
+        "type": "object",
+        "description": "A message the user typed while the run was working.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The message text."
+          }
+        }
+      },
+      "Workspace": {
+        "type": "object",
+        "description": "Snapshot of the workspace a task runs against.",
+        "required": [
+          "root",
+          "referenced_paths"
+        ],
+        "properties": {
+          "root": {
+            "type": "string",
+            "description": "Absolute path to the workspace root."
+          },
+          "git_branch": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Current git branch, if the workspace is a git repository."
+          },
+          "git_diff": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Current git diff, if any."
+          },
+          "referenced_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Paths the user explicitly referenced."
+          },
+          "active_file": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file the user is actively editing, if any."
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Smista-Api-Key",
+        "description": "User API key, presented only at sign-in"
+      },
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Session token from POST /api/v1/auth/sign-in"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Liveness"
+    },
+    {
+      "name": "auth",
+      "description": "Authentication and identity"
+    },
+    {
+      "name": "sessions",
+      "description": "Session lifecycle"
+    },
+    {
+      "name": "execution",
+      "description": "Task execution, streaming and preview"
+    },
+    {
+      "name": "traces",
+      "description": "Routing traces"
+    },
+    {
+      "name": "usage",
+      "description": "Usage accounting"
+    },
+    {
+      "name": "llm",
+      "description": "Providers and models"
+    }
+  ]
+}

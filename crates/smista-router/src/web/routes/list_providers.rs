@@ -20,6 +20,20 @@ use crate::web::routes::ApiResult;
 /// Reads the live provider registry off the router and returns one descriptor
 /// per available provider. The order is unspecified, as the registry is keyed
 /// by provider id.
+#[cfg_attr(
+    feature = "openapi",
+    utoipa::path(
+        get,
+        path = "/api/v1/llm/providers",
+        operation_id = "listProviders",
+        tag = "llm",
+        security(("bearer" = [])),
+        responses(
+            (status = 200, description = "Available providers", body = smista_core::api::ListProvidersResponse),
+            (status = 401, description = "Missing or invalid token", body = smista_core::api::ApiError)
+        )
+    )
+)]
 pub(crate) async fn list_providers(
     State(state): State<AppState>,
 ) -> ApiResult<ListProvidersResponse> {

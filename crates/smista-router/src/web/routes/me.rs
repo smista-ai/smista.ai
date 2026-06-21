@@ -13,6 +13,20 @@ use crate::web::AuthenticatedUser;
 use crate::web::routes::ApiResult;
 
 /// Handles `GET /api/v1/auth/me`.
+#[cfg_attr(
+    feature = "openapi",
+    utoipa::path(
+        get,
+        path = "/api/v1/auth/me",
+        operation_id = "getCurrentUser",
+        tag = "auth",
+        security(("bearer" = [])),
+        responses(
+            (status = 200, description = "The authenticated user", body = smista_core::api::MeResponse),
+            (status = 401, description = "Missing or invalid token", body = smista_core::api::ApiError)
+        )
+    )
+)]
 pub(crate) async fn me(Extension(user): Extension<AuthenticatedUser>) -> ApiResult<MeResponse> {
     Ok((
         StatusCode::OK,

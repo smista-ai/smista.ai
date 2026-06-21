@@ -42,6 +42,7 @@ const DEFAULT_PRIORITY: u32 = 1000;
 /// assert!(config.rules.is_empty());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ClassificationConfig {
     /// Intent used when no rule matches.
@@ -82,6 +83,7 @@ pub struct ClassificationConfig {
 /// assert_eq!(rule.priority, 10);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ClassificationRule {
     /// Intent assigned when the rule matches.
@@ -107,6 +109,7 @@ pub struct ClassificationRule {
 /// matching entry in [`ClassificationConfig::rules`] so traces can point back
 /// to the configured rule.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct Classification {
     /// The detected task intent.
@@ -131,6 +134,7 @@ pub struct Classification {
 ///
 /// This is a coarse signal-strength label, not a probability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Confidence {
@@ -144,6 +148,7 @@ pub enum Confidence {
 
 /// Origin of the intent attached to a request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum IntentSource {

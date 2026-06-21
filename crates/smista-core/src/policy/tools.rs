@@ -27,6 +27,7 @@ use crate::error::PolicyError;
 /// assert_eq!(config.mode_for("unlisted"), None);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ToolsConfig {
     /// Per-tool permission mode, keyed by tool name.

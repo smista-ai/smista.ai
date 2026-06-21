@@ -28,6 +28,7 @@ use serde_json::{Map, Value};
 /// matching a typed field are collected into [`Self::extra`] and re-emitted as
 /// they were, so provider-specific options pass through untouched.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ModelParameters {
     /// Sampling temperature.
@@ -41,6 +42,7 @@ pub struct ModelParameters {
     pub max_tokens: Option<u32>,
     /// Provider-specific knobs, preserved verbatim.
     #[serde(flatten)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub extra: Map<String, Value>,
 }
 

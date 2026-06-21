@@ -23,6 +23,7 @@ const REDACTED: &str = "<redacted>";
 /// `Debug` is implemented by hand to redact `api_key`, so the credential is
 /// never leaked through `{:?}` formatting, logs, or traces.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct BootstrapResponse {
     /// Identifier of the created user, for example `user:abc123`.
@@ -46,6 +47,7 @@ impl fmt::Debug for BootstrapResponse {
 /// valid. `Debug` is implemented by hand to redact `token`, so the credential
 /// is never leaked through `{:?}` formatting, logs, or traces.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct SignInResponse {
     /// Session bearer token. Secret; sent as `Authorization: Bearer`.
@@ -65,6 +67,7 @@ impl fmt::Debug for SignInResponse {
 
 /// Response to `POST /auth/sign-out`, confirming token revocation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct SignOutResponse {
     /// Whether the session token was revoked.
@@ -76,6 +79,7 @@ pub struct SignOutResponse {
 /// Carries only the caller's user ID; it lists no sessions and exposes no
 /// secret values. To enumerate sessions, use `GET /sessions` instead.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct MeResponse {
     /// The authenticated user's unique identifier.

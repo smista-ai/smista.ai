@@ -26,6 +26,7 @@ use crate::trace::Trace;
 
 /// Envelope wrapping a [`Trace`] under a `trace` key.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct TraceResponse {
     /// The execution trace.

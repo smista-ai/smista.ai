@@ -1,6 +1,7 @@
 # HTTP API
 
 - [HTTP API](#http-api)
+  - [OpenAPI schema](#openapi-schema)
   - [Conventions](#conventions)
   - [Health check](#health-check)
   - [Authentication](#authentication)
@@ -41,6 +42,13 @@ logic stays in the router — clients never reimplement it.
 > [!TIP]
 > For TypeScript and JavaScript, use the [`@smista-ai/sdk`](https://www.npmjs.com/package/@smista-ai/sdk)
 > typed client instead of calling these endpoints by hand.
+
+## OpenAPI schema
+
+A machine-readable OpenAPI 3.1 schema for this API is published alongside this
+page at [`./openapi.json`](./openapi.json). You can use it to generate typed
+clients in any language, validate requests and responses against the schema, or
+explore the API interactively in tools such as Swagger UI or Insomnia.
 
 ## Conventions
 

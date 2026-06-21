@@ -215,6 +215,7 @@ impl fmt::Display for ApiErrorCode {
 
 /// Envelope wrapping the error body under an `error` key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ApiError {
     /// The structured error payload.
@@ -226,6 +227,7 @@ pub struct ApiError {
 /// `details` carries machine-readable context (such as the offending provider
 /// and model) and is omitted when there is none. It must never contain secrets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ApiErrorBody {
     /// Stable machine-readable error code, for example `missing_provider_credentials`.
@@ -235,6 +237,7 @@ pub struct ApiErrorBody {
     /// Optional structured context; never carries secrets.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Object, nullable = true))]
     pub details: Option<serde_json::Value>,
 }
 

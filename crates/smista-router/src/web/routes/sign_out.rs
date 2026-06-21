@@ -15,6 +15,20 @@ use crate::web::routes::ApiResult;
 use crate::web::{AppState, AuthenticatedUser};
 
 /// Handles `POST /api/v1/auth/sign-out`.
+#[cfg_attr(
+    feature = "openapi",
+    utoipa::path(
+        post,
+        path = "/api/v1/auth/sign-out",
+        operation_id = "signOut",
+        tag = "auth",
+        security(("bearer" = [])),
+        responses(
+            (status = 200, description = "Session revoked", body = smista_core::api::SignOutResponse),
+            (status = 401, description = "Missing or invalid token", body = smista_core::api::ApiError)
+        )
+    )
+)]
 pub(crate) async fn sign_out(
     State(state): State<AppState>,
     Extension(user): Extension<AuthenticatedUser>,

@@ -128,6 +128,27 @@ impl<'de> Deserialize<'de> for ModelReference {
     }
 }
 
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for ModelReference {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::schema::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::new(
+                utoipa::openapi::schema::Type::String,
+            ))
+            .description(Some(
+                "A model reference in the form `provider/model`, e.g. `anthropic/claude-sonnet`.",
+            ))
+            .into()
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for ModelReference {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("ModelReference")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

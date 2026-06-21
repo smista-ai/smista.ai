@@ -203,6 +203,27 @@ impl SurrealValue for Provider {
     }
 }
 
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for Provider {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::schema::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::new(
+                utoipa::openapi::schema::Type::String,
+            ))
+            .description(Some(
+                "A provider identifier, e.g. `anthropic`, `openai`, or `openai-compat:<name>`.",
+            ))
+            .into()
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for Provider {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("Provider")
+    }
+}
+
 /// A provider that is available for routing.
 ///
 /// This is the shape returned by `GET /llm/providers`, which lists only the
@@ -211,6 +232,7 @@ impl SurrealValue for Provider {
 /// available is omitted from the listing entirely, so this descriptor carries
 /// no availability flag.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ProviderDescriptor {
     /// The provider this descriptor refers to.

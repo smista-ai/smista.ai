@@ -44,6 +44,23 @@ const MAX_FETCH_MODELS_TIMEOUT: Duration = Duration::from_secs(60);
 /// extension only when the caller sent at least one provider key, so the
 /// extractor is optional: its absence simply means no credentials, which still
 /// lists keyless local providers.
+#[cfg_attr(
+    feature = "openapi",
+    utoipa::path(
+        get,
+        path = "/api/v1/llm/models",
+        operation_id = "listModels",
+        tag = "llm",
+        security(("bearer" = [])),
+        params(
+            ("X-Smista-Timeout-Ms" = Option<u64>, Header, description = "Per-request timeout, default 10000, max 60000")
+        ),
+        responses(
+            (status = 200, description = "Available models", body = smista_core::api::ListModelsResponse),
+            (status = 401, description = "Missing or invalid token", body = smista_core::api::ApiError)
+        )
+    )
+)]
 pub(crate) async fn list_models(
     State(state): State<AppState>,
     headers: HeaderMap,

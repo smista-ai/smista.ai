@@ -17,6 +17,19 @@ use crate::web::AppState;
 use crate::web::routes::ApiResult;
 
 /// Handles `POST /api/v1/auth/bootstrap`.
+#[cfg_attr(
+    feature = "openapi",
+    utoipa::path(
+        post,
+        path = "/api/v1/auth/bootstrap",
+        operation_id = "bootstrap",
+        tag = "auth",
+        responses(
+            (status = 201, description = "User created and API key issued", body = smista_core::api::BootstrapResponse),
+            (status = 500, description = "Internal server error", body = smista_core::api::ApiError)
+        )
+    )
+)]
 pub(crate) async fn bootstrap(State(state): State<AppState>) -> ApiResult<BootstrapResponse> {
     // bootstrap user with the authenticator
     let user = state.authenticator.bootstrap_user().await?;

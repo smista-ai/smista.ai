@@ -29,6 +29,7 @@ use crate::model::Provider;
 ///
 /// Each variant serializes to its lowercase name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
 #[cfg_attr(feature = "surrealdb", surreal(crate = "::surrealdb_types"))]
 #[cfg_attr(feature = "surrealdb", surreal(rename_all = "lowercase", untagged))]
@@ -51,6 +52,7 @@ pub enum MessageRole {
 /// are `None` for user, system and tool messages, and may be `None` for an
 /// assistant turn whose origin is unknown.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct Message {
     /// The role of the message's author.

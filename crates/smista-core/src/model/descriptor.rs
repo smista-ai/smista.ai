@@ -51,6 +51,7 @@ use crate::error::CapabilityError;
 ///
 /// This is also the shape returned for each model by `GET /llm/models`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ModelDescriptor {
     /// Provider that offers the model.
@@ -76,6 +77,7 @@ pub struct ModelDescriptor {
         skip_serializing_if = "Option::is_none"
     )]
     #[ts(optional, type = "string")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String, example = "3.00"))]
     pub input_cost_per_million_tokens: Option<rust_decimal::Decimal>,
     /// Output price per million tokens, serialized as a string for exact precision.
     #[serde(
@@ -84,12 +86,14 @@ pub struct ModelDescriptor {
         skip_serializing_if = "Option::is_none"
     )]
     #[ts(optional, type = "string")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String, example = "15.00"))]
     pub output_cost_per_million_tokens: Option<rust_decimal::Decimal>,
     /// Default generation parameters applied when none are supplied.
     pub default_parameters: ModelParameters,
     /// Provider-specific options, preserved verbatim.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub provider_options: Option<serde_json::Value>,
 }
 

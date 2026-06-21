@@ -29,6 +29,7 @@ use crate::usage::Usage;
 ///
 /// Serialized with an internally tagged `type` discriminator in snake_case.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
 pub enum StreamEvent {
@@ -60,6 +61,7 @@ pub enum StreamEvent {
         /// Name of the tool to invoke.
         name: String,
         /// Arguments for the tool, as a provider-agnostic JSON value.
+        #[cfg_attr(feature = "openapi", schema(value_type = Object))]
         arguments: serde_json::Value,
     },
     /// A tool call needs user approval before it can run.

@@ -28,24 +28,64 @@ mod update_session;
 use axum::Json;
 use axum::http::StatusCode;
 
+// Re-export the utoipa-generated path structs so that openapi.rs can reference
+// them as `routes::__path_<fn>` in `paths(...)`.
+#[cfg(feature = "openapi")]
+pub(crate) use self::bootstrap::__path_bootstrap;
 pub(crate) use self::bootstrap::bootstrap;
+#[cfg(feature = "openapi")]
+pub(crate) use self::continue_run::__path_continue_run;
 pub(crate) use self::continue_run::continue_run;
+#[cfg(feature = "openapi")]
+pub(crate) use self::create_session::__path_create_session;
 pub(crate) use self::create_session::create_session;
+#[cfg(feature = "openapi")]
+pub(crate) use self::delete_session::__path_delete_session;
 pub(crate) use self::delete_session::delete_session;
+#[cfg(feature = "openapi")]
+pub(crate) use self::execute::__path_execute;
 pub(crate) use self::execute::execute;
+#[cfg(feature = "openapi")]
+pub(crate) use self::get_session::__path_get_session;
 pub(crate) use self::get_session::get_session;
+#[cfg(feature = "openapi")]
+pub(crate) use self::get_trace::__path_get_trace;
 pub(crate) use self::get_trace::get_trace;
+#[cfg(feature = "openapi")]
+pub(crate) use self::latest_trace::__path_latest_trace;
 pub(crate) use self::latest_trace::latest_trace;
+#[cfg(feature = "openapi")]
+pub(crate) use self::list_models::__path_list_models;
 pub(crate) use self::list_models::list_models;
+#[cfg(feature = "openapi")]
+pub(crate) use self::list_providers::__path_list_providers;
 pub(crate) use self::list_providers::list_providers;
+#[cfg(feature = "openapi")]
+pub(crate) use self::list_sessions::__path_list_sessions;
 pub(crate) use self::list_sessions::list_sessions;
+#[cfg(feature = "openapi")]
+pub(crate) use self::me::__path_me;
 pub(crate) use self::me::me;
+#[cfg(feature = "openapi")]
+pub(crate) use self::preview::__path_preview;
 pub(crate) use self::preview::preview;
+#[cfg(feature = "openapi")]
+pub(crate) use self::session_usage::__path_session_usage;
 pub(crate) use self::session_usage::session_usage;
+#[cfg(feature = "openapi")]
+pub(crate) use self::sign_in::__path_sign_in;
 pub(crate) use self::sign_in::sign_in;
+#[cfg(feature = "openapi")]
+pub(crate) use self::sign_out::__path_sign_out;
 pub(crate) use self::sign_out::sign_out;
+#[cfg(feature = "openapi")]
+pub(crate) use self::status::__path_status;
 pub(crate) use self::status::status;
+#[cfg(feature = "openapi")]
+pub(crate) use self::stream::__path_stream;
 pub(crate) use self::stream::stream;
+#[cfg(feature = "openapi")]
+pub(crate) use self::update_session::__path_update_session;
 pub(crate) use self::update_session::update_session;
 use crate::web::error::WebError;
 

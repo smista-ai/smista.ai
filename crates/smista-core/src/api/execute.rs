@@ -55,6 +55,7 @@ use crate::usage::Usage;
 
 /// Full input to executing, streaming, or previewing a task.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ExecuteRequest {
     /// What the user is asking for.
@@ -79,6 +80,7 @@ pub struct ExecuteRequest {
 
 /// The user's request: prompt text, optional command and explicit model.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct TaskInput {
     /// The prompt text.
@@ -95,9 +97,11 @@ pub struct TaskInput {
 
 /// Snapshot of the workspace a task runs against.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct Workspace {
     /// Absolute path to the workspace root.
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub root: PathBuf,
     /// Current git branch, if the workspace is a git repository.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -108,10 +112,12 @@ pub struct Workspace {
     #[ts(optional)]
     pub git_diff: Option<String>,
     /// Paths the user explicitly referenced.
+    #[cfg_attr(feature = "openapi", schema(value_type = Vec<String>))]
     pub referenced_paths: Vec<PathBuf>,
     /// The file the user is actively editing, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>, nullable = true))]
     pub active_file: Option<PathBuf>,
 }
 
@@ -122,6 +128,7 @@ pub struct Workspace {
 /// and `privacy` blocks are the canonical [`crate::policy`] types — the same
 /// vocabulary the router evaluates and the CLI loads from `config.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ExecutePolicy {
     /// Schema version of the policy snapshot.
@@ -140,6 +147,7 @@ pub struct ExecutePolicy {
 
 /// Client-side execution preferences.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct LocalPreferences {
     /// Apply edits automatically without confirmation.
@@ -154,6 +162,7 @@ pub struct LocalPreferences {
 
 /// A provider available to the request and the credential status of its models.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ProviderCredentialInfo {
     /// Provider identifier.
@@ -164,6 +173,7 @@ pub struct ProviderCredentialInfo {
 
 /// A model offered by a provider and whether its credential is available.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ProviderModelInfo {
     /// Model name.
@@ -180,6 +190,7 @@ pub struct ProviderModelInfo {
 /// History, memory and the assembled context are not part of this — the router
 /// owns them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct Attachments {
     /// Explicit `@path` files included with their content.
@@ -192,9 +203,11 @@ pub struct Attachments {
 
 /// A file the client attached, with a content hash and whether it is required.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ContextFile {
     /// Path of the file.
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub path: PathBuf,
     /// File content.
     pub content: String,
@@ -207,6 +220,7 @@ pub struct ContextFile {
 
 /// An instruction document the client attached as context.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ContextInstruction {
     /// Where the instruction came from, for example `SMISTA.md`.
@@ -222,6 +236,7 @@ pub struct ContextInstruction {
 /// continuation the client must act on before resuming the run with
 /// `/continue`, or a terminal [`Error`](Self::Error).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "status", rename_all = "snake_case")]
 #[ts(export)]
 pub enum TurnResponse {
@@ -266,6 +281,7 @@ pub enum TurnResponse {
 
 /// The payload of a [`completed`](TurnResponse::Completed) turn.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CompletedTurn {
     /// The assistant's reply.
@@ -284,6 +300,7 @@ pub struct CompletedTurn {
 
 /// A tool the client must execute on the user's machine.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ToolRequest {
     /// Identifier correlating this call with its later result.
@@ -291,6 +308,7 @@ pub struct ToolRequest {
     /// Name of the tool to invoke.
     pub name: String,
     /// Arguments for the tool, as a provider-agnostic JSON value.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object, nullable = true))]
     pub arguments: serde_json::Value,
     /// Whether the user must approve the call before it runs.
     pub requires_approval: ToolApproval,
@@ -301,6 +319,7 @@ pub struct ToolRequest {
 /// A tool denied by policy never reaches the client, so `deny` is not a value
 /// here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum ToolApproval {
@@ -316,6 +335,7 @@ pub enum ToolApproval {
 /// model under an `ask` privacy mode, or confirming a cost ceiling. The
 /// `detail` shape depends on `kind`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct PendingApproval {
     /// Identifier the approval decision refers to.
@@ -323,11 +343,13 @@ pub struct PendingApproval {
     /// What kind of decision is being asked for.
     pub kind: ApprovalKind,
     /// Machine-readable context for the decision; its shape depends on `kind`.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object, nullable = true))]
     pub detail: serde_json::Value,
 }
 
 /// The kind of a [`PendingApproval`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum ApprovalKind {
@@ -339,6 +361,7 @@ pub enum ApprovalKind {
 
 /// How a task was routed to a model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct RoutingOutcome {
     /// Detected task type that drove routing.
@@ -359,6 +382,7 @@ pub struct RoutingOutcome {
 
 /// What context the router included and excluded for a task.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ContextOutcome {
     /// Human-readable descriptions of included context.

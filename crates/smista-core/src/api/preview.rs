@@ -28,6 +28,7 @@ use crate::policy::{Classification, PermissionMode};
 
 /// The predicted routing of a task, without calling the model.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct PreviewResponse {
     /// Task type that would be detected.
@@ -56,13 +57,16 @@ pub struct PreviewResponse {
 ///
 /// `min` and `max` serialize as decimal strings to preserve monetary precision.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CostRange {
     /// Lower bound of the estimate, as a decimal string.
     #[ts(type = "string")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String, example = "0.0021"))]
     pub min: Decimal,
     /// Upper bound of the estimate, as a decimal string.
     #[ts(type = "string")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String, example = "0.0021"))]
     pub max: Decimal,
     /// ISO 4217 currency code for the bounds.
     pub currency: String,
@@ -70,6 +74,7 @@ pub struct CostRange {
 
 /// A permission the task requires and the mode that would apply.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct RequiredPermission {
     /// Name of the permission, for example `write_files`.
