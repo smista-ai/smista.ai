@@ -34,7 +34,8 @@ lives in `docs/`.
 ## Conventions
 
 - **Commits**: [Conventional Commits](https://conventionalcommits.org). Never
-  add a `Co-Authored-By` line.
+  add a `Co-Authored-By` line. Before any commit, run `just test` and
+  `just check_code` and only commit once both pass.
 - **Branches**: `feat/{issue_number}-{issue_name}` (e.g. `feat/1-scaffolding`).
 - **Issues**: when refining a task that belongs to a milestone, or creating an
   issue to implement a new feature, use the

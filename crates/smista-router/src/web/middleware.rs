@@ -19,11 +19,6 @@ mod log_requests;
 mod reject_query_credentials;
 
 pub(crate) use authenticate::authenticate;
-#[expect(
-    unused_imports,
-    reason = "read by provider-backed handlers landing in follow-up issues"
-)]
-pub(crate) use extract_provider_credentials::RequestCredentials;
-pub(crate) use extract_provider_credentials::extract_provider_credentials;
+pub(crate) use extract_provider_credentials::{RequestCredentials, extract_provider_credentials};
 pub(crate) use log_requests::log_requests;
 pub(crate) use reject_query_credentials::reject_query_credentials;

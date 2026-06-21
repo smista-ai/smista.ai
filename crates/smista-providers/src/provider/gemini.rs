@@ -2,6 +2,7 @@
 
 pub mod client;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -239,10 +240,13 @@ where
     async fn list_models(
         &self,
         authentication: &Authentication,
-    ) -> ProviderResult<Vec<ModelReference>> {
-        self.fetch_models(authentication)
-            .await
-            .map(|models| models.iter().map(ModelDescriptor::reference).collect())
+    ) -> ProviderResult<HashMap<ModelReference, ModelDescriptor>> {
+        self.fetch_models(authentication).await.map(|models| {
+            models
+                .into_iter()
+                .map(|descriptor| (descriptor.reference(), descriptor))
+                .collect()
+        })
     }
 }
 
@@ -459,8 +463,9 @@ mod tests {
             .await
             .expect("listing cannot fail");
 
-        let ids: Vec<&str> = listed.iter().map(|r| r.model.as_str()).collect();
-        assert_eq!(ids, vec!["gemini-2.5-pro", "gemini-2.5-flash"]);
+        let mut ids: Vec<&str> = listed.keys().map(|r| r.model.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec!["gemini-2.5-flash", "gemini-2.5-pro"]);
     }
 
     #[tokio::test]
