@@ -72,6 +72,10 @@ lives in `docs/`.
   indexes) must be reflected in both the migration at
   `crates/smista-storage/src/database/surreal/schema.rs` and the authoritative
   reference at `docs/technical/schema.md`; keep the two in sync.
+- **OpenAPI schema**: any change to `smista-core` or to anything under
+  `crates/smista-router/src/web/` must be followed by `just gen_openapi` to
+  regenerate `docs/api/openapi.json` from the Rust types; commit the regenerated
+  schema. CI runs `just check_openapi` and fails on drift.
 - **GitHub Actions**: must pass `zizmor`; pin actions by commit SHA and set
   `persist-credentials: false` on checkout.
 - **Tasks**: drive builds, checks, tests and publishing through the `just`

@@ -11,6 +11,9 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 description = "smista-router service: routing, orchestration and the HTTP API host."
 
+[features]
+openapi = ["dep:utoipa", "smista-core/openapi"]
+
 [dependencies]
 anyhow = { workspace = true }
 argon2 = { workspace = true, features = ["password-hash"] }
@@ -34,6 +37,7 @@ tower_governor = { workspace = true, features = ["axum", "tracing"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url = { workspace = true, features = ["serde"] }
+utoipa = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v7"] }
 
 [dev-dependencies]

@@ -30,6 +30,7 @@ use crate::usage::Usage;
 ///
 /// Serialized with an internally tagged `type` discriminator in snake_case.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
 pub enum TurnEvent {
@@ -58,6 +59,7 @@ pub enum TurnEvent {
         /// Name of the tool to invoke.
         name: String,
         /// Arguments for the tool, as a provider-agnostic JSON value.
+        #[cfg_attr(feature = "openapi", schema(value_type = Object, nullable = true))]
         arguments: serde_json::Value,
         /// Whether the user must approve the call before it runs.
         requires_approval: ToolApproval,

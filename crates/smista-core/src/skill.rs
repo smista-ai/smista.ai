@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 /// `name` and `description` come from the file's front matter; `instructions`
 /// is its Markdown body, which frames the model's behavior for the task.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct Skill {
     /// Machine-readable identifier used to resolve the skill by name.

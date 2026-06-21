@@ -36,6 +36,7 @@ use crate::error::{CoreError, ParseError};
 /// setting. Each variant serializes to its lowercase name. The default is
 /// [`Effort::Medium`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Effort {

@@ -32,6 +32,7 @@ use super::glob::compile_globs;
 /// assert_eq!(policy.local.mode(), PermissionMode::Allow);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct PrivacyPolicy {
     /// Paths treated as sensitive across all model classes.
@@ -82,6 +83,7 @@ impl PrivacyPolicy {
 /// unset: disclosing context to a remote provider requires approval unless
 /// explicitly allowed.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct RemotePrivacy {
     /// How sending context to remote providers is mediated, if set.
@@ -106,6 +108,7 @@ impl RemotePrivacy {
 /// The effective [`mode`](Self::mode) defaults to [`PermissionMode::Allow`] when
 /// unset: local models may receive context without prompting.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct LocalPrivacy {
     /// How sending context to local models is mediated, if set.

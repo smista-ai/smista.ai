@@ -39,6 +39,7 @@ use serde::{Deserialize, Serialize};
 /// persists but is a distinct serialization-first type; the router converts
 /// between the two when it persists or returns content.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct EncryptedPayload {
     /// Envelope schema version, so the format can evolve.
@@ -59,6 +60,7 @@ pub struct EncryptedPayload {
 /// client returns them in the `/continue` bundle after sealing the content of
 /// an `awaiting_encrypt` turn. Correlated by `record_id`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct SealedRecord {
     /// Identifier of the storage record the envelope belongs to.
@@ -73,6 +75,7 @@ pub struct SealedRecord {
 /// client returns them in the `/continue` bundle after opening the records of
 /// an `awaiting_decrypt` turn. Correlated by `record_id`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct PlainRecord {
     /// Identifier of the storage record the cleartext belongs to.

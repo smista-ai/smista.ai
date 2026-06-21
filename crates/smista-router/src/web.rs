@@ -22,6 +22,8 @@
 
 mod error;
 mod middleware;
+#[cfg(feature = "openapi")]
+mod openapi;
 mod routes;
 
 use std::net::SocketAddr;

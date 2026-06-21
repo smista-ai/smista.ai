@@ -27,6 +27,21 @@ use crate::web::routes::ApiResult;
 const API_KEY_HEADER: &str = "X-Smista-Api-Key";
 
 /// Handles `POST /api/v1/auth/sign-in`.
+#[cfg_attr(
+    feature = "openapi",
+    utoipa::path(
+        post,
+        path = "/api/v1/auth/sign-in",
+        operation_id = "signIn",
+        tag = "auth",
+        security(("apiKey" = [])),
+        responses(
+            (status = 200, description = "Session token issued", body = smista_core::api::SignInResponse),
+            (status = 401, description = "Missing or invalid API key", body = smista_core::api::ApiError),
+            (status = 500, description = "Internal server error", body = smista_core::api::ApiError)
+        )
+    )
+)]
 pub(crate) async fn sign_in(
     State(state): State<AppState>,
     headers: HeaderMap,

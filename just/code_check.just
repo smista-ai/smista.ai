@@ -51,3 +51,4 @@ check_code:
     just deny
     just check_sdk
     just typecheck_sdk
+    just check_openapi

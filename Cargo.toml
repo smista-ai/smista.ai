@@ -72,6 +72,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 ts-rs = "12"
 url = "2"
+utoipa = "5"
 uuid = "1"
 yaml_serde = "0.10"
 

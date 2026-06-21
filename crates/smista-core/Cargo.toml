@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 description = "Shared domain types, configuration, routing policy and trace structures for smista.ai."
 
 [features]
+openapi = ["dep:utoipa"]
 surrealdb = ["dep:surrealdb-types"]
 
 [dependencies]
@@ -26,4 +27,5 @@ surrealdb-types = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 ts-rs = { workspace = true, features = ["chrono-impl", "serde-json-impl", "uuid-impl"] }
+utoipa = { workspace = true, features = ["chrono", "preserve_order", "uuid"], optional = true }
 uuid = { workspace = true, features = ["serde", "v7"] }

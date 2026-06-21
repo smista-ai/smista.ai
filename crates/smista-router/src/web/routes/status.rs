@@ -15,6 +15,18 @@ use crate::web::routes::ApiResult;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Handles `GET /status`.
+#[cfg_attr(
+    feature = "openapi",
+    utoipa::path(
+        get,
+        path = "/status",
+        operation_id = "getStatus",
+        tag = "health",
+        responses(
+            (status = 200, description = "Router is up", body = smista_core::api::StatusResponse)
+        )
+    )
+)]
 pub(crate) async fn status() -> ApiResult<StatusResponse> {
     Ok((
         StatusCode::OK,

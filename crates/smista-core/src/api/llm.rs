@@ -51,6 +51,7 @@ use crate::model::{ModelDescriptor, Provider, ProviderDescriptor};
 
 /// Response to `GET /llm/providers`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ListProvidersResponse {
     /// Available providers.
@@ -59,6 +60,7 @@ pub struct ListProvidersResponse {
 
 /// Response to `GET /llm/models`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ListModelsResponse {
     /// Available models across providers.
@@ -78,6 +80,7 @@ pub struct ListModelsResponse {
 /// A provider left out of [`ListModelsResponse::models`] because its models
 /// could not be listed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct UnavailableProvider {
     /// The provider whose models could not be listed.

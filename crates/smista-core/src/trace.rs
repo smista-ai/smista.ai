@@ -37,6 +37,7 @@ use crate::model::Provider;
 /// **Provisional**: these variants are a placeholder until the private spec
 /// pins the trace taxonomy. Serialized as `snake_case`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
 #[cfg_attr(feature = "surrealdb", surreal(crate = "::surrealdb_types"))]
 #[cfg_attr(feature = "surrealdb", surreal(rename_all = "snake_case", untagged))]
@@ -64,6 +65,7 @@ pub enum TraceEventType {
 /// whose shape depends on `event_type`. The payload is opaque here while the
 /// trace vocabulary is still being designed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct TraceEvent {
     /// Kind of trace event.
@@ -81,6 +83,7 @@ pub struct TraceEvent {
     /// When the event occurred.
     pub created_at: DateTime<Utc>,
     /// Free-form event payload, as an opaque JSON value.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub payload: serde_json::Value,
 }
 
@@ -90,6 +93,7 @@ pub struct TraceEvent {
 /// [`TraceEvent`] is self-describing — it carries its own routing context — so
 /// the trace needs no top-level routing fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct Trace {
     /// Session the traced tasks belong to.

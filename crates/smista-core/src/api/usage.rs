@@ -33,6 +33,7 @@ use crate::usage::Usage;
 
 /// Response to `GET /sessions/{id}/usage`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct SessionUsageResponse {
     /// Session the usage belongs to.
@@ -43,6 +44,7 @@ pub struct SessionUsageResponse {
 
 /// A session's usage total and its per-model and per-task-type breakdowns.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct UsageBreakdown {
     /// Combined usage across the whole session.
@@ -55,6 +57,7 @@ pub struct UsageBreakdown {
 
 /// Usage attributed to a single model.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct ModelUsage {
     /// Provider that served the requests.
@@ -70,6 +73,7 @@ pub struct ModelUsage {
 
 /// Usage attributed to a single task type.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct TaskTypeUsage {
     /// Task type the requests were classified as.

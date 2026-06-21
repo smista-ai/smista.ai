@@ -195,6 +195,7 @@ pub struct ProviderError {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, thiserror::Error, ts_rs::TS,
 )]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 #[ts(rename_all = "snake_case")]

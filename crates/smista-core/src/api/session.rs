@@ -32,6 +32,7 @@ use crate::message::Message;
 
 /// Lightweight view of a session, used in listings and on creation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct SessionSummary {
     /// Unique session identifier.
@@ -53,6 +54,7 @@ pub struct SessionSummary {
 /// Carries the session's `messages` and free-form `metadata`. It omits
 /// `archived`, since archived sessions are not returned on fetch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct SessionDetail {
     /// Unique session identifier.
@@ -68,6 +70,7 @@ pub struct SessionDetail {
     /// The session's conversation history.
     pub messages: Vec<Message>,
     /// Free-form session metadata.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object, nullable = true))]
     pub metadata: serde_json::Value,
 }
 
@@ -79,6 +82,7 @@ pub struct SessionDetail {
 /// `key_id` must be absent. The pairing is validated by the router, not by this
 /// type. The choice is fixed for the life of the session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CreateSessionRequest {
     /// Title for the new session.
@@ -94,6 +98,7 @@ pub struct CreateSessionRequest {
 
 /// Response to `POST /sessions`, wrapping the created session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct CreateSessionResponse {
     /// The created session.
@@ -102,6 +107,7 @@ pub struct CreateSessionResponse {
 
 /// Response to `GET /sessions/{id}`, wrapping the full session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct GetSessionResponse {
     /// The fetched session.
@@ -112,6 +118,7 @@ pub struct GetSessionResponse {
 ///
 /// Each field is optional; omit a field to leave it unchanged.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct UpdateSessionRequest {
     /// New title, if changing it.
@@ -126,6 +133,7 @@ pub struct UpdateSessionRequest {
 
 /// Response to `DELETE /sessions/{id}`, confirming deletion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub struct DeleteSessionResponse {
     /// Whether the session was deleted.
