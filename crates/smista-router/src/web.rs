@@ -71,11 +71,7 @@ pub(crate) struct AppState {
         reason = "read by request handlers landing in follow-up issues (#133+)"
     )]
     pub(crate) database: SurrealDatabase,
-    #[expect(
-        dead_code,
-        reason = "read by request handlers landing in follow-up issues (#133+)"
-    )]
-    /// Router
+    /// The router, holding the providers requests are routed to.
     pub(crate) router: Arc<SmistaRouter>,
 }
 
