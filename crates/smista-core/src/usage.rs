@@ -28,43 +28,44 @@ const DEFAULT_CURRENCY: &str = "USD";
 /// Token usage and cost metadata for a single model invocation.
 ///
 /// All fields are optional and omitted from serialization when unset.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct Usage {
     /// Tokens in the input/prompt.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub input_tokens: Option<u64>,
     /// Tokens generated in the output.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub output_tokens: Option<u64>,
     /// Input tokens served from a provider cache.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub cached_tokens: Option<u64>,
     /// Tokens spent on reasoning, when reported separately.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub reasoning_tokens: Option<u64>,
     /// Total tokens, when the provider reports a combined count.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub total_tokens: Option<u64>,
     /// Cost estimated before the invocation, serialized as a decimal string.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional, type = "string")]
+    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
     #[cfg_attr(feature = "openapi", schema(value_type = String, example = "0.001"))]
     pub estimated_cost: Option<Decimal>,
     /// Cost reconciled after the invocation, serialized as a decimal string.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional, type = "string")]
+    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
     #[cfg_attr(feature = "openapi", schema(value_type = String, example = "0.001"))]
     pub actual_cost: Option<Decimal>,
     /// ISO 4217 currency code for the costs; defaults to `USD` when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub currency: Option<String>,
 }
 

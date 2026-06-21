@@ -25,9 +25,10 @@ use serde::{Deserialize, Serialize};
 use crate::trace::Trace;
 
 /// Envelope wrapping a [`Trace`] under a `trace` key.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct TraceResponse {
     /// The execution trace.
     pub trace: Trace,

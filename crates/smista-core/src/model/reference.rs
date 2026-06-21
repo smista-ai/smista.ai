@@ -33,9 +33,10 @@ use crate::error::{CoreError, ParseError};
 /// A reference to a specific model offered by a provider.
 ///
 /// The textual form is `provider/model`, e.g. `anthropic/claude-sonnet`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
-#[ts(export)]
-#[ts(type = "string")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[cfg_attr(feature = "ts", ts(type = "string"))]
 pub struct ModelReference {
     /// Provider that offers this model.
     pub provider: Provider,

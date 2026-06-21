@@ -28,13 +28,14 @@ use crate::model::Provider;
 /// The role an author plays in a conversation.
 ///
 /// Each variant serializes to its lowercase name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
 #[cfg_attr(feature = "surrealdb", surreal(crate = "::surrealdb_types"))]
 #[cfg_attr(feature = "surrealdb", surreal(rename_all = "lowercase", untagged))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum MessageRole {
     /// Instructions that frame the conversation.
     System,
@@ -51,9 +52,10 @@ pub enum MessageRole {
 /// `provider` and `model` identify which model produced an assistant turn; they
 /// are `None` for user, system and tool messages, and may be `None` for an
 /// assistant turn whose origin is unknown.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct Message {
     /// The role of the message's author.
     pub role: MessageRole,
@@ -61,11 +63,11 @@ pub struct Message {
     pub content: String,
     /// Provider that produced the message, if applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub provider: Option<Provider>,
     /// Model that produced the message, if applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub model: Option<String>,
 }
 

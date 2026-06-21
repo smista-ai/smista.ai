@@ -35,10 +35,11 @@ use crate::error::{CoreError, ParseError};
 /// Declared per routing rule and passed through to the model as its effort
 /// setting. Each variant serializes to its lowercase name. The default is
 /// [`Effort::Medium`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum Effort {
     /// Minimal reasoning effort; fastest and cheapest.
     Low,

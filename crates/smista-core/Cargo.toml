@@ -14,6 +14,7 @@ description = "Shared domain types, configuration, routing policy and trace stru
 [features]
 openapi = ["dep:utoipa"]
 surrealdb = ["dep:surrealdb-types"]
+ts = ["dep:ts-rs"]
 
 [dependencies]
 chrono = { workspace = true, features = ["serde"] }
@@ -26,6 +27,6 @@ serde_json = { workspace = true }
 surrealdb-types = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-ts-rs = { workspace = true, features = ["chrono-impl", "serde-json-impl", "uuid-impl"] }
+ts-rs = { workspace = true, features = ["chrono-impl", "serde-json-impl", "uuid-impl"], optional = true }
 utoipa = { workspace = true, features = ["chrono", "preserve_order", "uuid"], optional = true }
 uuid = { workspace = true, features = ["serde", "v7"] }

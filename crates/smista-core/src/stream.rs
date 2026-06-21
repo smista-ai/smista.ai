@@ -28,10 +28,11 @@ use crate::usage::Usage;
 /// A single event in a model's response stream.
 ///
 /// Serialized with an internally tagged `type` discriminator in snake_case.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum StreamEvent {
     /// An incremental chunk of generated text.
     TextDelta {

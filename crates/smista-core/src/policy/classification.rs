@@ -41,9 +41,10 @@ const DEFAULT_PRIORITY: u32 = 1000;
 /// assert_eq!(config.default_intent, TaskIntent::Chat);
 /// assert!(config.rules.is_empty());
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ClassificationConfig {
     /// Intent used when no rule matches.
     #[serde(default = "default_intent")]
@@ -82,9 +83,10 @@ pub struct ClassificationConfig {
 /// assert_eq!(rule.intent, TaskIntent::Review);
 /// assert_eq!(rule.priority, 10);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct ClassificationRule {
     /// Intent assigned when the rule matches.
     pub intent: TaskIntent,
@@ -108,9 +110,10 @@ pub struct ClassificationRule {
 /// intent, [`matched_rule`](Self::matched_rule) carries the index of the
 /// matching entry in [`ClassificationConfig::rules`] so traces can point back
 /// to the configured rule.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct Classification {
     /// The detected task intent.
     pub intent: TaskIntent,
@@ -122,21 +125,22 @@ pub struct Classification {
     ///
     /// Refers to a [`ClassificationRule`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub matched_rule: Option<usize>,
     /// Optional deterministic confidence category for an inferred intent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub confidence: Option<Confidence>,
 }
 
 /// Deterministic confidence category for an inferred intent.
 ///
 /// This is a coarse signal-strength label, not a probability.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum Confidence {
     /// Weak signal.
     Low,
@@ -147,10 +151,11 @@ pub enum Confidence {
 }
 
 /// Origin of the intent attached to a request.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum IntentSource {
     /// The user named the intent (for example via `--intent`).
     Explicit,

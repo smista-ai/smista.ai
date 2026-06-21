@@ -21,7 +21,7 @@ build_sdk: _generate_sdk_bindings sdk_build
 _generate_sdk_bindings:
   echo "Generating TypeScript bindings from Rust code..."
   rm -rf "{{SDK_DIR}}/src/bindings"
-  cargo test -p smista-core export_bindings
+  cargo test -p smista-core --features ts export_bindings
 
 # Clean build artifacts
 [group('build')]

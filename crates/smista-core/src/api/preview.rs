@@ -27,9 +27,10 @@ use crate::model::Provider;
 use crate::policy::{Classification, PermissionMode};
 
 /// The predicted routing of a task, without calling the model.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct PreviewResponse {
     /// Task type that would be detected.
     pub task_type: TaskIntent,
@@ -41,7 +42,7 @@ pub struct PreviewResponse {
     pub model: String,
     /// Description of the routing rule that would match, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub matched_rule: Option<String>,
     /// Human-readable descriptions of context that would be included.
     pub included_context: Vec<String>,
@@ -56,16 +57,17 @@ pub struct PreviewResponse {
 /// An estimated cost range in a given currency.
 ///
 /// `min` and `max` serialize as decimal strings to preserve monetary precision.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct CostRange {
     /// Lower bound of the estimate, as a decimal string.
-    #[ts(type = "string")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     #[cfg_attr(feature = "openapi", schema(value_type = String, example = "0.0021"))]
     pub min: Decimal,
     /// Upper bound of the estimate, as a decimal string.
-    #[ts(type = "string")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
     #[cfg_attr(feature = "openapi", schema(value_type = String, example = "0.0021"))]
     pub max: Decimal,
     /// ISO 4217 currency code for the bounds.
@@ -73,9 +75,10 @@ pub struct CostRange {
 }
 
 /// A permission the task requires and the mode that would apply.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct RequiredPermission {
     /// Name of the permission, for example `write_files`.
     pub permission: String,

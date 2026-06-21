@@ -20,9 +20,10 @@
 use serde::{Deserialize, Serialize};
 
 /// Body of a successful `GET /status` response.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct StatusResponse {
     /// Service liveness indicator; `"ok"` when the server answers.
     pub status: String,

@@ -21,13 +21,14 @@ use surrealdb_types::SurrealValue;
 /// The decision made on a pending approval.
 ///
 /// Each variant serializes to its lowercase name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
 #[cfg_attr(feature = "surrealdb", surreal(crate = "::surrealdb_types"))]
 #[cfg_attr(feature = "surrealdb", surreal(rename_all = "lowercase", untagged))]
 #[serde(rename_all = "lowercase")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum ApprovalDecision {
     /// The action is permitted to proceed.
     Approved,

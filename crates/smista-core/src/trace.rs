@@ -36,13 +36,14 @@ use crate::model::Provider;
 ///
 /// **Provisional**: these variants are a placeholder until the private spec
 /// pins the trace taxonomy. Serialized as `snake_case`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "surrealdb", derive(SurrealValue))]
 #[cfg_attr(feature = "surrealdb", surreal(crate = "::surrealdb_types"))]
 #[cfg_attr(feature = "surrealdb", surreal(rename_all = "snake_case", untagged))]
 #[serde(rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub enum TraceEventType {
     /// A message was recorded.
     Message,
@@ -64,9 +65,10 @@ pub enum TraceEventType {
 /// (`task_type`, `provider`, `model`, `matched_rule`) and a free-form `payload`
 /// whose shape depends on `event_type`. The payload is opaque here while the
 /// trace vocabulary is still being designed.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct TraceEvent {
     /// Kind of trace event.
     pub event_type: TraceEventType,
@@ -78,7 +80,7 @@ pub struct TraceEvent {
     pub model: String,
     /// Description of the routing rule that matched, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub matched_rule: Option<String>,
     /// When the event occurred.
     pub created_at: DateTime<Utc>,
@@ -92,9 +94,10 @@ pub struct TraceEvent {
 /// `events` holds the session's ordered execution events, oldest first. Each
 /// [`TraceEvent`] is self-describing — it carries its own routing context — so
 /// the trace needs no top-level routing fields.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[ts(export)]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct Trace {
     /// Session the traced tasks belong to.
     pub session_id: Uuid,
