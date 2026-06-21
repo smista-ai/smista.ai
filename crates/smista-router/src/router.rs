@@ -5,27 +5,29 @@
 //! resolves a model from one of them at execution time.
 
 mod build;
-
+mod fetch_models;
 mod memory_storage;
 #[cfg(test)]
 mod mock_provider;
 
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 
 use smista_core::model::{Provider as ProviderId, ProviderDescriptor};
 use smista_providers::provider::Provider;
 use smista_storage::database::surreal::SurrealDatabase;
 
+pub use self::fetch_models::FetchModelsResult;
 use crate::config::RouterConfig;
 
 /// The providers a router can route requests to, split by locality.
 #[derive(Default)]
 pub struct Router {
     /// Local providers to route requests to.
-    local: HashMap<ProviderId, Box<dyn Provider>>,
+    local: HashMap<ProviderId, Arc<dyn Provider>>,
     /// Remote providers to route requests to.
-    remote: HashMap<ProviderId, Box<dyn Provider>>,
+    remote: HashMap<ProviderId, Arc<dyn Provider>>,
 }
 
 impl fmt::Debug for Router {

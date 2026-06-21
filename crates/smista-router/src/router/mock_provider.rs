@@ -5,6 +5,7 @@
 //! call or an API key. [`Router::mock`](super::Router::mock) installs one local
 //! and one remote instance.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -122,8 +123,11 @@ impl Provider for MockProvider {
     async fn list_models(
         &self,
         _authentication: &Authentication,
-    ) -> ProviderResult<Vec<ModelReference>> {
-        Ok(vec![self.reference()])
+    ) -> ProviderResult<HashMap<ModelReference, ModelDescriptor>> {
+        Ok(vec![self.reference()]
+            .into_iter()
+            .map(|r| (r.clone(), self.descriptor_for(&r)))
+            .collect())
     }
 }
 

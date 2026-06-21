@@ -26,9 +26,12 @@ pub mod ollama;
 pub mod openai;
 pub mod openai_compat;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use smista_core::model::{ModelReference, Provider as ProviderId, ProviderDescriptor};
+use smista_core::model::{
+    ModelDescriptor, ModelReference, Provider as ProviderId, ProviderDescriptor,
+};
 
 use crate::ProviderResult;
 use crate::auth::Authentication;
@@ -117,5 +120,5 @@ pub trait Provider: Send + Sync {
     async fn list_models(
         &self,
         authentication: &Authentication,
-    ) -> ProviderResult<Vec<ModelReference>>;
+    ) -> ProviderResult<HashMap<ModelReference, ModelDescriptor>>;
 }

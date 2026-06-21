@@ -196,7 +196,7 @@ impl Router {
         provider_id: ProviderId,
         provider: Box<dyn Provider>,
     ) -> Self {
-        self.local.insert(provider_id, provider);
+        self.local.insert(provider_id, Arc::from(provider));
         self
     }
 
@@ -206,7 +206,7 @@ impl Router {
         provider_id: ProviderId,
         provider: Box<dyn Provider>,
     ) -> Self {
-        self.remote.insert(provider_id, provider);
+        self.remote.insert(provider_id, Arc::from(provider));
         self
     }
 }

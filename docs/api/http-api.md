@@ -762,6 +762,13 @@ strings:
 }
 ```
 
+The router lists every provider in parallel under a per-provider deadline, so a
+single slow provider cannot hold the response open: a provider that does not
+answer in time is reported under `unavailable` with `reason` `timeout`. The
+deadline defaults to 10 seconds; send the `X-Smista-Timeout-Ms` header to tune
+it, in milliseconds. A value above the 60-second cap is clamped down to it, and a
+missing, zero or non-numeric value falls back to the default.
+
 ## Usage
 
 ### Session usage

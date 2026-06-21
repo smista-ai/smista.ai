@@ -1,5 +1,6 @@
 //! OpenAI [`Provider`] implementation.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use smista_core::error::ProviderErrorCategory;
@@ -101,10 +102,10 @@ where
     async fn list_models(
         &self,
         _authentication: &Authentication,
-    ) -> ProviderResult<Vec<ModelReference>> {
+    ) -> ProviderResult<HashMap<ModelReference, ModelDescriptor>> {
         Ok(openai::catalog()
             .iter()
-            .map(ModelDescriptor::reference)
+            .map(|descriptor| (descriptor.reference(), descriptor.clone()))
             .collect())
     }
 }
@@ -222,14 +223,10 @@ mod tests {
             .await
             .expect("listing cannot fail");
 
-        assert_eq!(
-            listed,
-            vec![
-                openai::gpt_5_4().reference(),
-                openai::gpt_5_4_mini().reference(),
-                openai::gpt_5_5().reference(),
-            ]
-        );
+        assert_eq!(listed.len(), 3);
+        assert!(listed.contains_key(&openai::gpt_5_4().reference()));
+        assert!(listed.contains_key(&openai::gpt_5_4_mini().reference()));
+        assert!(listed.contains_key(&openai::gpt_5_5().reference()));
     }
 
     #[tokio::test]

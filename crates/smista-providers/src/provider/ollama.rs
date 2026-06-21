@@ -2,6 +2,7 @@
 
 pub mod client;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -247,10 +248,13 @@ where
     async fn list_models(
         &self,
         authentication: &Authentication,
-    ) -> ProviderResult<Vec<ModelReference>> {
-        self.fetch_models(authentication)
-            .await
-            .map(|models| models.into_iter().map(|m| m.reference()).collect())
+    ) -> ProviderResult<HashMap<ModelReference, ModelDescriptor>> {
+        self.fetch_models(authentication).await.map(|models| {
+            models
+                .into_iter()
+                .map(|descriptor| (descriptor.reference(), descriptor))
+                .collect()
+        })
     }
 }
 
@@ -476,7 +480,8 @@ mod tests {
             .await
             .expect("listing cannot fail");
 
-        let names: Vec<&str> = listed.iter().map(|r| r.model.as_str()).collect();
+        let mut names: Vec<&str> = listed.keys().map(|r| r.model.as_str()).collect();
+        names.sort_unstable();
         assert_eq!(names, vec!["llama3:8b", "qwen2.5-coder:7b"]);
     }
 

@@ -44,6 +44,11 @@ impl RequestCredentials {
         self.0.insert(provider, api_key);
     }
 
+    /// Returns the full map of provider credentials.
+    pub(crate) fn credentials(self) -> HashMap<Provider, SecretString> {
+        self.0
+    }
+
     /// Returns the API key the caller supplied for `provider`, if any.
     #[cfg_attr(
         not(test),

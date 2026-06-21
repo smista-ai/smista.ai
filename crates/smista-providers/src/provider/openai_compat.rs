@@ -173,8 +173,8 @@ where
     async fn list_models(
         &self,
         _authentication: &Authentication,
-    ) -> ProviderResult<Vec<ModelReference>> {
-        Ok(self.models.keys().cloned().collect())
+    ) -> ProviderResult<HashMap<ModelReference, ModelDescriptor>> {
+        Ok(self.models.clone())
     }
 }
 
@@ -369,7 +369,7 @@ mod tests {
             .list_models(&authentication())
             .await
             .expect("listing cannot fail")
-            .into_iter()
+            .into_keys()
             .map(|r| r.model)
             .collect();
         listed.sort();
