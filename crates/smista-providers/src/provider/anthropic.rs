@@ -169,6 +169,7 @@ where
         reference: &ModelReference,
         authentication: &Authentication,
         scope: MemoryScope,
+        preamble_segments: &[String],
     ) -> ProviderResult<Arc<dyn Model>> {
         let descriptor = self
             .fetch_models(authentication)
@@ -188,7 +189,14 @@ where
             })?;
 
         Ok(Arc::new(
-            AnthropicModel::new(self.args.clone(), authentication, descriptor, scope).await?,
+            AnthropicModel::new(
+                self.args.clone(),
+                authentication,
+                descriptor,
+                scope,
+                preamble_segments,
+            )
+            .await?,
         ))
     }
 
@@ -415,7 +423,10 @@ mod tests {
         };
 
         // `Arc<dyn Model>` is not `Debug`, so match rather than `expect_err`.
-        let Err(error) = provider.resolve(&unknown, &authentication(), scope()).await else {
+        let Err(error) = provider
+            .resolve(&unknown, &authentication(), scope(), &[])
+            .await
+        else {
             panic!("an unoffered model must not resolve");
         };
 
@@ -435,7 +446,7 @@ mod tests {
         };
 
         let Err(error) = provider
-            .resolve(&reference, &Authentication::None, scope())
+            .resolve(&reference, &Authentication::None, scope(), &[])
             .await
         else {
             panic!("a model must not resolve without an API key");

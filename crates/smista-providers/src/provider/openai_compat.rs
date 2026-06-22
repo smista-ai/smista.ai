@@ -145,6 +145,7 @@ where
         reference: &ModelReference,
         authentication: &Authentication,
         scope: MemoryScope,
+        preamble_segments: &[String],
     ) -> ProviderResult<Arc<dyn Model>> {
         let Some(descriptor) = self.models.get(reference).cloned() else {
             return Err(crate::error::provider_error(
@@ -165,6 +166,7 @@ where
                 authentication,
                 descriptor,
                 scope,
+                preamble_segments,
             )
             .await?,
         ))
@@ -383,7 +385,12 @@ mod tests {
 
         // `Arc<dyn Model>` is not `Debug`, so match rather than `expect_err`.
         let Err(error) = provider
-            .resolve(&reference("does-not-exist"), &authentication(), scope())
+            .resolve(
+                &reference("does-not-exist"),
+                &authentication(),
+                scope(),
+                &[],
+            )
             .await
         else {
             panic!("an unconfigured model must not resolve");
@@ -399,7 +406,7 @@ mod tests {
         let provider = provider_with(&["llama-3.1-70b"]);
 
         let resolved = provider
-            .resolve(&reference("llama-3.1-70b"), &authentication(), scope())
+            .resolve(&reference("llama-3.1-70b"), &authentication(), scope(), &[])
             .await;
 
         assert!(resolved.is_ok(), "a configured model must resolve");
@@ -410,7 +417,7 @@ mod tests {
         let provider = provider_with(&["llama-3.1-70b"]);
 
         let model = provider
-            .resolve(&reference("llama-3.1-70b"), &authentication(), scope())
+            .resolve(&reference("llama-3.1-70b"), &authentication(), scope(), &[])
             .await
             .expect("a configured model must resolve");
 

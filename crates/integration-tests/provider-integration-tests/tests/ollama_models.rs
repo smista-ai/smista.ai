@@ -89,6 +89,7 @@ async fn should_resolve_installed_model_and_run_complete_and_stream() {
                 user_id: Uuid::now_v7(),
                 session_id: Uuid::now_v7(),
             },
+            &[],
         )
         .await
         .expect("resolving the configured Ollama model must succeed");

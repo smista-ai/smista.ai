@@ -60,6 +60,13 @@ where
     pub descriptor: ModelDescriptor,
     /// A preamble to inject to give instructions to the agent about what it should do.
     pub preamble: String,
+    /// Extra preamble segments appended after the base preamble and the memory,
+    /// in order, each as its own block.
+    ///
+    /// The segments are opaque text: the agent never inspects them, so it stays
+    /// agnostic to whatever a caller renders into them (skills, instruction
+    /// documents, …). Empty when a turn adds nothing beyond base and memory.
+    pub preamble_segments: Vec<String>,
     /// The memory storage to use for the agent's memory operations.
     pub storage: Arc<S>,
     /// The user and session the agent's memory operations are scoped to.
@@ -97,6 +104,7 @@ where
             completion_model,
             descriptor,
             preamble,
+            preamble_segments,
             storage,
             scope,
         }: AgentArgs<C, S>,
@@ -125,16 +133,20 @@ where
             model.name = %model,
             "creating agent for {{model.provider}}/{{model.name}}"
         );
-        let builder = completion_model
+        let mut builder = completion_model
             .agent(model.clone())
             .preamble(&preamble)
             .tool(memory_tool);
         // `preamble` replaces the system prompt, so the memory preamble must be
         // appended rather than set or it would wipe the base preamble.
-        let builder = match memory_preamble {
-            Some(memories) => builder.append_preamble(&memories),
-            None => builder,
-        };
+        if let Some(memories) = memory_preamble {
+            builder = builder.append_preamble(&memories);
+        }
+        // Extra segments follow the memory, each appended as its own block so
+        // the final preamble order is base, then memory, then the segments.
+        for segment in &preamble_segments {
+            builder = builder.append_preamble(segment);
+        }
         let agent = builder.build();
 
         // snapshot the names of the tools the agent executes itself, so
@@ -1356,6 +1368,178 @@ mod tests {
                 Ok(StreamEvent::Done),
             ]
         );
+    }
+
+    /// Memory backend returning a fixed set of user memories and no session
+    /// memories, for asserting how the preamble is assembled.
+    struct StubStorage {
+        user: Vec<MemoryRecord>,
+    }
+
+    impl MemoryStorage for StubStorage {
+        type Error = std::convert::Infallible;
+
+        async fn put_user_memory(
+            &self,
+            _scope: MemoryScope,
+            _key: Option<String>,
+            _content: String,
+        ) -> Result<MemoryRecord, Self::Error> {
+            unreachable!("not exercised by these tests")
+        }
+
+        async fn forget_user_memory(
+            &self,
+            _scope: MemoryScope,
+            _handle: String,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn get_user_memories(
+            &self,
+            _scope: MemoryScope,
+            _limit: Option<usize>,
+        ) -> Result<Vec<MemoryRecord>, Self::Error> {
+            Ok(self.user.clone())
+        }
+
+        async fn get_user_memory_by_key(
+            &self,
+            _scope: MemoryScope,
+            _key: String,
+        ) -> Result<Option<MemoryRecord>, Self::Error> {
+            Ok(None)
+        }
+
+        async fn put_session_memory(
+            &self,
+            _scope: MemoryScope,
+            _key: Option<String>,
+            _content: String,
+        ) -> Result<MemoryRecord, Self::Error> {
+            unreachable!("not exercised by these tests")
+        }
+
+        async fn forget_session_memory(
+            &self,
+            _scope: MemoryScope,
+            _handle: String,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        async fn get_session_memories(
+            &self,
+            _scope: MemoryScope,
+            _limit: Option<usize>,
+        ) -> Result<Vec<MemoryRecord>, Self::Error> {
+            Ok(Vec::new())
+        }
+
+        async fn get_session_memory_by_key(
+            &self,
+            _scope: MemoryScope,
+            _key: String,
+        ) -> Result<Option<MemoryRecord>, Self::Error> {
+            Ok(None)
+        }
+    }
+
+    /// A descriptor for an OpenAI model with system-prompt support, enough to
+    /// build an agent offline.
+    fn descriptor() -> ModelDescriptor {
+        use smista_core::model::{ModelAuthRequirement, ModelCapabilities};
+
+        ModelDescriptor {
+            provider: Provider::OpenAI,
+            model: "gpt-test".to_string(),
+            display_name: None,
+            local: false,
+            auth: ModelAuthRequirement::ApiKey,
+            capabilities: ModelCapabilities {
+                streaming: true,
+                tools: true,
+                json_output: true,
+                system_prompt: true,
+                images: false,
+                reasoning: false,
+                memory: true,
+            },
+            max_context_tokens: 8_192,
+            max_output_tokens: Some(4_096),
+            input_cost_per_million_tokens: None,
+            output_cost_per_million_tokens: None,
+            default_parameters: ModelParameters::default(),
+            provider_options: None,
+        }
+    }
+
+    /// Builds an agent over an offline OpenAI client with the given base
+    /// preamble, stored user memories and extra segments, and returns the
+    /// resulting system prompt.
+    async fn assembled_preamble(
+        preamble: &str,
+        user: Vec<MemoryRecord>,
+        preamble_segments: Vec<String>,
+    ) -> String {
+        use rig_core::providers::openai::client::Client as OpenAIClient;
+        use uuid::Uuid;
+
+        let client = OpenAIClient::new("test-key").expect("client builds offline");
+        let agent = Agent::new(AgentArgs {
+            completion_model: client,
+            descriptor: descriptor(),
+            preamble: preamble.to_string(),
+            preamble_segments,
+            storage: Arc::new(StubStorage { user }),
+            scope: MemoryScope {
+                user_id: Uuid::now_v7(),
+                session_id: Uuid::now_v7(),
+            },
+        })
+        .await
+        .expect("agent builds");
+
+        agent.agent.preamble.expect("a preamble was set")
+    }
+
+    #[tokio::test]
+    async fn should_leave_preamble_unchanged_without_segments() {
+        let preamble = assembled_preamble("base", Vec::new(), Vec::new()).await;
+        assert_eq!(preamble, "base");
+    }
+
+    #[tokio::test]
+    async fn should_append_segments_in_order_each_as_its_own_block() {
+        let preamble = assembled_preamble(
+            "base",
+            Vec::new(),
+            vec!["first".to_string(), "second".to_string()],
+        )
+        .await;
+        assert_eq!(preamble, "base\nfirst\nsecond");
+    }
+
+    #[tokio::test]
+    async fn should_append_segments_after_the_memory() {
+        let memory = vec![MemoryRecord {
+            handle: "h1".to_string(),
+            key: None,
+            content: "MEMORY_SENTINEL".to_string(),
+        }];
+        let preamble = assembled_preamble(
+            "BASE_SENTINEL",
+            memory,
+            vec!["SEGMENT_SENTINEL".to_string()],
+        )
+        .await;
+
+        let base = preamble.find("BASE_SENTINEL").expect("base present");
+        let mem = preamble.find("MEMORY_SENTINEL").expect("memory present");
+        let segment = preamble.find("SEGMENT_SENTINEL").expect("segment present");
+        assert!(base < mem, "base must precede the memory");
+        assert!(mem < segment, "the memory must precede the segment");
     }
 
     #[tokio::test]

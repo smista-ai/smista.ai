@@ -215,6 +215,7 @@ where
         reference: &ModelReference,
         authentication: &Authentication,
         scope: MemoryScope,
+        preamble_segments: &[String],
     ) -> ProviderResult<Arc<dyn Model>> {
         let models = self.fetch_models(authentication).await?;
 
@@ -240,6 +241,7 @@ where
                 authentication,
                 descriptor,
                 scope,
+                preamble_segments,
             )
             .await?,
         ))
@@ -518,7 +520,10 @@ mod tests {
         };
 
         // `Arc<dyn Model>` is not `Debug`, so match rather than `expect_err`.
-        let Err(error) = provider.resolve(&unknown, &authentication(), scope()).await else {
+        let Err(error) = provider
+            .resolve(&unknown, &authentication(), scope(), &[])
+            .await
+        else {
             panic!("an uninstalled model must not resolve");
         };
 
@@ -540,7 +545,7 @@ mod tests {
         };
 
         let resolved = provider
-            .resolve(&reference, &authentication(), scope())
+            .resolve(&reference, &authentication(), scope(), &[])
             .await;
         assert!(resolved.is_ok(), "an installed model must resolve");
     }

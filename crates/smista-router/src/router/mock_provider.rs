@@ -113,6 +113,7 @@ impl Provider for MockProvider {
         reference: &ModelReference,
         _authentication: &Authentication,
         _scope: MemoryScope,
+        _preamble_segments: &[String],
     ) -> ProviderResult<Arc<dyn Model>> {
         Ok(Arc::new(MockModel {
             descriptor: self.descriptor_for(reference),

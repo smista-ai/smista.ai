@@ -72,8 +72,8 @@ pub trait Provider: Send + Sync {
     fn descriptor(&self) -> ProviderDescriptor;
 
     /// Resolves a reference into an executable model offered by this provider,
-    /// authenticating with the supplied [`Authentication`] and binding the
-    /// model's memory to `scope`.
+    /// authenticating with the supplied [`Authentication`], binding the model's
+    /// memory to `scope` and appending `preamble_segments` to its preamble.
     ///
     /// On success the returned `Arc<dyn Model>` is ready to serve completions
     /// and exposes the model's facts via [`Model::descriptor`]. The handle is
@@ -82,6 +82,13 @@ pub trait Provider: Send + Sync {
     /// the provider, so the same provider can resolve for different callers; the
     /// `scope` identifies the user and session whose memories the resolved model
     /// reads and writes.
+    ///
+    /// `preamble_segments` are extra blocks of text appended to the resolved
+    /// model's preamble after the base text and the memory, preserving order.
+    /// They are opaque to the provider — it neither inspects nor stores them, so
+    /// the layer stays agnostic to whatever a caller renders into them — and
+    /// they apply only to the model built by this call. Pass an empty slice to
+    /// leave the preamble at base plus memory.
     ///
     /// # Errors
     ///
@@ -100,6 +107,7 @@ pub trait Provider: Send + Sync {
         reference: &ModelReference,
         authentication: &Authentication,
         scope: MemoryScope,
+        preamble_segments: &[String],
     ) -> ProviderResult<Arc<dyn Model>>;
 
     /// Lists every model this provider currently offers, authenticating with the

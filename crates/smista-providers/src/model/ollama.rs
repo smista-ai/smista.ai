@@ -187,6 +187,10 @@ impl OllamaModel {
     /// headers — come from `authentication`. The preamble and memory backend
     /// come from `runtime`.
     ///
+    /// `preamble_segments` are appended to the model's preamble after the base
+    /// text and the memory, preserving order; pass an empty slice to add
+    /// nothing.
+    ///
     /// # Errors
     ///
     /// Returns a [`ProviderError`] if the underlying client cannot be built or
@@ -197,6 +201,7 @@ impl OllamaModel {
         authentication: &Authentication,
         descriptor: ModelDescriptor,
         scope: MemoryScope,
+        preamble_segments: &[String],
     ) -> Result<Self, ProviderError>
     where
         S: MemoryStorage + 'static,
@@ -257,6 +262,7 @@ impl OllamaModel {
             completion_model: client,
             descriptor: descriptor.clone(),
             preamble: runtime.preamble.clone(),
+            preamble_segments: preamble_segments.to_vec(),
             storage: Arc::clone(&runtime.storage),
             scope,
         })
