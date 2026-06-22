@@ -7,7 +7,7 @@ use surrealdb::types::RecordId;
 
 use super::*;
 use crate::api::Pagination;
-use crate::entity::{ToolCallStatus, TraceEventType};
+use crate::entity::{ApprovalKind, RunPhase, RunState, ToolCallStatus, TraceEventType};
 use crate::types::{ContentEnvelope, SecretContent};
 
 async fn memory_db() -> SurrealDatabase {
@@ -1790,5 +1790,183 @@ async fn should_purge_old_traces() {
             .expect("failed to get session")
             .is_some(),
         "session was purged by trace cleanup"
+    );
+}
+
+// -- Run state --------------------------------------------------------------
+
+fn run_state_for(session_id: Uuid, user_id: Uuid, phase: RunPhase) -> RunState {
+    RunState::new(session_id, user_id, Uuid::now_v7(), phase)
+}
+
+#[tokio::test]
+async fn should_set_and_get_run_state() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let state = run_state_for(
+        session_id,
+        user_id,
+        RunPhase::AwaitingApproval {
+            approval_id: "a1".to_string(),
+            kind: ApprovalKind::RemoteDisclosure,
+            detail: r#"{"provider":"anthropic"}"#.to_string(),
+        },
+    );
+    let stored = db
+        .set_run_state(user_id, state.clone())
+        .await
+        .expect("failed to set run state");
+    assert_eq!(stored, state);
+
+    let loaded = db
+        .get_run_state(user_id, session_id)
+        .await
+        .expect("failed to get run state");
+    assert_eq!(loaded, Some(state));
+}
+
+#[tokio::test]
+async fn should_overwrite_run_state_in_place() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    db.set_run_state(
+        user_id,
+        run_state_for(
+            session_id,
+            user_id,
+            RunPhase::Running {
+                turn: 0,
+                started_at: Utc::now(),
+            },
+        ),
+    )
+    .await
+    .expect("failed to set first run state");
+
+    db.set_run_state(
+        user_id,
+        run_state_for(session_id, user_id, RunPhase::AwaitingTool),
+    )
+    .await
+    .expect("failed to overwrite run state");
+
+    let loaded = db
+        .get_run_state(user_id, session_id)
+        .await
+        .expect("failed to get run state")
+        .expect("run state missing");
+    assert_eq!(loaded.phase, RunPhase::AwaitingTool);
+    assert_eq!(
+        count::<RunState>(&db).await,
+        1,
+        "run state was not overwritten in place"
+    );
+}
+
+#[tokio::test]
+async fn should_get_no_run_state_when_idle() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let loaded = db
+        .get_run_state(user_id, session_id)
+        .await
+        .expect("failed to get run state");
+    assert!(loaded.is_none(), "idle session reported a run state");
+}
+
+#[tokio::test]
+async fn should_not_get_run_state_of_other_user() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    db.set_run_state(
+        user_id,
+        run_state_for(session_id, user_id, RunPhase::AwaitingTool),
+    )
+    .await
+    .expect("failed to set run state");
+
+    let other = Uuid::now_v7();
+    let loaded = db
+        .get_run_state(other, session_id)
+        .await
+        .expect("failed to get run state");
+    assert!(loaded.is_none(), "run state disclosed to a non-owner");
+}
+
+#[tokio::test]
+async fn should_reject_set_run_state_for_unowned_session() {
+    let db = memory_db().await;
+    let (_user_id, session_id) = user_with_session(&db).await;
+
+    let intruder = Uuid::now_v7();
+    db.create_user(user(intruder))
+        .await
+        .expect("failed to create intruder");
+
+    let state = run_state_for(session_id, intruder, RunPhase::AwaitingTool);
+    let result = db.set_run_state(intruder, state).await;
+    assert!(
+        matches!(result, Err(StorageError::NotFound)),
+        "set run state for an unowned session"
+    );
+}
+
+#[tokio::test]
+async fn should_delete_run_state_on_session_delete() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    db.set_run_state(
+        user_id,
+        run_state_for(session_id, user_id, RunPhase::AwaitingTool),
+    )
+    .await
+    .expect("failed to set run state");
+
+    db.delete_session(user_id, session_id)
+        .await
+        .expect("failed to delete session");
+
+    assert_eq!(
+        count::<RunState>(&db).await,
+        0,
+        "run state survived session delete"
+    );
+}
+
+#[tokio::test]
+async fn should_purge_run_state_with_old_session() {
+    let db = memory_db().await;
+    let user_id = Uuid::now_v7();
+    db.create_user(user(user_id))
+        .await
+        .expect("failed to create user");
+
+    let old_id = Uuid::now_v7();
+    db.create_session(session_with(
+        old_id,
+        user_id,
+        Utc::now() - Duration::days(40),
+        None,
+    ))
+    .await
+    .expect("failed to create old session");
+    db.set_run_state(
+        user_id,
+        run_state_for(old_id, user_id, RunPhase::AwaitingTool),
+    )
+    .await
+    .expect("failed to set run state");
+
+    db.purge_old_sessions(30)
+        .await
+        .expect("failed to purge old sessions");
+
+    assert_eq!(
+        count::<RunState>(&db).await,
+        0,
+        "run state survived session purge"
     );
 }

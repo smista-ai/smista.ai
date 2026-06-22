@@ -711,9 +711,10 @@ where
         Ok(StreamedAssistantContent::ReasoningDelta { reasoning, .. }) => {
             Some(Ok(StreamEvent::ReasoningDelta { delta: reasoning }))
         }
-        Ok(StreamedAssistantContent::Final(raw)) => raw
-            .token_usage()
-            .map(|usage| Ok(StreamEvent::Usage(api_usage(usage, pricing)))),
+        Ok(StreamedAssistantContent::Final(raw)) => Some(Ok(StreamEvent::Usage(api_usage(
+            raw.token_usage(),
+            pricing,
+        )))),
         Err(error) => Some(Err(crate::error::provider_error(
             crate::error::category_from_completion(&error),
             provider,
@@ -1095,13 +1096,13 @@ mod tests {
     struct RawWithUsage;
 
     impl GetTokenUsage for RawWithUsage {
-        fn token_usage(&self) -> Option<RigUsage> {
-            Some(RigUsage {
+        fn token_usage(&self) -> RigUsage {
+            RigUsage {
                 input_tokens: 5,
                 output_tokens: 7,
                 total_tokens: 12,
                 ..RigUsage::new()
-            })
+            }
         }
     }
 

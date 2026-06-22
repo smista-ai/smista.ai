@@ -38,7 +38,7 @@ use uuid::Uuid;
 use crate::StorageResult;
 use crate::api::{MemoryRef, Pagination, SessionState};
 use crate::entity::{
-    AuthToken, ContextMemory, ContextMemoryContent, Session, SessionApproval,
+    AuthToken, ContextMemory, ContextMemoryContent, RunState, Session, SessionApproval,
     SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
     SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
     SessionToolCall, SessionToolCallContent, TraceEvent, TraceEventContent, User, UserMemory,
@@ -150,6 +150,30 @@ pub trait Database: Send + Sync {
         user_id: Uuid,
         id: Uuid,
     ) -> impl Future<Output = StorageResult<()>> + Send;
+
+    // -- Run state -----------------------------------------------------------
+
+    /// Sets the in-flight run state for a session, overwriting any existing row.
+    ///
+    /// The row is keyed by the session id, so each call replaces the session's
+    /// single run-state row in place; the stored row is returned. Fails with
+    /// [`StorageError::NotFound`](crate::StorageError::NotFound) when the session
+    /// is not owned by `user_id`.
+    fn set_run_state(
+        &self,
+        user_id: Uuid,
+        state: RunState,
+    ) -> impl Future<Output = StorageResult<RunState>> + Send;
+
+    /// Loads the in-flight run state for a session owned by `user_id`.
+    ///
+    /// Returns `None` when the session has no in-flight run, which is the idle
+    /// state. A row owned by a different user is treated as absent.
+    fn get_run_state(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<RunState>>> + Send;
 
     // -- Append --------------------------------------------------------------
 

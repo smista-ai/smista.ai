@@ -35,6 +35,7 @@ DEFINE TABLE IF NOT EXISTS session_plan_content SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS session_diff SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS session_diff_content SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS session_approval SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_run_state SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS trace_event SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS trace_event_content SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS user_memory SCHEMAFULL;
@@ -131,6 +132,15 @@ DEFINE FIELD IF NOT EXISTS decision ON TABLE session_approval TYPE string;
 DEFINE FIELD IF NOT EXISTS reason ON TABLE session_approval TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_approval TYPE datetime;
 
+-- session_run_state. Metadata-only: `phase` is the `RunPhase` enum, which the
+-- SurrealValue derive encodes as an externally-tagged object (every variant,
+-- including the payload-free ones), so it is typed `object FLEXIBLE`.
+DEFINE FIELD IF NOT EXISTS session ON TABLE session_run_state TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE session_run_state TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS run_id ON TABLE session_run_state TYPE string;
+DEFINE FIELD IF NOT EXISTS phase ON TABLE session_run_state TYPE object FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS updated_at ON TABLE session_run_state TYPE datetime;
+
 -- session_plan
 DEFINE FIELD IF NOT EXISTS session ON TABLE session_plan TYPE record<session> ASSERT record::exists($value);
 DEFINE FIELD IF NOT EXISTS user ON TABLE session_plan TYPE record<user> ASSERT record::exists($value);
@@ -203,6 +213,7 @@ DEFINE INDEX IF NOT EXISTS session_tool_call_session ON TABLE session_tool_call 
 DEFINE INDEX IF NOT EXISTS session_plan_session ON TABLE session_plan FIELDS session;
 DEFINE INDEX IF NOT EXISTS session_diff_session ON TABLE session_diff FIELDS session;
 DEFINE INDEX IF NOT EXISTS session_approval_session ON TABLE session_approval FIELDS session;
+DEFINE INDEX IF NOT EXISTS session_run_state_session ON TABLE session_run_state FIELDS session UNIQUE;
 DEFINE INDEX IF NOT EXISTS trace_event_session ON TABLE trace_event FIELDS session;
 
 -- Keyed-memory lookups. Not UNIQUE: keyless memories carry a NULL key and may

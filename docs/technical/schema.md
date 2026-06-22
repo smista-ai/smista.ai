@@ -15,6 +15,7 @@
     - [session\_tool\_call](#session_tool_call)
     - [session\_tool\_call\_content](#session_tool_call_content)
     - [session\_approval](#session_approval)
+    - [session\_run\_state](#session_run_state)
     - [session\_plan](#session_plan)
     - [session\_plan\_content](#session_plan_content)
     - [session\_diff](#session_diff)
@@ -122,6 +123,13 @@ erDiagram
         uuid user FK
         enum decision
     }
+    session_run_state {
+        uuid id PK
+        uuid session FK
+        uuid user FK
+        string run_id
+        enum phase
+    }
     session_plan {
         uuid id PK
         uuid session FK
@@ -164,6 +172,7 @@ erDiagram
     session ||--o{ session_context_reference : "records"
     session ||--o{ session_tool_call : "records"
     session ||--o{ session_approval : "records"
+    session ||--o| session_run_state : "tracks"
     session ||--o{ session_plan : "produces"
     session ||--o{ session_diff : "produces"
     session ||--o{ trace_event : "emits"
@@ -192,8 +201,8 @@ erDiagram
 ```
 
 Metadata-only entities (`user`, `auth_token`, `session`,
-`session_routing_decision`, `session_context_reference`, `session_approval`)
-stay single-table.
+`session_routing_decision`, `session_context_reference`, `session_approval`,
+`session_run_state`) stay single-table.
 
 Each encryptable payload field is typed `SecretContent` below. A `SecretContent`
 holds the value either in clear or sealed as a ciphertext envelope, and is stored
@@ -376,6 +385,33 @@ disclosure. Metadata-only.
 | `reason`      | string, option    | Why the decision was made.          |
 | `created_at`  | datetime          | When the decision was recorded.     |
 
+### session_run_state
+
+Persists the execution state machine of a session's in-flight run, so the router
+can pause between protocol turns and resume on the next request without holding
+the run in memory. A session has at most one in-flight run, so this row is keyed
+by the session id and there is at most one per session; a write replaces it in
+place. Metadata-only: the phase carries only references to rows already stored,
+never content, so the row is never encrypted. Reading no row means the run is
+idle. See [Execution protocol](./execution-protocol.md) for the run lifecycle.
+
+| Field        | Type              | Description                         |
+| ------------ | ----------------- | ----------------------------------- |
+| `id`         | UUIDv7            | Record id; the owning session's id. |
+| `session`    | session reference | Session the run belongs to.         |
+| `user`       | user reference    | Owner, enforced on every query.     |
+| `run_id`     | string            | Id of the in-flight run.            |
+| `phase`      | `RunPhase` enum   | The phase the run is paused in.     |
+| `updated_at` | datetime          | When the state was last written.    |
+
+`phase` is one of: `Idle` (nothing outstanding), `Running` (a turn is in
+flight), `AwaitingTool` (blocked on client-run tools, recovered from the
+`session_tool_call` rows still requested), `AwaitingApproval` (blocked on a
+yes/no decision with no tool), `AwaitingDecrypt` (blocked on one sealed record
+being opened) and `AwaitingEncrypt` (blocked on one record being sealed). Each
+`Awaiting*` variant carries only the references it needs, never content. The
+enum serializes to an object, so `phase` is stored as a flexible object.
+
 ### session_plan
 
 Records a generated or approved execution plan. The plan snapshot lives in
@@ -542,12 +578,15 @@ Indexes are declared on the **metadata** tables only:
   on `(session, key)` for `context_memory`, applied to keyed rows only. Keyless
   rows (`key` is null) stay unconstrained, so multiple keyless facts can coexist
   while a keyed fact can be upserted in place.
+- **One run state per session** — unique index on `session` for
+  `session_run_state`, enforcing the single in-flight run a session may have.
 
 ## Cascade and retention
 
 - Deleting a session cascades to all session-scoped rows and their `_content`
-  pairs, including `context_memory`. The cascade is explicit in `delete_session`,
-  not enforced by SurrealDB.
+  pairs, including `context_memory` and `session_run_state`. The cascade is
+  explicit in `delete_session`, not enforced by SurrealDB. The retention purges
+  clear the same rows for the sessions they remove.
 - `user_memory` survives session deletion and falls under user retention
   settings.
 - Expired and revoked `auth_token` rows are cleaned up over time.
