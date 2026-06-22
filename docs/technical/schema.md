@@ -460,23 +460,26 @@ Paired 1:1 with `trace_event` (same record id).
 The payload is a JSON object serialized to a string, then wrapped as a
 `SecretContent`. The shapes below describe that plaintext string; in an encrypted
 session it is sealed in the envelope and only the holder of the session key can
-read it. Its shape is determined
-by the owning event's `event_type` and mirrors the fields of the matching
-metadata entity. `?` marks an optional field; `int` is a JSON number and a
-monetary `cost` is a decimal string (never a float).
+read it. Each shape is tagged with a `type` field equal to the owning event's
+`event_type`, and carries the fields of the matching metadata entity. `?` marks
+an optional field; `int` is a JSON number and a monetary `cost` is a decimal
+string (never a float).
 
-| `event_type`        | `payload` shape                                                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `message`           | `{ "role": string, "provider": string, "model": string }`                                                                            |
-| `routing_decision`  | `{ "provider": string, "model": string, "matched_rule"?: string, "fallback_used"?: bool, "override_used"?: bool, "reason": string }` |
-| `context_selection` | `{ "path"?: string, "kind": string, "included": bool, "reason": string }`                                                            |
-| `tool_call`         | `{ "tool_name": string, "status": string, "arguments"?: string, "result"?: string, "error"?: string }`                               |
-| `approval`          | `{ "target_type": string, "target_id": string, "decision": string, "reason"?: string }`                                              |
-| `cost`              | `{ "provider": string, "model": string, "input_tokens": int, "output_tokens": int, "cost"?: string }`                                |
+| `event_type`        | `payload` shape                                                                                                                                                |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message`           | `{ "type": "message", "role": string, "provider": string, "model": string }`                                                                                   |
+| `classification`    | `{ "type": "classification", "intent": string, "source": string, "reason": string, "matched_rule"?: int, "confidence"?: string }`                              |
+| `routing_decision`  | `{ "type": "routing_decision", "provider": string, "model": string, "matched_rule"?: string, "fallback_used": bool, "override_used": bool, "reason": string }` |
+| `context_selection` | `{ "type": "context_selection", "path"?: string, "kind": string, "included": bool, "reason": string }`                                                         |
+| `tool_call`         | `{ "type": "tool_call", "tool_name": string, "status": string, "arguments"?: string, "result"?: string, "error"?: string }`                                    |
+| `approval`          | `{ "type": "approval", "target_type": string, "target_id": string, "decision": string, "reason"?: string }`                                                    |
+| `cost`              | `{ "type": "cost", "provider": string, "model": string, "input_tokens": int, "output_tokens": int, "cost"?: string }`                                          |
 
 On read, each event row (metadata + this payload) is mapped to one `TraceEvent`
-in the assembled `smista-core` `Trace`, where this payload becomes the event's
-`payload` field.
+in the assembled `smista-core` `Trace`. The event's `payload` is a
+`TraceEventPayload`: `plaintext` carries the parsed, tagged payload above for a
+normal session, while `encrypted` carries the sealed envelope for an end-to-end
+encrypted session, which only the client can open.
 
 ### user_memory
 

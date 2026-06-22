@@ -22,5 +22,6 @@ pub mod policy;
 pub mod secret;
 pub mod skill;
 pub mod stream;
+pub mod tool;
 pub mod trace;
 pub mod usage;

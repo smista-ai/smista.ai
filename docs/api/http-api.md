@@ -23,8 +23,7 @@
     - [Preview a route](#preview-a-route)
   - [Approvals](#approvals)
   - [Traces](#traces)
-    - [Latest trace](#latest-trace)
-    - [A trace by id](#a-trace-by-id)
+    - [Fetch a session's trace](#fetch-a-sessions-trace)
   - [Providers and models](#providers-and-models)
     - [List providers](#list-providers)
     - [List models](#list-models)
@@ -627,21 +626,41 @@ run**, such as disclosing context to a remote provider when
 ## Traces
 
 A trace is the ordered list of events emitted while the router routed and ran a
-session's tasks. Both endpoints return a trace wrapped under a `trace` key.
-`events` is ordered oldest first. Each event carries its own routing context
-(`task_type`, `provider`, `model`, optional `matched_rule`) and a `payload`
-whose shape depends on `event_type`. `event_type` is one of `message`,
-`routing_decision`, `context_selection`, `tool_call`, `approval` or `cost`; the
-per-type `payload` shapes are listed under `trace_event_content` in the
-[storage schema reference](../technical/schema.md).
+session's tasks. A session has a single trace; it grows as the session runs.
 
-### Latest trace
+### Fetch a session's trace
 
 ```http
-GET /api/v1/sessions/{session_id}/traces/latest
+GET /api/v1/sessions/{session_id}/traces
 ```
 
-Returns the most recent trace for the session:
+Returns the session's trace wrapped under a `trace` key. `events` is ordered
+oldest first. Each event carries its own routing context (`task_type`,
+`provider`, `model`, optional `matched_rule`) and a `payload`. `event_type` is
+one of `message`, `classification`, `routing_decision`, `context_selection`,
+`tool_call`, `approval` or `cost`.
+
+The `payload` is either `plaintext` or `encrypted`. For a normal session it is
+`{ "plaintext": <payload> }`, where `<payload>` is tagged by a `type` field
+equal to `event_type`; the per-type shapes are listed under
+`trace_event_content` in the [storage schema reference](../technical/schema.md).
+For an end-to-end encrypted session it is `{ "encrypted": <envelope> }`, the
+sealed AEAD envelope (`version`, `algorithm`, `key_id`, `nonce`, `ciphertext`)
+that only a client holding the session key can open.
+
+The events are paginated with two optional query parameters:
+
+| Parameter | Type    | Default | Description                         |
+| --------- | ------- | ------- | ----------------------------------- |
+| `limit`   | integer | `50`    | Maximum number of events to return. |
+| `offset`  | integer | `0`     | Number of leading events to skip.   |
+
+A session with no events in the requested window returns an empty `events`
+array; a `404` is reserved for a session that does not exist:
+
+```http
+GET /api/v1/sessions/{session_id}/traces?limit=50&offset=0
+```
 
 ```json
 {
@@ -655,7 +674,7 @@ Returns the most recent trace for the session:
         "model": "gpt-5.5-thinking",
         "matched_rule": "task.review -> openai/gpt-5.5-thinking",
         "created_at": "2026-06-04T10:15:00Z",
-        "payload": { "provider": "openai", "model": "gpt-5.5-thinking", "reason": "best for review" }
+        "payload": { "plaintext": { "type": "routing_decision", "provider": "openai", "model": "gpt-5.5-thinking", "fallback_used": false, "override_used": false, "reason": "best for review" } }
       },
       {
         "event_type": "tool_call",
@@ -663,21 +682,12 @@ Returns the most recent trace for the session:
         "provider": "openai",
         "model": "gpt-5.5-thinking",
         "created_at": "2026-06-04T10:15:02Z",
-        "payload": { "tool_name": "read_file", "status": "completed" }
+        "payload": { "plaintext": { "type": "tool_call", "tool_name": "read_file", "status": "completed" } }
       }
     ]
   }
 }
 ```
-
-### A trace by id
-
-```http
-GET /api/v1/sessions/{session_id}/traces/{trace_id}
-```
-
-Returns the trace with the given id. The response shape matches the latest-trace
-response above.
 
 ## Providers and models
 

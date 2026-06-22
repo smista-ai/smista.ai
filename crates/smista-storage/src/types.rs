@@ -85,6 +85,18 @@ impl From<ContentEnvelope> for SecretContent {
     }
 }
 
+impl From<ContentEnvelope> for smista_core::api::EncryptedPayload {
+    fn from(envelope: ContentEnvelope) -> Self {
+        Self {
+            version: envelope.version,
+            algorithm: envelope.algorithm,
+            key_id: envelope.key_id,
+            nonce: envelope.nonce,
+            ciphertext: envelope.ciphertext,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

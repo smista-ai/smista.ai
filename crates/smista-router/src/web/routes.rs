@@ -11,8 +11,7 @@ mod create_session;
 mod delete_session;
 mod execute;
 mod get_session;
-mod get_trace;
-mod latest_trace;
+mod get_traces;
 mod list_models;
 mod list_providers;
 mod list_sessions;
@@ -49,11 +48,8 @@ pub(crate) use self::execute::execute;
 pub(crate) use self::get_session::__path_get_session;
 pub(crate) use self::get_session::get_session;
 #[cfg(feature = "openapi")]
-pub(crate) use self::get_trace::__path_get_trace;
-pub(crate) use self::get_trace::get_trace;
-#[cfg(feature = "openapi")]
-pub(crate) use self::latest_trace::__path_latest_trace;
-pub(crate) use self::latest_trace::latest_trace;
+pub(crate) use self::get_traces::__path_get_traces;
+pub(crate) use self::get_traces::get_traces;
 #[cfg(feature = "openapi")]
 pub(crate) use self::list_models::__path_list_models;
 pub(crate) use self::list_models::list_models;

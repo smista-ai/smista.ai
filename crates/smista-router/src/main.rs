@@ -17,6 +17,7 @@ mod retention;
 mod router;
 mod signal;
 mod storage;
+mod trace;
 mod web;
 
 use std::time::Duration;

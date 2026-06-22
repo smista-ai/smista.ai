@@ -88,8 +88,7 @@ impl Modify for SecurityAddon {
         routes::continue_run,
         routes::stream,
         routes::preview,
-        routes::latest_trace,
-        routes::get_trace,
+        routes::get_traces,
         routes::session_usage
     )
 )]

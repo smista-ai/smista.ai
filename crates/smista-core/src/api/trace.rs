@@ -42,7 +42,9 @@ mod tests {
     use super::*;
     use crate::intent::TaskIntent;
     use crate::model::Provider;
-    use crate::trace::{TraceEvent, TraceEventType};
+    use crate::trace::{
+        Payload, RoutingDecisionPayload, TraceEvent, TraceEventPayload, TraceEventType,
+    };
 
     fn trace() -> Trace {
         Trace {
@@ -54,7 +56,16 @@ mod tests {
                 model: "claude-sonnet".to_string(),
                 matched_rule: Some("rule".to_string()),
                 created_at: Utc::now(),
-                payload: serde_json::json!({ "step": 1 }),
+                payload: TraceEventPayload::Plaintext(Payload::RoutingDecision(
+                    RoutingDecisionPayload {
+                        provider: Provider::Anthropic,
+                        model: "claude-sonnet".to_string(),
+                        matched_rule: Some("rule".to_string()),
+                        fallback_used: false,
+                        override_used: false,
+                        reason: "best for edit".to_string(),
+                    },
+                )),
             }],
         }
     }
