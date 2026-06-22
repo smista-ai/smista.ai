@@ -16,6 +16,7 @@ use smista_core::model::Provider;
 #[doc(inline)]
 pub use smista_core::trace::TraceEventType;
 use surrealdb::types::{RecordId, SurrealValue};
+use uuid::Uuid;
 
 use super::Table;
 use crate::types::SecretContent;
@@ -63,6 +64,15 @@ pub struct TraceEventContent {
     pub id: RecordId,
     /// Structured event payload, in clear or sealed for an encrypted session.
     pub payload: SecretContent,
+}
+
+impl TraceEventContent {
+    pub fn new(id: Uuid, payload: SecretContent) -> Self {
+        Self {
+            id: RecordId::new(Self::table(), id.to_string()),
+            payload,
+        }
+    }
 }
 
 impl Table for TraceEventContent {

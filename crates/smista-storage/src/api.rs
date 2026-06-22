@@ -7,6 +7,34 @@ use crate::entity::{
     SessionRoutingDecision, SessionToolCall,
 };
 
+/// A bounded window over an ordered list of rows.
+///
+/// `offset` rows are skipped, then at most `limit` rows are returned. Both are
+/// applied by the storage layer after ordering; the caller chooses the bounds
+/// (the web layer derives them from request query parameters, falling back to
+/// [`Pagination::default`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pagination {
+    /// Maximum number of rows to return.
+    pub limit: u64,
+    /// Number of leading rows to skip.
+    pub offset: u64,
+}
+
+impl Pagination {
+    /// Page size used when the caller does not request one.
+    pub const DEFAULT_LIMIT: u64 = 50;
+}
+
+impl Default for Pagination {
+    fn default() -> Self {
+        Self {
+            limit: Self::DEFAULT_LIMIT,
+            offset: 0,
+        }
+    }
+}
+
 /// Selects an existing memory row to update, either by its id or by its key.
 ///
 /// Keyed memory rows are unique per owner, so an update may target the key

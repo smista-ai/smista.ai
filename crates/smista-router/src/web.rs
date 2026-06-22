@@ -202,14 +202,7 @@ fn build_router(state: AppState) -> Router {
             "/sessions/{session_id}/continue",
             post(routes::continue_run),
         )
-        .route(
-            "/sessions/{session_id}/traces/latest",
-            get(routes::latest_trace),
-        )
-        .route(
-            "/sessions/{session_id}/traces/{trace_id}",
-            get(routes::get_trace),
-        )
+        .route("/sessions/{session_id}/traces", get(routes::get_traces))
         .route("/sessions/{session_id}/usage", get(routes::session_usage))
         .route("/llm/providers", get(routes::list_providers))
         .route("/llm/models", get(routes::list_models))

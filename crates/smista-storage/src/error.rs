@@ -27,4 +27,8 @@ pub enum StorageError {
     /// The requested record does not exist.
     #[error("record not found")]
     NotFound,
+
+    /// A stored payload could not be deserialized into its typed form.
+    #[error("serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
 }

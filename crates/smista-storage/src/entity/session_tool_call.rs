@@ -6,27 +6,12 @@
 //! for secrets before persistence.
 
 use chrono::{DateTime, Utc};
+#[doc(inline)]
+pub use smista_core::tool::ToolCallStatus;
 use surrealdb::types::{RecordId, SurrealValue};
 
 use super::Table;
 use crate::types::SecretContent;
-
-/// Execution status of a tool call.
-///
-/// **Provisional**: these variants are a placeholder until the private spec
-/// pins the tool-call lifecycle. Serialized as `snake_case`.
-#[derive(Debug, Clone, Copy, SurrealValue, PartialEq, Eq)]
-#[surreal(rename_all = "snake_case", untagged)]
-pub enum ToolCallStatus {
-    /// Requested, not yet started.
-    Pending,
-    /// Currently executing.
-    Running,
-    /// Finished successfully.
-    Completed,
-    /// Finished with an error.
-    Failed,
-}
 
 /// Records a tool request and its execution result.
 ///

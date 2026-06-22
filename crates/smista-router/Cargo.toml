@@ -25,6 +25,7 @@ rand = { workspace = true }
 rust_decimal = { workspace = true, features = ["serde-with-str"] }
 secrecy = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 sha-crypt = { workspace = true, features = ["alloc", "password-hash"] }
 smista-core = { workspace = true }
 smista-providers = { workspace = true }

@@ -2,9 +2,11 @@ use chrono::{Duration, Utc};
 use smista_core::intent::TaskIntent;
 use smista_core::message::MessageRole;
 use smista_core::model::Provider;
+use smista_core::trace::{Payload, RoutingDecisionPayload, TraceEventPayload};
 use surrealdb::types::RecordId;
 
 use super::*;
+use crate::api::Pagination;
 use crate::entity::{ToolCallStatus, TraceEventType};
 use crate::types::{ContentEnvelope, SecretContent};
 
@@ -336,7 +338,6 @@ fn routing_decision_for(id: Uuid, session_id: Uuid, user_id: Uuid) -> SessionRou
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn trace_event_for(
     id: Uuid,
     session_id: Uuid,
@@ -344,8 +345,15 @@ fn trace_event_for(
     provider: Provider,
     model: &str,
     created_at: chrono::DateTime<Utc>,
-    payload: &str,
 ) -> (TraceEvent, TraceEventContent) {
+    let payload = Payload::RoutingDecision(RoutingDecisionPayload {
+        provider: provider.clone(),
+        model: model.to_string(),
+        matched_rule: Some("edit -> model".to_string()),
+        fallback_used: false,
+        override_used: false,
+        reason: "test".to_string(),
+    });
     (
         TraceEvent {
             id: record_id::<TraceEvent, _>(id),
@@ -360,7 +368,9 @@ fn trace_event_for(
         },
         TraceEventContent {
             id: record_id::<TraceEventContent, _>(id),
-            payload: SecretContent::plaintext(payload),
+            payload: SecretContent::plaintext(
+                serde_json::to_string(&payload).expect("failed to serialize trace payload"),
+            ),
         },
     )
 }
@@ -761,7 +771,6 @@ async fn should_delete_session_and_cascade_children() {
         Provider::Anthropic,
         "claude",
         Utc::now(),
-        "{}",
     );
     db.append_trace_event(user_id, event, event_content)
         .await
@@ -978,7 +987,6 @@ async fn should_not_append_trace_event_with_forged_user() {
         Provider::OpenAI,
         "gpt",
         Utc::now(),
-        "{}",
     );
     let err = db
         .append_trace_event(owner, event, content)
@@ -1034,7 +1042,6 @@ async fn should_assemble_trace_from_session_events() {
         Provider::OpenAI,
         "gpt",
         Utc::now() - Duration::minutes(5),
-        "{\"step\":1}",
     );
     db.append_trace_event(user_id, first, first_content)
         .await
@@ -1047,14 +1054,13 @@ async fn should_assemble_trace_from_session_events() {
         Provider::Anthropic,
         "claude",
         Utc::now(),
-        "{\"step\":2}",
     );
     db.append_trace_event(user_id, second, second_content)
         .await
         .expect("failed to append second event");
 
     let trace = db
-        .get_session_trace_events(user_id, session_id)
+        .get_session_trace_events(user_id, session_id, Pagination::default())
         .await
         .expect("failed to load trace")
         .expect("trace not found");
@@ -1064,23 +1070,117 @@ async fn should_assemble_trace_from_session_events() {
     // Events are ordered oldest first; each carries its own routing context.
     assert_eq!(trace.events[0].provider, Provider::OpenAI);
     assert_eq!(trace.events[0].model, "gpt");
-    assert_eq!(trace.events[0].payload["step"], 1);
     assert_eq!(trace.events[1].provider, Provider::Anthropic);
     assert_eq!(trace.events[1].model, "claude");
-    assert_eq!(trace.events[1].payload["step"], 2);
+    // The plaintext payload reads back as its typed variant.
+    assert!(matches!(
+        trace.events[0].payload,
+        TraceEventPayload::Plaintext(Payload::RoutingDecision(_))
+    ));
 }
 
 #[tokio::test]
-async fn should_return_no_trace_without_events() {
+async fn should_paginate_session_trace_events() {
     let db = memory_db().await;
     let (user_id, session_id) = user_with_session(&db).await;
 
+    // Three events, one minute apart, so the oldest-first order is unambiguous.
+    // Each carries a distinct model so the page contents can be asserted.
+    for step in 0..3u32 {
+        let (event, content) = trace_event_for(
+            Uuid::now_v7(),
+            session_id,
+            user_id,
+            Provider::OpenAI,
+            &format!("gpt-{step}"),
+            Utc::now() - Duration::minutes(i64::from(3 - step)),
+        );
+        db.append_trace_event(user_id, event, content)
+            .await
+            .expect("failed to append event");
+    }
+
+    // First page: the two oldest events.
+    let first = db
+        .get_session_trace_events(
+            user_id,
+            session_id,
+            Pagination {
+                limit: 2,
+                offset: 0,
+            },
+        )
+        .await
+        .expect("failed to load first page")
+        .expect("trace not found");
+    assert_eq!(first.events.len(), 2);
+    assert_eq!(first.events[0].model, "gpt-0");
+    assert_eq!(first.events[1].model, "gpt-1");
+
+    // Second page: the remaining event.
+    let second = db
+        .get_session_trace_events(
+            user_id,
+            session_id,
+            Pagination {
+                limit: 2,
+                offset: 2,
+            },
+        )
+        .await
+        .expect("failed to load second page")
+        .expect("trace not found");
+    assert_eq!(second.events.len(), 1);
+    assert_eq!(second.events[0].model, "gpt-2");
+
+    // A page past the end resolves to an empty trace, not a missing one.
+    let empty = db
+        .get_session_trace_events(
+            user_id,
+            session_id,
+            Pagination {
+                limit: 2,
+                offset: 10,
+            },
+        )
+        .await
+        .expect("failed to load empty page")
+        .expect("trace not found");
+    assert!(empty.events.is_empty());
+}
+
+#[tokio::test]
+async fn should_return_empty_trace_without_events() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    // A session with no events resolves to an empty trace; `None` is reserved
+    // for a session that does not exist or is not owned by the caller.
+    let trace = db
+        .get_session_trace_events(user_id, session_id, Pagination::default())
+        .await
+        .expect("failed to load trace")
+        .expect("trace not found");
+    assert_eq!(trace.session_id, session_id);
+    assert!(trace.events.is_empty());
+}
+
+#[tokio::test]
+async fn should_return_no_trace_for_unowned_session() {
+    let db = memory_db().await;
+    let (_owner, session_id) = user_with_session(&db).await;
+
+    let other = Uuid::now_v7();
+    db.create_user(user(other))
+        .await
+        .expect("failed to create other user");
+
     assert!(
-        db.get_session_trace_events(user_id, session_id)
+        db.get_session_trace_events(other, session_id, Pagination::default())
             .await
             .expect("failed to load trace")
             .is_none(),
-        "trace assembled from no events"
+        "trace disclosed for a session owned by another user"
     );
 }
 
@@ -1654,7 +1754,6 @@ async fn should_purge_old_traces() {
         Provider::OpenAI,
         "gpt",
         Utc::now() - Duration::days(40),
-        "{}",
     );
     db.append_trace_event(user_id, old, old_content)
         .await
@@ -1667,7 +1766,6 @@ async fn should_purge_old_traces() {
         Provider::Anthropic,
         "claude",
         Utc::now(),
-        "{}",
     );
     db.append_trace_event(user_id, recent, recent_content)
         .await

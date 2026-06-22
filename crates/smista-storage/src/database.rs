@@ -36,7 +36,7 @@ use smista_core::trace::Trace;
 use uuid::Uuid;
 
 use crate::StorageResult;
-use crate::api::{MemoryRef, SessionState};
+use crate::api::{MemoryRef, Pagination, SessionState};
 use crate::entity::{
     AuthToken, ContextMemory, ContextMemoryContent, Session, SessionApproval,
     SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
@@ -223,6 +223,26 @@ pub trait Database: Send + Sync {
         content: TraceEventContent,
     ) -> impl Future<Output = StorageResult<TraceEvent>> + Send;
 
+    /// Overwrites the `_content` row identified by `id` with `content`.
+    ///
+    /// Content-bearing entities split their encryptable payload into a paired
+    /// `_content` row sharing the base record id (see [`crate::entity`]). The
+    /// end-to-end encryption protocol uses this to replace a payload in place
+    /// with its sealed form: `content` already carries the
+    /// [`SecretContent`](crate::types::SecretContent) field(s), in clear or
+    /// sealed, and storage just persists it without ever holding a key.
+    ///
+    /// Ownership is the caller's responsibility — the row is addressed directly
+    /// by id. Returns [`StorageError::NotFound`](crate::StorageError::NotFound)
+    /// if no such `_content` row exists.
+    fn seal_content<C>(
+        &self,
+        id: Uuid,
+        content: C,
+    ) -> impl Future<Output = StorageResult<()>> + Send
+    where
+        C: crate::entity::Table + surrealdb::types::SurrealValue + Send + 'static;
+
     // -- Reads ---------------------------------------------------------------
 
     /// Loads the full state of a session owned by `user_id`, or `None`.
@@ -235,16 +255,18 @@ pub trait Database: Send + Sync {
         id: Uuid,
     ) -> impl Future<Output = StorageResult<Option<SessionState>>> + Send;
 
-    /// Loads every trace event for a session owned by `user_id`, assembled into
-    /// a [`Trace`].
+    /// Loads a page of trace events for a session owned by `user_id`, assembled
+    /// into a [`Trace`].
     ///
-    /// Returns the [`Trace`] read view built from all of the session's trace
-    /// events, oldest first, or `None` if the session has no events or is not
-    /// owned by `user_id`.
+    /// Returns the [`Trace`] read view built from the session's trace events,
+    /// oldest first, windowed by `pagination`. A session that exists but has no
+    /// event in the requested window yields a [`Trace`] with no events; `None`
+    /// is returned only when the session is absent or not owned by `user_id`.
     fn get_session_trace_events(
         &self,
         user_id: Uuid,
         session_id: Uuid,
+        pagination: Pagination,
     ) -> impl Future<Output = StorageResult<Option<Trace>>> + Send;
 
     // -- User memory ---------------------------------------------------------

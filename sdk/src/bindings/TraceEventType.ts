@@ -6,4 +6,4 @@
  * **Provisional**: these variants are a placeholder until the private spec
  * pins the trace taxonomy. Serialized as `snake_case`.
  */
-export type TraceEventType = "message" | "routing_decision" | "context_selection" | "tool_call" | "approval" | "cost";
+export type TraceEventType = "message" | "classification" | "routing_decision" | "context_selection" | "tool_call" | "approval" | "cost";

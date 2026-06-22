@@ -17,7 +17,7 @@
 //! These rules hold for every entity; see `docs/technical/schema.md` for the
 //! authoritative reference.
 //!
-//! - **The record id is the id.** Each entity's [`surrealdb::types::RecordId`]
+//! - **The record id is the id.** Each entity's [`crate::surrealdb::RecordId`]
 //!   (`table:⟨key⟩`) *is* its identity — there is no separate id column. Keys are
 //!   UUIDv7 generated in Rust, so ids are portable and time-sortable.
 //! - **Metadata and content are physically separated.** Every entity carrying
@@ -31,7 +31,7 @@
 //!
 //! ## References, not foreign keys
 //!
-//! Relations are explicit [`surrealdb::types::RecordId`] references. SurrealDB
+//! Relations are explicit [`crate::surrealdb::RecordId`] references. SurrealDB
 //! does not enforce foreign keys, so a reference is just a record id — there is
 //! no automatic cascade. Deleting a session cascades to its rows explicitly in
 //! the storage operations, not in the database.
@@ -40,6 +40,7 @@ pub mod api;
 pub mod database;
 pub mod entity;
 mod error;
+pub mod surrealdb;
 #[cfg(test)]
 mod tests;
 pub mod types;
