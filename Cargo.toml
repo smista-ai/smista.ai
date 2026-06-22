@@ -46,7 +46,7 @@ password-hash = { version = "0.6", default-features = false }
 rand = "0.10"
 ratatui = "0.30"
 reqwest = "0.13"
-rig-core = "0.38"
+rig-core = "0.39"
 rust_decimal = { version = "1", default-features = false }
 secrecy = "0.10"
 serde = "1"

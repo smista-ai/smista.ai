@@ -21,7 +21,7 @@ pub use self::options::SurrealOptions;
 use crate::api::{MemoryRef, Pagination, SessionState};
 use crate::database::Database;
 use crate::entity::{
-    AuthToken, ContextMemory, ContextMemoryContent, Session, SessionApproval,
+    AuthToken, ContextMemory, ContextMemoryContent, RunState, Session, SessionApproval,
     SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
     SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
     SessionToolCall, SessionToolCallContent, Table, TraceEvent, TraceEventContent, User,
@@ -132,6 +132,7 @@ DELETE context_memory WHERE session = $sess;
 DELETE session_routing_decision WHERE session = $sess;
 DELETE session_context_reference WHERE session = $sess;
 DELETE session_approval WHERE session = $sess;
+DELETE session_run_state WHERE session = $sess;
 DELETE $sess;
 "#;
 
@@ -158,6 +159,7 @@ DELETE context_memory WHERE session IN $targets;
 DELETE session_routing_decision WHERE session IN $targets;
 DELETE session_context_reference WHERE session IN $targets;
 DELETE session_approval WHERE session IN $targets;
+DELETE session_run_state WHERE session IN $targets;
 DELETE session WHERE id IN $targets;
 "#;
 
@@ -557,6 +559,27 @@ impl Database for SurrealDatabase {
                 Err(err.into())
             }
         }
+    }
+
+    async fn set_run_state(&self, user_id: Uuid, state: RunState) -> StorageResult<RunState> {
+        tracing::debug!("setting run state for user {user_id}");
+        self.assert_write_owned(user_id, &state.session, &state.user)
+            .await?;
+
+        let id = state.id.clone();
+        let stored: Option<RunState> = self.0.upsert(id).content(state).await?;
+        stored.ok_or(StorageError::NotFound)
+    }
+
+    async fn get_run_state(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> StorageResult<Option<RunState>> {
+        tracing::debug!("getting run state for session {session_id}, user {user_id}");
+
+        let state: Option<RunState> = self.0.select(record_id::<RunState, _>(session_id)).await?;
+        Ok(state.filter(|state| state.user == record_id::<User, _>(user_id)))
     }
 
     async fn append_message(
