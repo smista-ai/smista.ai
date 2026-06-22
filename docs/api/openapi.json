@@ -1167,8 +1167,7 @@
         "description": "Local content the client supplies because the router has no filesystem.\n\nEvery file, instruction and skill the task may need from disk travels here.\nHistory, memory and the assembled context are not part of this — the router\nowns them.",
         "required": [
           "files",
-          "instructions",
-          "skills"
+          "instructions"
         ],
         "properties": {
           "files": {
@@ -1185,12 +1184,19 @@
             },
             "description": "Instruction documents the client read from disk."
           },
-          "skills": {
+          "invoked_skills": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Skill"
             },
-            "description": "Invoked skills, as name plus the `SKILL.md` body."
+            "description": "Skills the user explicitly invoked, with their full `SKILL.md` body.\n\nAuthoritative: routing rules may match on them by name, and their\ninstructions are added to the model preamble. The router never infers\nthis set from the prompt."
+          },
+          "available_skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Skill"
+            },
+            "description": "Skills offered for the serving model to activate by reading them.\n\nSame shape as the invoked skills, but distinct by role: they never\ninfluence routing, and the model decides whether to apply one. The full\ninstructions travel up front, so an activated skill needs no follow-up\nfetch."
           }
         }
       },
@@ -2953,24 +2959,19 @@
       },
       "Skill": {
         "type": "object",
-        "description": "A reusable execution profile defined by a `SKILL.md` file.\n\n`name` and `description` come from the file's front matter; `instructions`\nis its Markdown body, which frames the model's behavior for the task.",
+        "description": "A reusable execution profile defined by a `SKILL.md` file.\n\n[`name`](Self::name) comes from the file's front matter; [`content`](Self::content)\nis its Markdown body, which frames the model's behavior for the task. The\nsame type carries a skill whether it was explicitly invoked or merely offered\nfor the model to activate; the two cases differ by where the skill travels in\nthe request, not by shape.",
         "required": [
           "name",
-          "description",
-          "instructions"
+          "content"
         ],
         "properties": {
           "name": {
             "type": "string",
             "description": "Machine-readable identifier used to resolve the skill by name."
           },
-          "description": {
+          "content": {
             "type": "string",
-            "description": "Human-readable summary of what the skill does."
-          },
-          "instructions": {
-            "type": "string",
-            "description": "Behavioral instructions from the skill's Markdown body."
+            "description": "The `SKILL.md` body: the behavioral instructions for the model."
           }
         }
       },

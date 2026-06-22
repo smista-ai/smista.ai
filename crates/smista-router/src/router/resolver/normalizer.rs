@@ -42,12 +42,15 @@ use self::fuzzy::KeywordHit;
 /// Produced by [`TaskNormalizer::normalize`]. It bundles the canonical
 /// [`Classification`] (so the trace and the turn response keep the full intent
 /// provenance) with the two signals the routing policy matches on: the
-/// [relevant skills](Self::skills) and the [touched files](Self::touched_files).
+/// [invoked skills](Self::skills) and the [touched files](Self::touched_files).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizedTask {
     /// The deterministic classification outcome: intent plus provenance.
     pub classification: Classification,
-    /// Client-supplied skills judged relevant to this turn.
+    /// The skills the user explicitly invoked, passed through unchanged.
+    ///
+    /// Authoritative: routing matches on these by name. The router never infers
+    /// skill relevance from the prompt.
     pub skills: Vec<Skill>,
     /// File paths relevant to the task, matched against routing-rule path globs.
     pub touched_files: Vec<PathBuf>,
@@ -65,7 +68,7 @@ impl NormalizedTask {
     /// Conditions across fields are AND-combined; the path-glob list is
     /// OR-combined; absent conditions are ignored, so a rule with no conditions
     /// matches everything. A rule's [`skill`](RoutingRule::skill) matches when a
-    /// skill of that name is among the [relevant skills](Self::skills). Invalid
+    /// skill of that name is among the [invoked skills](Self::skills). Invalid
     /// path globs match nothing rather than panicking.
     #[must_use]
     pub fn matches(&self, rule: &RoutingRule) -> bool {
@@ -97,22 +100,23 @@ impl TaskNormalizer {
     /// Normalizes one turn into a [`NormalizedTask`].
     ///
     /// `input` carries the prompt and an optional explicit command; `workspace`
-    /// supplies the context kinds and touched files; `skills` are the attached
-    /// skills; `config` holds the classification rules and default intent. The
-    /// result is always defined — classification falls back to
+    /// supplies the context kinds and touched files; `invoked_skills` are the
+    /// skills the user explicitly invoked, carried through verbatim; `config`
+    /// holds the classification rules and default intent. The result is always
+    /// defined — classification falls back to
     /// [`ClassificationConfig::default_intent`] when no rule matches.
     #[must_use]
     pub fn normalize(
         &self,
         input: &TaskInput,
         workspace: &Workspace,
-        skills: &[Skill],
+        invoked_skills: &[Skill],
         config: &ClassificationConfig,
     ) -> NormalizedTask {
         let tokens = fuzzy::tokenize(&input.text);
         NormalizedTask {
             classification: self.classify(input, &tokens, workspace, config),
-            skills: signals::relevant_skills(skills, &tokens),
+            skills: invoked_skills.to_vec(),
             touched_files: signals::touched_files(workspace),
         }
     }
@@ -298,8 +302,7 @@ mod tests {
     fn skill(name: &str) -> Skill {
         Skill {
             name: name.to_string(),
-            description: format!("{name} skill"),
-            instructions: "do the thing".to_string(),
+            content: "do the thing".to_string(),
         }
     }
 
@@ -528,37 +531,15 @@ mod tests {
     }
 
     #[test]
-    fn should_select_skills_matching_a_prompt_token() {
+    fn should_carry_invoked_skills_through_verbatim() {
+        // The router does not infer relevance: whatever the user invoked is
+        // passed through unchanged, regardless of the prompt wording.
         let skills = vec![skill("changelog"), skill("security-review")];
-        let cfg = ClassificationConfig::default();
-
-        let task =
-            TaskNormalizer.normalize(&input("update the changelog"), &workspace(), &skills, &cfg);
-
-        assert_eq!(task.skills.len(), 1);
-        assert_eq!(task.skills[0].name, "changelog");
-    }
-
-    #[test]
-    fn should_select_hyphenated_skill_matching_prompt_words() {
-        let skills = vec![skill("security-review"), skill("changelog")];
-        let cfg = ClassificationConfig::default();
-
-        let task =
-            TaskNormalizer.normalize(&input("run a security review"), &workspace(), &skills, &cfg);
-
-        assert_eq!(task.skills.len(), 1);
-        assert_eq!(task.skills[0].name, "security-review");
-    }
-
-    #[test]
-    fn should_select_no_skills_when_none_are_named() {
-        let skills = vec![skill("changelog")];
         let cfg = ClassificationConfig::default();
 
         let task = TaskNormalizer.normalize(&input("fix the bug"), &workspace(), &skills, &cfg);
 
-        assert!(task.skills.is_empty());
+        assert_eq!(task.skills, skills);
     }
 
     fn routing_rule(value: serde_json::Value) -> RoutingRule {

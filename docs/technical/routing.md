@@ -35,7 +35,7 @@ builds it for every turn from the stage before it:
 | Field    | Built from                                                                                                                                   |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `intent` | The classified `TaskIntent` (or an explicit `input.command`).                                                                                |
-| `skill`  | The invoked skill the classifier marked relevant, if any.                                                                                    |
+| `skill`  | A skill the user explicitly invoked, if any (never inferred from the prompt).                                                                |
 | `paths`  | The candidate file paths relevant to the task: referenced paths, the active file, the `@path` attachments and paths touched by the git diff. |
 
 These are the same candidate paths the privacy stage classifies, so a rule's

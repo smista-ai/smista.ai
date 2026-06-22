@@ -66,11 +66,6 @@ pub(super) fn match_keyword(keywords: &[String], tokens: &[String]) -> Option<Ke
         })
 }
 
-/// Whether `needle` matches any of `tokens`, exactly or within typo tolerance.
-pub(super) fn token_matches(needle: &str, tokens: &[String]) -> bool {
-    token_match(needle, tokens).is_some()
-}
-
 /// Classifies how `needle` matches the closest of `tokens`, if at all.
 fn token_match(needle: &str, tokens: &[String]) -> Option<MatchKind> {
     let needle = needle.to_lowercase();

@@ -11,7 +11,7 @@
     - [Typo-tolerant keyword matching](#typo-tolerant-keyword-matching)
   - [The classification result](#the-classification-result)
   - [Classifying every turn](#classifying-every-turn)
-  - [Skill relevance](#skill-relevance)
+  - [Skills](#skills)
   - [In the HTTP API](#in-the-http-api)
   - [Worked examples](#worked-examples)
   - [Refinements](#refinements)
@@ -194,15 +194,23 @@ turn). Later inner turns have no new command, so they infer from the evolving
 state — unless the user injects a fresh command with
 [mid-run input](./execution-protocol.md#mid-run-input-and-aborting).
 
-## Skill relevance
+## Skills
 
-The router also decides **which of the client-supplied skills are
-relevant** to the task. This is deterministic too — a skill is relevant when its
-name or declared trigger matches the prompt and the classified intent — and the
-relevant skills feed both the [routing rules](../api/http-api.md#policy) (a rule
-may require a `skill`) and the assembled context. It is an output adjacent to the
-`Classification` and is not captured by that type today; see
-[Refinements](#refinements).
+The router never guesses which skills are relevant from the prompt. A skill is
+active for a turn in one of two ways, and the client tells the router which:
+
+- **Invoked skills** — the ones the user explicitly invoked. These are
+  authoritative: a [routing rule](../api/http-api.md#policy) may require a
+  `skill`, and it matches a rule when the invoked set contains a skill of that
+  name (an exact match, never an inferred one). Their instructions are added to
+  the model preamble.
+- **Available skills** — offered for the serving model to activate by reading
+  their content. These never influence routing; the model decides whether to
+  apply one.
+
+Both travel in the request (`invoked_skills` and `available_skills` under
+`attachments`). Classification stays purely about the [intent](#the-intents);
+skills are carried alongside it, not derived from the prompt.
 
 ## In the HTTP API
 
@@ -246,4 +254,6 @@ The doc reflects where the types are heading; these refinements are planned:
 - **Richer rule signals** — explicit slash command, prompt prefix, workflow
   state, skill or template invocation, beyond `keywords` and
   `requires_any_context`.
-- **Skill relevance** as a first-class, deterministic output of the stage.
+- **On-demand skill bodies** — today every available skill ships its full
+  content up front. A later refinement may send only metadata and fetch a body
+  when the model activates it.

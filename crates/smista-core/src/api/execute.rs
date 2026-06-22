@@ -205,8 +205,21 @@ pub struct Attachments {
     pub files: Vec<ContextFile>,
     /// Instruction documents the client read from disk.
     pub instructions: Vec<ContextInstruction>,
-    /// Invoked skills, as name plus the `SKILL.md` body.
-    pub skills: Vec<Skill>,
+    /// Skills the user explicitly invoked, with their full `SKILL.md` body.
+    ///
+    /// Authoritative: routing rules may match on them by name, and their
+    /// instructions are added to the model preamble. The router never infers
+    /// this set from the prompt.
+    #[serde(default)]
+    pub invoked_skills: Vec<Skill>,
+    /// Skills offered for the serving model to activate by reading them.
+    ///
+    /// Same shape as the invoked skills, but distinct by role: they never
+    /// influence routing, and the model decides whether to apply one. The full
+    /// instructions travel up front, so an activated skill needs no follow-up
+    /// fetch.
+    #[serde(default)]
+    pub available_skills: Vec<Skill>,
 }
 
 /// A file the client attached, with a content hash and whether it is required.
@@ -466,7 +479,8 @@ mod tests {
         "attachments": {
             "files": [ { "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true } ],
             "instructions": [ { "source": "SMISTA.md", "content": "..." } ],
-            "skills": []
+            "invoked_skills": [ { "name": "code-review", "content": "Report findings by severity." } ],
+            "available_skills": [ { "name": "changelog", "content": "Summarize changes under a heading." } ]
         }
     }"#;
 
@@ -506,7 +520,10 @@ mod tests {
         let file = &request.attachments.files[0];
         assert_eq!(file.path, PathBuf::from("src/auth/middleware.rs"));
         assert!(file.required);
-        assert!(request.attachments.skills.is_empty());
+        assert_eq!(request.attachments.invoked_skills.len(), 1);
+        assert_eq!(request.attachments.invoked_skills[0].name, "code-review");
+        assert_eq!(request.attachments.available_skills.len(), 1);
+        assert_eq!(request.attachments.available_skills[0].name, "changelog");
         assert_eq!(request.providers.len(), 2);
     }
 
