@@ -9,6 +9,7 @@ mod fetch_models;
 mod memory_storage;
 #[cfg(test)]
 mod mock_provider;
+mod resolver;
 
 use std::collections::HashMap;
 use std::fmt;
