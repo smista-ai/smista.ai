@@ -78,9 +78,10 @@ itself — the prompt, the local files and skills, and the policy:
 
 The router cannot read the filesystem, so every file, instruction and skill the
 task may need from disk is the client's to supply. Skills travel as `name` plus
-their `SKILL.md` content. The router never discovers a skill or infers which are
-relevant: a routing rule matches only the skills the user **explicitly invoked**,
-while **available** skills are offered for the model to activate.
+their `SKILL.md` content, and they do not influence routing. The router never
+discovers a skill or infers relevance: the **invoked** skills are added to the
+model preamble, while the **available** skills are offered for the model to
+activate.
 
 What the client does **not** send: session history, memory, or any assembled
 context. Those are the router's.

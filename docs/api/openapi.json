@@ -2713,7 +2713,7 @@
       },
       "RoutingRule": {
         "type": "object",
-        "description": "A single deterministic routing rule.\n\nA rule selects [`model`](Self::model) (with optional per-rule\n[`fallbacks`](Self::fallbacks)) when all of its present match conditions\nhold. Matching is LLM-free. The match conditions are flat and all optional:\n\n- [`intent`](Self::intent): the classified task intent.\n- [`skill`](Self::skill): the invoked skill name.\n- [`paths`](Self::paths): file-path globs; a rule with paths matches when a\n  relevant path matches any glob.\n\nA rule with no conditions matches everything (useful as a low-priority\ncatch-all). Rules are evaluated in ascending [`priority`](Self::priority)\norder; the first match wins.\n\nWhen [`local_only`](Self::local_only) is set, a matched rule must not fall\nback to remote models — its fallback chain is restricted to local models.\n\nA matched rule also declares the [`effort`](Self::effort) the model should\nspend on the task, defaulting to [`Effort::Medium`].\n\n# Examples\n\n```\nuse smista_core::effort::Effort;\nuse smista_core::policy::RoutingRule;\n\nlet rule: RoutingRule = serde_json::from_value(serde_json::json!({\n    \"name\": \"auth code uses Claude\",\n    \"priority\": 30,\n    \"effort\": \"high\",\n    \"intent\": \"edit\",\n    \"paths\": [\"src/auth/**\"],\n    \"model\": \"anthropic/claude-sonnet\",\n    \"fallbacks\": [\"openai/gpt-5.5-thinking\"],\n}))\n.unwrap();\nassert_eq!(rule.name, \"auth code uses Claude\");\nassert_eq!(rule.priority, 30);\nassert_eq!(rule.effort, Effort::High);\nassert_eq!(rule.model.model, \"claude-sonnet\");\nassert_eq!(rule.paths, vec![\"src/auth/**\".to_string()]);\n```",
+        "description": "A single deterministic routing rule.\n\nA rule selects [`model`](Self::model) (with optional per-rule\n[`fallbacks`](Self::fallbacks)) when all of its present match conditions\nhold. Matching is LLM-free. The match conditions are flat and all optional:\n\n- [`intent`](Self::intent): the classified task intent.\n- [`paths`](Self::paths): file-path globs; a rule with paths matches when a\n  relevant path matches any glob.\n\nA rule with no conditions matches everything (useful as a low-priority\ncatch-all). Rules are evaluated in ascending [`priority`](Self::priority)\norder; the first match wins.\n\nWhen [`local_only`](Self::local_only) is set, a matched rule must not fall\nback to remote models — its fallback chain is restricted to local models.\n\nA matched rule also declares the [`effort`](Self::effort) the model should\nspend on the task, defaulting to [`Effort::Medium`].\n\n# Examples\n\n```\nuse smista_core::effort::Effort;\nuse smista_core::policy::RoutingRule;\n\nlet rule: RoutingRule = serde_json::from_value(serde_json::json!({\n    \"name\": \"auth code uses Claude\",\n    \"priority\": 30,\n    \"effort\": \"high\",\n    \"intent\": \"edit\",\n    \"paths\": [\"src/auth/**\"],\n    \"model\": \"anthropic/claude-sonnet\",\n    \"fallbacks\": [\"openai/gpt-5.5-thinking\"],\n}))\n.unwrap();\nassert_eq!(rule.name, \"auth code uses Claude\");\nassert_eq!(rule.priority, 30);\nassert_eq!(rule.effort, Effort::High);\nassert_eq!(rule.model.model, \"claude-sonnet\");\nassert_eq!(rule.paths, vec![\"src/auth/**\".to_string()]);\n```",
         "required": [
           "name",
           "model"
@@ -2743,13 +2743,6 @@
                 "description": "Required task intent, if any."
               }
             ]
-          },
-          "skill": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Required skill name, if any."
           },
           "paths": {
             "type": "array",

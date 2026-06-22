@@ -23,19 +23,17 @@ validates and — if needed — falls back to a usable model. Like every routing
 decision it is **deterministic and never depends on an LLM**.
 
 This document follows the `smista-core` types: `RoutingPolicy`, `RoutingRule`,
-`RoutingContext`, `Specificity`, `DefaultRoute` (the `policy` module),
-`ModelReference`, `ModelDescriptor`, `ModelCapabilities`, `Provider`, `Effort`
-and `ToolsConfig`.
+`Specificity`, `DefaultRoute` (the `policy` module), `ModelReference`,
+`ModelDescriptor`, `ModelCapabilities`, `Provider`, `Effort` and `ToolsConfig`.
 
 ## The routing context
 
-A `RoutingContext` is the observable input a rule is matched against. The router
+The routing context is the observable input a rule is matched against. The router
 builds it for every turn from the stage before it:
 
 | Field    | Built from                                                                                                                                   |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `intent` | The classified `TaskIntent` (or an explicit `input.command`).                                                                                |
-| `skill`  | A skill the user explicitly invoked, if any (never inferred from the prompt).                                                                |
 | `paths`  | The candidate file paths relevant to the task: referenced paths, the active file, the `@path` attachments and paths touched by the git diff. |
 
 These are the same candidate paths the privacy stage classifies, so a rule's
@@ -55,10 +53,9 @@ present condition holds**:
 | Condition | Matches when                                         |
 | --------- | ---------------------------------------------------- |
 | `intent`  | it equals the context intent.                        |
-| `skill`   | it equals the invoked skill.                         |
 | `paths`   | **any** of its globs matches **any** candidate path. |
 
-That is AND across the three condition kinds, OR within the `paths` list — the
+That is AND across the condition kinds, OR within the `paths` list — the
 same shape the [classifier](./task-classification.md#rule-evaluation) uses. A
 rule with no conditions matches every request, which makes it a deliberate
 low-priority catch-all. An invalid path glob matches nothing rather than
@@ -75,10 +72,7 @@ Routing resolves to exactly one rule, in this order:
 2. **Priority.** Otherwise rules are evaluated in **ascending `priority`**
    (lower first; default `1000`).
 3. **Specificity.** Within equal priority, the **more specific** rule wins. The
-   ladder, most specific first: `skill+path+intent` > `skill+path` >
-   `path+intent` > `skill` > `path` > `intent` > none. A rule combining `skill`
-   with `intent` but no `path` collapses to the `skill` rung — there is no
-   dedicated skill+intent step.
+   ladder, most specific first: `path+intent` > `path` > `intent` > none.
 4. **Configuration order.** A remaining tie is broken by the order the rules
    appear in the config. Two rules with the same priority **and** the same
    specificity are rejected by configuration validation, so the order is always

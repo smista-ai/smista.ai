@@ -196,21 +196,19 @@ state — unless the user injects a fresh command with
 
 ## Skills
 
-The router never guesses which skills are relevant from the prompt. A skill is
-active for a turn in one of two ways, and the client tells the router which:
+The router never guesses which skills are relevant from the prompt, and skills
+do not influence routing. A skill is active for a turn in one of two ways, and
+the client tells the router which:
 
-- **Invoked skills** — the ones the user explicitly invoked. These are
-  authoritative: a [routing rule](../api/http-api.md#policy) may require a
-  `skill`, and it matches a rule when the invoked set contains a skill of that
-  name (an exact match, never an inferred one). Their instructions are added to
-  the model preamble.
+- **Invoked skills** — the ones the user explicitly invoked. Their instructions
+  are added to the model preamble, so the model applies them for sure.
 - **Available skills** — offered for the serving model to activate by reading
-  their content. These never influence routing; the model decides whether to
-  apply one.
+  their content. The model decides whether to apply one.
 
 Both travel in the request (`invoked_skills` and `available_skills` under
 `attachments`). Classification stays purely about the [intent](#the-intents);
-skills are carried alongside it, not derived from the prompt.
+skills are carried alongside it, not derived from the prompt and not part of the
+routing decision.
 
 ## In the HTTP API
 

@@ -16,10 +16,7 @@ const DEFAULT_PRIORITY: u32 = 1000;
 
 /// Match specificity of a routing rule, used as a precedence tie-breaker.
 ///
-/// Higher is more specific. The ladder is
-/// `skill+path+intent > skill+path > path+intent > skill > path > intent > default`.
-/// A rule combining `skill` with `intent` but no `path` collapses to
-/// [`Skill`](Self::Skill); there is no dedicated skill+intent rung.
+/// Higher is more specific. The ladder is `path+intent > path > intent > default`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Specificity {
     /// No match conditions.
@@ -28,14 +25,8 @@ pub enum Specificity {
     Intent = 1,
     /// Path only.
     Path = 2,
-    /// Skill (optionally with intent, no path).
-    Skill = 3,
     /// Path and intent.
-    PathIntent = 4,
-    /// Skill and path.
-    SkillPath = 5,
-    /// Skill, path and intent.
-    SkillPathIntent = 6,
+    PathIntent = 3,
 }
 
 /// A single deterministic routing rule.
@@ -45,7 +36,6 @@ pub enum Specificity {
 /// hold. Matching is LLM-free. The match conditions are flat and all optional:
 ///
 /// - [`intent`](Self::intent): the classified task intent.
-/// - [`skill`](Self::skill): the invoked skill name.
 /// - [`paths`](Self::paths): file-path globs; a rule with paths matches when a
 ///   relevant path matches any glob.
 ///
@@ -99,9 +89,6 @@ pub struct RoutingRule {
     /// Required task intent, if any.
     #[serde(default)]
     pub intent: Option<TaskIntent>,
-    /// Required skill name, if any.
-    #[serde(default)]
-    pub skill: Option<String>,
     /// File-path globs; when non-empty, a relevant path must match one of them.
     #[serde(default)]
     pub paths: Vec<String>,
@@ -157,15 +144,11 @@ impl RoutingRule {
     pub fn specificity(&self) -> Specificity {
         let intent = self.intent.is_some();
         let path = !self.paths.is_empty();
-        let skill = self.skill.is_some();
-        match (skill, path, intent) {
-            (true, true, true) => Specificity::SkillPathIntent,
-            (true, true, false) => Specificity::SkillPath,
-            (false, true, true) => Specificity::PathIntent,
-            (true, false, _) => Specificity::Skill,
-            (false, true, false) => Specificity::Path,
-            (false, false, true) => Specificity::Intent,
-            (false, false, false) => Specificity::Default,
+        match (path, intent) {
+            (true, true) => Specificity::PathIntent,
+            (true, false) => Specificity::Path,
+            (false, true) => Specificity::Intent,
+            (false, false) => Specificity::Default,
         }
     }
 }
@@ -242,7 +225,7 @@ mod tests {
     use super::*;
     use crate::policy::PermissionMode;
 
-    fn rule_with(intent: bool, skill: bool, path: bool) -> RoutingRule {
+    fn rule_with(intent: bool, path: bool) -> RoutingRule {
         let mut rule: RoutingRule = serde_json::from_value(serde_json::json!({
             "name": "t",
             "model": "ollama/llama3",
@@ -250,9 +233,6 @@ mod tests {
         .unwrap();
         if intent {
             rule.intent = Some(TaskIntent::Edit);
-        }
-        if skill {
-            rule.skill = Some("changelog".to_string());
         }
         if path {
             rule.paths = vec!["src/**".to_string()];
@@ -277,7 +257,6 @@ mod tests {
         assert_eq!(rule.priority, DEFAULT_PRIORITY);
         assert_eq!(rule.effort, Effort::Medium);
         assert!(rule.intent.is_none());
-        assert!(rule.skill.is_none());
         assert!(rule.paths.is_empty());
         assert!(!rule.local_only);
         assert!(rule.requires_capabilities.is_none());
@@ -287,16 +266,16 @@ mod tests {
     }
 
     #[test]
-    fn should_parse_skill_match_with_per_rule_fallbacks() {
+    fn should_parse_intent_match_with_per_rule_fallbacks() {
         let rule: RoutingRule = serde_json::from_value(serde_json::json!({
-            "name": "use local model for changelog skill",
+            "name": "summarize on a local model",
             "priority": 20,
-            "skill": "changelog",
+            "intent": "summarize",
             "model": "ollama/qwen2.5-coder",
             "fallbacks": ["openai/gpt-5.5-mini"],
         }))
         .unwrap();
-        assert_eq!(rule.skill.as_deref(), Some("changelog"));
+        assert_eq!(rule.intent, Some(TaskIntent::Summarize));
         assert_eq!(rule.model.to_string(), "ollama/qwen2.5-coder");
         assert_eq!(rule.fallbacks.len(), 1);
         assert_eq!(rule.fallbacks[0].to_string(), "openai/gpt-5.5-mini");
@@ -355,7 +334,6 @@ mod tests {
                 priority: 30,
                 effort: Effort::High,
                 intent: Some(TaskIntent::Edit),
-                skill: None,
                 paths: vec!["src/auth/**".to_string()],
                 local_only: false,
                 requires_capabilities: None,
@@ -378,9 +356,9 @@ mod tests {
 
     #[test]
     fn should_order_by_priority_then_specificity() {
-        let mut low_priority = rule_with(true, true, true);
+        let mut low_priority = rule_with(true, true);
         low_priority.priority = 100;
-        let mut high_priority = rule_with(true, false, false);
+        let mut high_priority = rule_with(true, false);
         high_priority.priority = 10;
 
         assert_eq!(
@@ -388,9 +366,9 @@ mod tests {
             Ordering::Less
         );
 
-        let mut a = rule_with(true, true, true);
+        let mut a = rule_with(true, true);
         a.priority = 10;
-        let mut b = rule_with(true, false, false);
+        let mut b = rule_with(true, false);
         b.priority = 10;
         assert_eq!(RoutingRule::precedence_cmp(&a, &b), Ordering::Less);
 
@@ -423,40 +401,12 @@ mod tests {
 
     #[test]
     fn should_rank_specificity_by_ladder() {
-        assert_eq!(
-            rule_with(false, false, false).specificity(),
-            Specificity::Default
-        );
-        assert_eq!(
-            rule_with(true, false, false).specificity(),
-            Specificity::Intent
-        );
-        assert_eq!(
-            rule_with(false, false, true).specificity(),
-            Specificity::Path
-        );
-        assert_eq!(
-            rule_with(false, true, false).specificity(),
-            Specificity::Skill
-        );
-        assert_eq!(
-            rule_with(true, false, true).specificity(),
-            Specificity::PathIntent
-        );
-        assert_eq!(
-            rule_with(false, true, true).specificity(),
-            Specificity::SkillPath
-        );
-        assert_eq!(
-            rule_with(true, true, true).specificity(),
-            Specificity::SkillPathIntent
-        );
-        assert_eq!(
-            rule_with(true, true, false).specificity(),
-            Specificity::Skill
-        );
-        assert!(Specificity::SkillPathIntent > Specificity::SkillPath);
-        assert!(Specificity::PathIntent > Specificity::Skill);
+        assert_eq!(rule_with(false, false).specificity(), Specificity::Default);
+        assert_eq!(rule_with(true, false).specificity(), Specificity::Intent);
+        assert_eq!(rule_with(false, true).specificity(), Specificity::Path);
+        assert_eq!(rule_with(true, true).specificity(), Specificity::PathIntent);
+        assert!(Specificity::PathIntent > Specificity::Path);
         assert!(Specificity::Path > Specificity::Intent);
+        assert!(Specificity::Intent > Specificity::Default);
     }
 }
