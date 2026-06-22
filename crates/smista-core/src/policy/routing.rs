@@ -1,11 +1,8 @@
 //! Deterministic routing rules and the routing policy.
 
-use std::path::PathBuf;
-
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use super::glob::compile_globs;
 use crate::effort::Effort;
 use crate::intent::TaskIntent;
 use crate::model::{ModelCapabilities, ModelReference};
@@ -141,74 +138,7 @@ pub struct RoutingRule {
     pub cost_limit: Option<Decimal>,
 }
 
-/// The observable inputs a [`RoutingRule`] is matched against.
-///
-/// Built by the router from the classified task. Matching is LLM-free.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct RoutingContext {
-    /// The classified task intent, if known.
-    pub intent: Option<TaskIntent>,
-    /// The invoked skill name, if any.
-    pub skill: Option<String>,
-    /// Candidate file paths relevant to the task.
-    pub paths: Vec<PathBuf>,
-}
-
 impl RoutingRule {
-    /// Returns `true` when every present condition holds for `ctx`.
-    ///
-    /// Conditions across fields are AND-combined; lists within a field (paths)
-    /// are OR-combined; absent conditions are ignored. A rule with no
-    /// conditions matches everything. Invalid path globs match nothing here
-    /// rather than panicking.
-    #[must_use]
-    pub fn matches(&self, ctx: &RoutingContext) -> bool {
-        if let Some(intent) = self.intent
-            && ctx.intent != Some(intent)
-        {
-            tracing::debug!(
-                rule.name = %self.name,
-                rule.intent = %intent,
-                "rule {{rule.name}} does not match: intent mismatch"
-            );
-            return false;
-        }
-        if let Some(skill) = &self.skill
-            && ctx.skill.as_deref() != Some(skill.as_str())
-        {
-            tracing::debug!(
-                rule.name = %self.name,
-                rule.skill = %skill,
-                "rule {{rule.name}} does not match: skill mismatch"
-            );
-            return false;
-        }
-        if !self.paths.is_empty() {
-            let set = compile_globs(&self.paths).unwrap_or_else(|source| {
-                tracing::warn!(
-                    rule.name = %self.name,
-                    error.message = %source,
-                    "rule {{rule.name}} has invalid path globs; treating as no match"
-                );
-                globset::GlobSet::empty()
-            });
-            tracing::trace!(
-                rule.name = %self.name,
-                rule.paths = self.paths.len(),
-                "matching {{rule.paths}} path globs for rule {{rule.name}}"
-            );
-            if !ctx.paths.iter().any(|path| set.is_match(path)) {
-                tracing::debug!(
-                    rule.name = %self.name,
-                    "rule {{rule.name}} does not match: no path matched"
-                );
-                return false;
-            }
-        }
-        tracing::debug!(rule.name = %self.name, "rule {{rule.name}} matches context");
-        true
-    }
-
     /// Orders two rules by routing precedence: lower [`priority`](Self::priority)
     /// first, then higher [`Specificity`](Self::specificity) first.
     ///
@@ -305,7 +235,6 @@ pub struct DefaultRoute {
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     use rust_decimal::Decimal;
@@ -445,44 +374,6 @@ mod tests {
             serde_json::from_str::<RoutingPolicy>(&json).unwrap(),
             policy
         );
-    }
-
-    #[test]
-    fn should_match_empty_rule_against_anything() {
-        let rule = rule_with(false, false, false);
-        let ctx = RoutingContext {
-            intent: Some(TaskIntent::Chat),
-            skill: Some("x".to_string()),
-            paths: vec![PathBuf::from("a/b")],
-        };
-        assert!(rule.matches(&ctx));
-    }
-
-    #[test]
-    fn should_match_when_all_present_conditions_hold() {
-        let mut rule = rule_with(true, false, true);
-        rule.skill = None;
-
-        let hit = RoutingContext {
-            intent: Some(TaskIntent::Edit),
-            skill: None,
-            paths: vec![PathBuf::from("src/auth/login.rs")],
-        };
-        assert!(rule.matches(&hit));
-
-        let wrong_intent = RoutingContext {
-            intent: Some(TaskIntent::Review),
-            skill: None,
-            paths: vec![PathBuf::from("src/auth/login.rs")],
-        };
-        assert!(!rule.matches(&wrong_intent));
-
-        let no_path = RoutingContext {
-            intent: Some(TaskIntent::Edit),
-            skill: None,
-            paths: vec![PathBuf::from("docs/readme.md")],
-        };
-        assert!(!rule.matches(&no_path));
     }
 
     #[test]

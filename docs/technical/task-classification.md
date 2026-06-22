@@ -8,6 +8,7 @@
     - [Explicit override](#explicit-override)
     - [Rule evaluation](#rule-evaluation)
     - [Confidence](#confidence)
+    - [Typo-tolerant keyword matching](#typo-tolerant-keyword-matching)
   - [The classification result](#the-classification-result)
   - [Classifying every turn](#classifying-every-turn)
   - [Skill relevance](#skill-relevance)
@@ -132,6 +133,37 @@ match was, so the same inputs always produce the same label:
 Confidence never gates the decision — the matched intent is used regardless. It
 is a diagnostic the trace and `/preview` surface so a user can see how firm the
 inference was.
+
+### Typo-tolerant keyword matching
+
+Keyword matching is **token-based and typo-tolerant**, not a raw substring scan.
+The prompt is split into lowercase alphanumeric tokens, and each keyword is
+compared to each token using **Optimal String Alignment (OSA)** edit distance —
+the transposition-aware variant, so the common `impelment`/`implement` swap is a
+single edit. An exact token match is the fast path; only when no token matches
+exactly does a keyword fall through to a fuzzy comparison.
+
+The tolerance is a **static, length-bucketed** edit-distance cap — never
+user-configurable — so the feature stays invisible and fully deterministic (no
+model, and the same prompt always classifies the same way). The buckets follow
+Meilisearch's stricter model, because the keyword set is small and a false
+positive mis-routes a turn:
+
+| Keyword length | Maximum OSA distance |
+| -------------- | -------------------- |
+| < 5            | 0 (exact only)       |
+| 5–8            | 1                    |
+| >= 9           | 2                    |
+
+The cap never exceeds two edits. Short keywords such as `edit`, `plan` and
+`chat` require an exact match, which avoids collisions like `edit` matching
+`audit`. A keyword wholly contained in a longer token (or the reverse) is taken
+to be a different word rather than a typo, so `review` does not match `preview`.
+
+A keyword matched through a typo is a weaker signal than an exact hit, so when a
+rule matches **only** through a fuzzy keyword its [confidence](#confidence) is
+capped at `medium`, even when matching both condition kinds would otherwise make
+it `high`.
 
 ## The classification result
 

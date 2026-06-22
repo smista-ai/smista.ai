@@ -18,5 +18,5 @@ pub use classification::{
 };
 pub use permission::PermissionMode;
 pub use privacy::{LocalPrivacy, PrivacyPolicy, RemotePrivacy};
-pub use routing::{DefaultRoute, RoutingContext, RoutingPolicy, RoutingRule, Specificity};
+pub use routing::{DefaultRoute, RoutingPolicy, RoutingRule, Specificity};
 pub use tools::ToolsConfig;
