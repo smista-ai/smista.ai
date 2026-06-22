@@ -152,6 +152,10 @@ impl OpenAICompatModel {
     /// preamble and memory backend come from `runtime`, and the model's stable
     /// identity is derived from `descriptor`.
     ///
+    /// `preamble_segments` are appended to the model's preamble after the base
+    /// text and the memory, preserving order; pass an empty slice to add
+    /// nothing.
+    ///
     /// # Errors
     ///
     /// Returns a [`smista_core::error::ProviderError`] if the underlying client
@@ -162,6 +166,7 @@ impl OpenAICompatModel {
         authentication: &Authentication,
         descriptor: ModelDescriptor,
         scope: MemoryScope,
+        preamble_segments: &[String],
     ) -> ProviderResult<Self>
     where
         S: MemoryStorage + 'static,
@@ -187,6 +192,7 @@ impl OpenAICompatModel {
             completion_model: client,
             descriptor: descriptor.clone(),
             preamble: runtime.preamble.clone(),
+            preamble_segments: preamble_segments.to_vec(),
             storage: Arc::clone(&runtime.storage),
             scope,
         })

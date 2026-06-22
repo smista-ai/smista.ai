@@ -91,6 +91,10 @@ impl OpenAIModel {
     /// Creates a new OpenAI model from the given arguments and descriptor,
     /// authenticating with the supplied [`Authentication`].
     ///
+    /// `preamble_segments` are appended to the model's preamble after the base
+    /// text and the memory, preserving order; pass an empty slice to add
+    /// nothing.
+    ///
     /// # Errors
     ///
     /// Returns a [`ProviderError`] with category
@@ -102,6 +106,7 @@ impl OpenAIModel {
         authentication: &Authentication,
         descriptor: ModelDescriptor,
         scope: MemoryScope,
+        preamble_segments: &[String],
     ) -> Result<Self, ProviderError>
     where
         S: MemoryStorage + 'static,
@@ -123,6 +128,7 @@ impl OpenAIModel {
             completion_model: client,
             descriptor: descriptor.clone(),
             preamble,
+            preamble_segments: preamble_segments.to_vec(),
             storage,
             scope,
         })

@@ -161,6 +161,7 @@ mod tests {
             _reference: &ModelReference,
             _authentication: &Authentication,
             _scope: MemoryScope,
+            _preamble_segments: &[String],
         ) -> ProviderResult<Arc<dyn Model>> {
             Err(self.error(ProviderErrorCategory::Unknown, "resolve is unused"))
         }

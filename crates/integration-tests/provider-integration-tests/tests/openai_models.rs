@@ -73,6 +73,7 @@ async fn should_resolve_gpt_5_4_mini_and_run_complete_and_stream() {
                 user_id: Uuid::now_v7(),
                 session_id: Uuid::now_v7(),
             },
+            &[],
         )
         .await
         .expect("resolving the GPT-5.4-mini reference must succeed");

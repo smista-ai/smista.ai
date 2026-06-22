@@ -83,6 +83,7 @@ async fn should_resolve_gemini_2_5_flash_and_run_complete_and_stream() {
                 user_id: Uuid::now_v7(),
                 session_id: Uuid::now_v7(),
             },
+            &[],
         )
         .await
         .expect("resolving the Gemini 2.5 Flash reference must succeed");
