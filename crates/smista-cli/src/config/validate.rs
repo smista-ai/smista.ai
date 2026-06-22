@@ -6,27 +6,19 @@ mod references;
 mod report;
 mod routing;
 mod secrets;
-mod skills;
 
 pub use report::{Severity, ValidationCode, ValidationError, ValidationReport};
 
+use crate::config::Config;
 use crate::config::layers::ConfigLayer;
-use crate::config::{Config, SkillStore};
 
 /// Validates the merged configuration and its originating layer stack.
 ///
-/// `skills` is the source of truth for resolving routing-rule `skill`
-/// references. Collects every finding in one pass. Errors block; warnings are
-/// advisory.
+/// Collects every finding in one pass. Errors block; warnings are advisory.
 #[must_use]
-pub fn validate(
-    merged: &Config,
-    layers: &[(ConfigLayer, Config)],
-    skills: &SkillStore,
-) -> ValidationReport {
+pub fn validate(merged: &Config, layers: &[(ConfigLayer, Config)]) -> ValidationReport {
     tracing::debug!(
         validation.layer_count = layers.len(),
-        validation.skill_count = skills.len(),
         "validating merged configuration"
     );
     let mut report = ValidationReport::default();
@@ -37,8 +29,6 @@ pub fn validate(
     routing::check_routing_structure(merged, &mut report);
     tracing::trace!("checking routing rule ambiguity");
     routing::check_rule_ambiguity(merged, &mut report);
-    tracing::trace!("checking skill references");
-    skills::check_skills(merged, skills, &mut report);
     tracing::trace!("checking glob patterns");
     globs::check_globs(merged, &mut report);
     tracing::trace!("checking inline secrets");
@@ -67,8 +57,7 @@ mod tests {
         )
         .unwrap();
         let layers = vec![(ConfigLayer::Project, merged.clone())];
-        let skills = SkillStore::from_names(["changelog"]);
-        let report = validate(&merged, &layers, &skills);
+        let report = validate(&merged, &layers);
         assert!(
             report.is_ok(),
             "fixture should validate clean: {:?}",
@@ -89,8 +78,7 @@ mod tests {
         )
         .unwrap();
         let layers = vec![(ConfigLayer::Project, merged.clone())];
-        let skills = SkillStore::default();
-        let report = validate(&merged, &layers, &skills);
+        let report = validate(&merged, &layers);
         assert!(!report.is_ok());
         assert!(report.errors().len() >= 2);
     }

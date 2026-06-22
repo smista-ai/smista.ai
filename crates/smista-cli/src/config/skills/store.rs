@@ -231,28 +231,6 @@ impl SkillStore {
 }
 
 #[cfg(test)]
-impl SkillStore {
-    /// Builds a store whose only knowledge is the given skill names.
-    ///
-    /// For tests that validate references against a known name set; the entries
-    /// carry no descriptor path, so [`Self::load`] is not meaningful on them.
-    pub(crate) fn from_names<I, S>(names: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        let skills = names
-            .into_iter()
-            .map(|name| (name.into(), SkillEntry::new(PathBuf::new(), String::new())))
-            .collect();
-        Self {
-            skills,
-            warnings: Vec::new(),
-        }
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
 

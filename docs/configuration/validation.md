@@ -4,7 +4,6 @@
   - [CLI / policy configuration (`config.toml`)](#cli--policy-configuration-configtoml)
     - [Specificity](#specificity)
     - [Unsafe overrides and permission widening](#unsafe-overrides-and-permission-widening)
-    - [Skill references](#skill-references)
   - [Model selection (checked at run time)](#model-selection-checked-at-run-time)
   - [Router configuration (`router.toml`)](#router-configuration-routertoml)
     - [Example: correcting a zero timeout](#example-correcting-a-zero-timeout)
@@ -31,7 +30,6 @@ from your global, project, and local preference layers.
 | **Missing default route** — no `[routing.default]` table is present                                                                                                          | Error    | Add `[routing.default]` with a `model` field                                                                                           |
 | **Invalid fallback** — a rule lists its own `model` as a fallback, or lists the same fallback model more than once                                                           | Error    | Remove the self-reference or duplicate from `fallbacks`                                                                                |
 | **Ambiguous rules** — two overlapping rules share the same `priority` value and the same specificity score, making their relative order undefined                            | Error    | Give them distinct `priority` values or make their match conditions mutually exclusive                                                 |
-| **Unknown skill** — a routing rule's `skill` does not match any discovered skill                                                                                             | Error    | Create a skill with that name, or correct the rule's `skill`                                                                           |
 | **Unsafe override** — a local or runtime preference layer sets `privacy.remote.mode` to a value less strict than the merged config-layer floor                               | Error    | Do not weaken the configured privacy mode in a preference layer                                                                        |
 | **Permission widening** — a local or runtime preference layer sets a tool permission (`file_read`, `file_write`, `shell`, etc.) to a less strict value than the config floor | Error    | Keep the configured stricter permission; preference layers may only tighten, never loosen                                              |
 | **Inline secret** — a provider `api_key` is a literal string instead of a `${secret:NAME}` reference                                                                         | Error    | Replace the literal with `api_key = "${secret:NAME}"` and store the value in your `.smista/secrets` file or as an environment variable |
@@ -40,10 +38,9 @@ from your global, project, and local preference layers.
 
 Two overlapping rules are considered ambiguous when they share both a
 `priority` value and the same number of constrained match dimensions (intent,
-skill, path list, `local_only`). Rules with mutually exclusive match conditions,
-such as different explicit intents or different explicit skills, are not
-ambiguous. Give one overlapping rule a lower priority number to resolve the
-ambiguity:
+path list, `local_only`). Rules with mutually exclusive match conditions, such
+as different explicit intents, are not ambiguous. Give one overlapping rule a
+lower priority number to resolve the ambiguity:
 
 ```toml
 [[routing.rules]]
@@ -83,12 +80,6 @@ mode = "allow" # error: unsafe override
 [tools.permissions]
 shell = "allow" # error: permission widening
 ```
-
-### Skill references
-
-A rule's `skill` must name a skill smista has discovered. The check resolves the
-name against your discovered skills (project skills first, then global), so a
-typo or a skill you have not created yet is reported as an error.
 
 ## Model selection (checked at run time)
 

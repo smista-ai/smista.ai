@@ -396,14 +396,14 @@ continuations and the streaming flow, see
 
 The top-level fields are:
 
-| Field               | Purpose                                                                                                                                                                                                           |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `input`             | The prompt `text`, an optional `command` and an optional `explicit_model`.                                                                                                                                        |
-| `workspace`         | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced/active files.                                                                                                                                   |
-| `policy`            | The deterministic `classification`, `routing`, `tools` and `privacy` policy (see below).                                                                                                                          |
-| `local_preferences` | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                                                                                                                                      |
-| `providers`         | Providers offered for this request and per-model credential status.                                                                                                                                               |
-| `attachments`       | Local content the router cannot read: `files` (each `required` or discardable), `instructions`, `invoked_skills` (explicitly invoked, can drive routing), `available_skills` (offered for the model to activate). |
+| Field               | Purpose                                                                                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input`             | The prompt `text`, an optional `command` and an optional `explicit_model`.                                                                                                                                                  |
+| `workspace`         | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced/active files.                                                                                                                                             |
+| `policy`            | The deterministic `classification`, `routing`, `tools` and `privacy` policy (see below).                                                                                                                                    |
+| `local_preferences` | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                                                                                                                                                |
+| `providers`         | Providers offered for this request and per-model credential status.                                                                                                                                                         |
+| `attachments`       | Local content the router cannot read: `files` (each `required` or discardable), `instructions`, `invoked_skills` (explicitly invoked, added to the model preamble), `available_skills` (offered for the model to activate). |
 
 `input.command` forces a task type (`edit`, `review`, …) and `input.explicit_model`
 forces a `provider/model`, bypassing routing entirely; both may be `null`.
@@ -432,7 +432,6 @@ holds ordered `rules` plus an optional `default` route (`model` and ordered
 | `priority`              | integer         | Evaluation order, ascending; first match wins. Defaults to `1000`.      |
 | `effort`                | string          | Reasoning effort for the matched model (`low`/`medium`/`high`/`xhigh`). |
 | `intent`                | task type, null | Required task intent, if scoped.                                        |
-| `skill`                 | string, null    | Required invoked skill, if scoped.                                      |
 | `paths`                 | list of strings | Path globs; a relevant path must match one when non-empty.              |
 | `local_only`            | bool            | Restrict the fallback chain to local models.                            |
 | `requires_capabilities` | object          | Capability gate the matched model must satisfy; omitted if none.        |

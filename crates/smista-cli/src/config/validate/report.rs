@@ -32,8 +32,6 @@ pub enum ValidationCode {
     RuleAmbiguity,
     /// A reference names a provider absent from `[providers]`.
     UnknownProvider,
-    /// A routing rule's `skill` does not resolve to a discovered skill.
-    UnknownSkill,
     /// A preference layer weakens a non-overridable safety policy.
     UnsafeOverride,
 }

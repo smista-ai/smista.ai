@@ -1,16 +1,16 @@
 //! Deterministic task normalization: the resolver's first stage.
 //!
 //! [`TaskNormalizer`] turns the observable signals of one turn — the prompt, the
-//! explicit command, the workspace snapshot, the attached skills and the user's
+//! explicit command, the workspace snapshot and the user's
 //! [`ClassificationConfig`] — into a [`NormalizedTask`]: the classified
-//! [`TaskIntent`] (with provenance), the relevant skills, and the touched files.
-//! That is the input the routing policy matcher consumes to pick a model.
+//! [`TaskIntent`] (with provenance) and the touched files. That is the input the
+//! routing policy matcher consumes to pick a model.
 //!
 //! Normalization is **purely deterministic and never calls an LLM**, the core
 //! invariant of smista.ai: the same inputs always produce the same result. The
 //! work splits across two child modules — [`fuzzy`] for typo-tolerant keyword
-//! matching and [`signals`] for the workspace- and skill-derived inputs — while
-//! this module owns the classification decision itself.
+//! matching and [`signals`] for the workspace-derived inputs — while this module
+//! owns the classification decision itself.
 //!
 //! See `docs/technical/task-classification.md` for the user-facing description.
 
@@ -33,7 +33,6 @@ use smista_core::intent::TaskIntent;
 use smista_core::policy::{
     Classification, ClassificationConfig, ClassificationRule, Confidence, IntentSource, RoutingRule,
 };
-use smista_core::skill::Skill;
 
 use self::fuzzy::KeywordHit;
 
@@ -41,17 +40,12 @@ use self::fuzzy::KeywordHit;
 ///
 /// Produced by [`TaskNormalizer::normalize`]. It bundles the canonical
 /// [`Classification`] (so the trace and the turn response keep the full intent
-/// provenance) with the two signals the routing policy matches on: the
-/// [invoked skills](Self::skills) and the [touched files](Self::touched_files).
+/// provenance) with the [touched files](Self::touched_files) the routing policy
+/// matches on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizedTask {
     /// The deterministic classification outcome: intent plus provenance.
     pub classification: Classification,
-    /// The skills the user explicitly invoked, passed through unchanged.
-    ///
-    /// Authoritative: routing matches on these by name. The router never infers
-    /// skill relevance from the prompt.
-    pub skills: Vec<Skill>,
     /// File paths relevant to the task, matched against routing-rule path globs.
     pub touched_files: Vec<PathBuf>,
 }
@@ -67,18 +61,12 @@ impl NormalizedTask {
     ///
     /// Conditions across fields are AND-combined; the path-glob list is
     /// OR-combined; absent conditions are ignored, so a rule with no conditions
-    /// matches everything. A rule's [`skill`](RoutingRule::skill) matches when a
-    /// skill of that name is among the [invoked skills](Self::skills). Invalid
-    /// path globs match nothing rather than panicking.
+    /// matches everything. Invalid path globs match nothing rather than
+    /// panicking.
     #[must_use]
     pub fn matches(&self, rule: &RoutingRule) -> bool {
         if let Some(intent) = rule.intent
             && self.intent() != intent
-        {
-            return false;
-        }
-        if let Some(skill) = &rule.skill
-            && !self.skills.iter().any(|relevant| relevant.name == *skill)
         {
             return false;
         }
@@ -100,23 +88,20 @@ impl TaskNormalizer {
     /// Normalizes one turn into a [`NormalizedTask`].
     ///
     /// `input` carries the prompt and an optional explicit command; `workspace`
-    /// supplies the context kinds and touched files; `invoked_skills` are the
-    /// skills the user explicitly invoked, carried through verbatim; `config`
-    /// holds the classification rules and default intent. The result is always
-    /// defined — classification falls back to
-    /// [`ClassificationConfig::default_intent`] when no rule matches.
+    /// supplies the context kinds and touched files; `config` holds the
+    /// classification rules and default intent. The result is always defined —
+    /// classification falls back to [`ClassificationConfig::default_intent`]
+    /// when no rule matches.
     #[must_use]
     pub fn normalize(
         &self,
         input: &TaskInput,
         workspace: &Workspace,
-        invoked_skills: &[Skill],
         config: &ClassificationConfig,
     ) -> NormalizedTask {
         let tokens = fuzzy::tokenize(&input.text);
         NormalizedTask {
             classification: self.classify(input, &tokens, workspace, config),
-            skills: invoked_skills.to_vec(),
             touched_files: signals::touched_files(workspace),
         }
     }
@@ -299,13 +284,6 @@ mod tests {
         }
     }
 
-    fn skill(name: &str) -> Skill {
-        Skill {
-            name: name.to_string(),
-            content: "do the thing".to_string(),
-        }
-    }
-
     #[test]
     fn should_let_explicit_command_win_over_rules() {
         let mut request = input("review my changes");
@@ -315,7 +293,7 @@ mod tests {
             "keywords": ["review"],
         })]);
 
-        let task = TaskNormalizer.normalize(&request, &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&request, &workspace(), &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Edit);
         assert_eq!(task.classification.source, IntentSource::Explicit);
@@ -330,7 +308,7 @@ mod tests {
             "keywords": ["review", "audit"],
         })]);
 
-        let task = TaskNormalizer.normalize(&input("please review this"), &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("please review this"), &workspace(), &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Review);
         assert_eq!(task.classification.source, IntentSource::Inferred);
@@ -347,7 +325,7 @@ mod tests {
         let mut ws = workspace();
         ws.git_diff = Some("diff --git a/x b/x".to_string());
 
-        let task = TaskNormalizer.normalize(&input("anything"), &ws, &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("anything"), &ws, &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Review);
         assert_eq!(task.classification.confidence, Some(Confidence::Medium));
@@ -363,7 +341,7 @@ mod tests {
         let mut ws = workspace();
         ws.git_diff = Some("diff --git a/x b/x".to_string());
 
-        let task = TaskNormalizer.normalize(&input("review my changes"), &ws, &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("review my changes"), &ws, &cfg);
 
         assert_eq!(task.classification.confidence, Some(Confidence::High));
         assert!(task.classification.reason.contains("git_diff"));
@@ -378,7 +356,7 @@ mod tests {
         })]);
 
         // "review this idea" with no diff available, mirroring the spec example.
-        let task = TaskNormalizer.normalize(&input("review this idea"), &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("review this idea"), &workspace(), &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Chat);
         assert_eq!(task.classification.matched_rule, None);
@@ -392,7 +370,7 @@ mod tests {
             "keywords": ["refactor"],
         })]);
 
-        let task = TaskNormalizer.normalize(&input("what does this do?"), &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("what does this do?"), &workspace(), &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Chat);
         assert_eq!(task.classification.source, IntentSource::Inferred);
@@ -403,7 +381,7 @@ mod tests {
     fn should_match_conditionless_catch_all_with_low_confidence() {
         let cfg = config(vec![serde_json::json!({ "intent": "plan" })]);
 
-        let task = TaskNormalizer.normalize(&input("anything at all"), &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("anything at all"), &workspace(), &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Plan);
         assert_eq!(task.classification.confidence, Some(Confidence::Low));
@@ -416,7 +394,7 @@ mod tests {
             serde_json::json!({ "intent": "edit", "priority": 10, "keywords": ["go"] }),
         ]);
 
-        let task = TaskNormalizer.normalize(&input("go"), &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("go"), &workspace(), &cfg);
 
         // The lower-priority-value rule (index 1) wins; its original index is kept.
         assert_eq!(task.classification.intent, TaskIntent::Edit);
@@ -430,7 +408,7 @@ mod tests {
             serde_json::json!({ "intent": "edit", "priority": 10, "keywords": ["go"] }),
         ]);
 
-        let task = TaskNormalizer.normalize(&input("go"), &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("go"), &workspace(), &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Plan);
         assert_eq!(task.classification.matched_rule, Some(0));
@@ -447,7 +425,7 @@ mod tests {
         ws.git_diff = Some("diff --git a/x b/x".to_string());
 
         // "impelment" is one OSA transposition from "implement".
-        let task = TaskNormalizer.normalize(&input("impelment the feature"), &ws, &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("impelment the feature"), &ws, &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Edit);
         // Both conditions held, but the fuzzy keyword caps the signal.
@@ -463,7 +441,7 @@ mod tests {
 
         // "audit" is one edit from "edit" but the four-character keyword bucket
         // is exact-only, so it must not match.
-        let task = TaskNormalizer.normalize(&input("audit the code"), &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("audit the code"), &workspace(), &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Chat);
     }
@@ -476,7 +454,7 @@ mod tests {
         })]);
 
         // "reviXX" is distance two from the six-character keyword (cap one).
-        let task = TaskNormalizer.normalize(&input("revixx the code"), &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("revixx the code"), &workspace(), &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Chat);
     }
@@ -488,7 +466,7 @@ mod tests {
             "keywords": ["review"],
         })]);
 
-        let task = TaskNormalizer.normalize(&input("preview the page"), &workspace(), &[], &cfg);
+        let task = TaskNormalizer.normalize(&input("preview the page"), &workspace(), &cfg);
 
         assert_eq!(task.classification.intent, TaskIntent::Chat);
     }
@@ -501,8 +479,8 @@ mod tests {
         })]);
         let request = input("review please");
 
-        let first = TaskNormalizer.normalize(&request, &workspace(), &[], &cfg);
-        let second = TaskNormalizer.normalize(&request, &workspace(), &[], &cfg);
+        let first = TaskNormalizer.normalize(&request, &workspace(), &cfg);
+        let second = TaskNormalizer.normalize(&request, &workspace(), &cfg);
 
         assert_eq!(first, second);
     }
@@ -517,8 +495,7 @@ mod tests {
                 .to_string(),
         );
 
-        let task =
-            TaskNormalizer.normalize(&input("go"), &ws, &[], &ClassificationConfig::default());
+        let task = TaskNormalizer.normalize(&input("go"), &ws, &ClassificationConfig::default());
 
         assert_eq!(
             task.touched_files,
@@ -530,23 +507,11 @@ mod tests {
         );
     }
 
-    #[test]
-    fn should_carry_invoked_skills_through_verbatim() {
-        // The router does not infer relevance: whatever the user invoked is
-        // passed through unchanged, regardless of the prompt wording.
-        let skills = vec![skill("changelog"), skill("security-review")];
-        let cfg = ClassificationConfig::default();
-
-        let task = TaskNormalizer.normalize(&input("fix the bug"), &workspace(), &skills, &cfg);
-
-        assert_eq!(task.skills, skills);
-    }
-
     fn routing_rule(value: serde_json::Value) -> RoutingRule {
         serde_json::from_value(value).expect("valid routing rule")
     }
 
-    fn task_with(intent: TaskIntent, skills: Vec<Skill>, touched: Vec<&str>) -> NormalizedTask {
+    fn task_with(intent: TaskIntent, touched: Vec<&str>) -> NormalizedTask {
         NormalizedTask {
             classification: Classification {
                 intent,
@@ -555,7 +520,6 @@ mod tests {
                 matched_rule: None,
                 confidence: Some(Confidence::Low),
             },
-            skills,
             touched_files: touched.into_iter().map(PathBuf::from).collect(),
         }
     }
@@ -563,7 +527,7 @@ mod tests {
     #[test]
     fn should_match_conditionless_routing_rule() {
         let rule = routing_rule(serde_json::json!({ "name": "any", "model": "ollama/llama3" }));
-        let task = task_with(TaskIntent::Chat, vec![], vec!["src/main.rs"]);
+        let task = task_with(TaskIntent::Chat, vec!["src/main.rs"]);
         assert!(task.matches(&rule));
     }
 
@@ -576,33 +540,14 @@ mod tests {
             "model": "ollama/llama3",
         }));
 
-        let hit = task_with(TaskIntent::Edit, vec![], vec!["src/auth/login.rs"]);
+        let hit = task_with(TaskIntent::Edit, vec!["src/auth/login.rs"]);
         assert!(hit.matches(&rule));
 
-        let wrong_intent = task_with(TaskIntent::Review, vec![], vec!["src/auth/login.rs"]);
+        let wrong_intent = task_with(TaskIntent::Review, vec!["src/auth/login.rs"]);
         assert!(!wrong_intent.matches(&rule));
 
-        let wrong_path = task_with(TaskIntent::Edit, vec![], vec!["docs/readme.md"]);
+        let wrong_path = task_with(TaskIntent::Edit, vec!["docs/readme.md"]);
         assert!(!wrong_path.matches(&rule));
-    }
-
-    #[test]
-    fn should_match_routing_rule_skill_against_the_relevant_set() {
-        let rule = routing_rule(serde_json::json!({
-            "name": "changelog skill",
-            "skill": "changelog",
-            "model": "ollama/llama3",
-        }));
-
-        let hit = task_with(
-            TaskIntent::Chat,
-            vec![skill("changelog"), skill("security-review")],
-            vec![],
-        );
-        assert!(hit.matches(&rule));
-
-        let miss = task_with(TaskIntent::Chat, vec![skill("security-review")], vec![]);
-        assert!(!miss.matches(&rule));
     }
 
     #[test]
@@ -610,7 +555,7 @@ mod tests {
         let mut rule = routing_rule(serde_json::json!({ "name": "bad", "model": "ollama/llama3" }));
         rule.paths = vec!["[".to_string()];
 
-        let task = task_with(TaskIntent::Chat, vec![], vec!["src/main.rs"]);
+        let task = task_with(TaskIntent::Chat, vec!["src/main.rs"]);
         assert!(!task.matches(&rule));
     }
 }

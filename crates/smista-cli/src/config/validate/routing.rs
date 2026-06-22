@@ -118,20 +118,13 @@ pub fn check_routing_structure(config: &Config, report: &mut ValidationReport) {
 /// reconcile this with the authoritative rule-precedence definition.
 fn specificity(rule: &RoutingRule) -> u32 {
     u32::from(rule.intent.is_some())
-        + u32::from(rule.skill.is_some())
         + u32::from(!rule.paths.is_empty())
         + u32::from(rule.local_only)
 }
 
 /// Returns whether two rules can match the same request.
 fn rules_overlap(first: &RoutingRule, second: &RoutingRule) -> bool {
-    let intents_overlap = first.intent.zip(second.intent).is_none_or(|(a, b)| a == b);
-    let skills_overlap = match (&first.skill, &second.skill) {
-        (Some(a), Some(b)) => a == b,
-        _ => true,
-    };
-
-    intents_overlap && skills_overlap
+    first.intent.zip(second.intent).is_none_or(|(a, b)| a == b)
 }
 
 /// Flags overlapping rule pairs that share both `priority` and specificity,
@@ -342,22 +335,22 @@ mod tests {
     }
 
     #[test]
-    fn should_accept_same_priority_rules_with_different_skills() {
+    fn should_accept_same_priority_rules_with_disjoint_intents() {
         let config = parse(
             r#"
             [routing.default]
             model = "openai/x"
 
             [[routing.rules]]
-            name = "docs"
+            name = "plan"
             priority = 10
-            skill = "docs"
+            intent = "plan"
             model = "openai/a"
 
             [[routing.rules]]
-            name = "tests"
+            name = "review"
             priority = 10
-            skill = "tests"
+            intent = "review"
             model = "openai/b"
             "#,
             "test",

@@ -13,7 +13,6 @@ import type { ToolsConfig } from "./ToolsConfig.js";
  * hold. Matching is LLM-free. The match conditions are flat and all optional:
  *
  * - [`intent`](Self::intent): the classified task intent.
- * - [`skill`](Self::skill): the invoked skill name.
  * - [`paths`](Self::paths): file-path globs; a rule with paths matches when a
  *   relevant path matches any glob.
  *
@@ -69,10 +68,6 @@ effort: Effort,
  * Required task intent, if any.
  */
 intent: TaskIntent | null, 
-/**
- * Required skill name, if any.
- */
-skill: string | null, 
 /**
  * File-path globs; when non-empty, a relevant path must match one of them.
  */

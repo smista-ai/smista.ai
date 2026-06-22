@@ -24,8 +24,8 @@ is deterministic, versionable and inspectable — routing never depends on an LL
 
 ## Routing rules
 
-A routing rule decides which model handles a task. Rules match on intent, skill,
-file path, or a combination, and may declare a fallback chain.
+A routing rule decides which model handles a task. Rules match on intent, file
+path, or a combination, and may declare a fallback chain.
 
 ```toml
 [[routing.rules]]
@@ -36,9 +36,9 @@ model = "openai/gpt-5.5-thinking"
 fallbacks = ["anthropic/claude-sonnet"]
 
 [[routing.rules]]
-name = "use local model for changelog skill"
+name = "summarize on a local model"
 priority = 20
-skill = "changelog"
+intent = "summarize"
 model = "ollama/qwen2.5-coder"
 fallbacks = ["openai/gpt-5.5-mini"]
 
@@ -71,7 +71,6 @@ rule with none matches every task.
 | `priority`              | integer         | Lower value wins; defaults to `1000`.                                                                 |
 | `effort`                | string          | Reasoning effort for the matched model; defaults to `medium`.                                         |
 | `intent`                | string          | Match only this task intent.                                                                          |
-| `skill`                 | string          | Match only this invoked skill.                                                                        |
 | `paths`                 | list of globs   | Match when a relevant path matches any glob.                                                          |
 | `local_only`            | bool            | Pin the route to local models; an `ollama/` model resolves to the local instance, never Ollama Cloud. |
 | `requires_capabilities` | table           | Capability gate; the model must satisfy each `true` flag.                                             |
@@ -145,10 +144,7 @@ When several rules match, exactly one is chosen, in this order:
 Specificity, most to least specific:
 
 ```txt
-skill + path + intent
-> skill + path
-> path + intent
-> skill
+path + intent
 > path
 > intent
 > default
@@ -259,8 +255,8 @@ network = "deny"
 git = "allow"
 ```
 
-Skill- or rule-specific permissions (a rule's `required_permissions`) may
-_narrow_ these defaults — tightening a tool from `allow` to `ask` to `deny`, or
+Rule-specific permissions (a rule's `required_permissions`) may _narrow_ these
+defaults, tightening a tool from `allow` to `ask` to `deny`, or
 adding a tool not listed in the defaults. They may never _widen_ them: an
 override that loosens a stricter mode (for example setting `shell = "allow"` when
 the project default is `shell = "deny"`) is a configuration error naming the
@@ -510,8 +506,8 @@ Local always overrides global; values the local layer does not set are kept.
 ## Validation
 
 Configuration is validated before execution. Validation rejects routing rules
-that reference a provider you have not enabled, unknown intents or skills,
-invalid globs, duplicate rule names, a missing default route, invalid fallback
+that reference a provider you have not enabled, unknown intents, invalid globs,
+duplicate rule names, a missing default route, invalid fallback
 references, ambiguous rules, invalid permission values, and secrets stored
 inline where forbidden. Whether a model exists and whether it satisfies a rule's
 `requires_capabilities` is checked later, at model selection time, against the
