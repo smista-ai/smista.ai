@@ -20,6 +20,19 @@ files: Array<ContextFile>,
  */
 instructions: Array<ContextInstruction>, 
 /**
- * Invoked skills, as name plus the `SKILL.md` body.
+ * Skills the user explicitly invoked, with their full `SKILL.md` body.
+ *
+ * Authoritative: routing rules may match on them by name, and their
+ * instructions are added to the model preamble. The router never infers
+ * this set from the prompt.
  */
-skills: Array<Skill>, };
+invoked_skills: Array<Skill>, 
+/**
+ * Skills offered for the serving model to activate by reading them.
+ *
+ * Same shape as the invoked skills, but distinct by role: they never
+ * influence routing, and the model decides whether to apply one. The full
+ * instructions travel up front, so an activated skill needs no follow-up
+ * fetch.
+ */
+available_skills: Array<Skill>, };

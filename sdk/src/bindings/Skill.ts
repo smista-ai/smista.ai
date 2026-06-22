@@ -3,8 +3,11 @@
 /**
  * A reusable execution profile defined by a `SKILL.md` file.
  *
- * `name` and `description` come from the file's front matter; `instructions`
- * is its Markdown body, which frames the model's behavior for the task.
+ * [`name`](Self::name) comes from the file's front matter; [`content`](Self::content)
+ * is its Markdown body, which frames the model's behavior for the task. The
+ * same type carries a skill whether it was explicitly invoked or merely offered
+ * for the model to activate; the two cases differ by where the skill travels in
+ * the request, not by shape.
  */
 export type Skill = { 
 /**
@@ -12,10 +15,6 @@ export type Skill = {
  */
 name: string, 
 /**
- * Human-readable summary of what the skill does.
+ * The `SKILL.md` body: the behavioral instructions for the model.
  */
-description: string, 
-/**
- * Behavioral instructions from the skill's Markdown body.
- */
-instructions: string, };
+content: string, };

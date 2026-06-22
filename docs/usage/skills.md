@@ -6,10 +6,13 @@
   - [Writing a `SKILL.md`](#writing-a-skillmd)
   - [Warnings](#warnings)
 
-A **skill** is a reusable set of instructions you can attach to a task — for
+A **skill** is a reusable set of instructions you can attach to a task, for
 example a code-review checklist or your project's Rust conventions. smista.ai
-discovers skills from disk so routing rules can target them and the CLI can send
-the right instructions along with a task.
+discovers skills from disk and sends them with a task in one of two ways. A skill
+you **explicitly invoke** is applied for sure, and a routing rule can target it
+by name. A skill that is merely **available** is offered to the model, which
+decides whether to apply it by reading it. The router never guesses which skills
+are relevant from your prompt.
 
 ## Where skills live
 

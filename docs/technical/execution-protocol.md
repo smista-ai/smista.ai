@@ -64,21 +64,23 @@ Two trust boundaries follow, and they are not the same:
 When it starts a run the client sends only what the router cannot obtain for
 itself — the prompt, the local files and skills, and the policy:
 
-| Field                      | Contents                                                                                              |
-| -------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `input`                    | The prompt `text`, an optional `command` (forces the intent) and an optional `explicit_model`.        |
-| `workspace`                | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced paths, active file.                 |
-| `attachments.files`        | Explicit `@path` files **with content** and a `content_hash`, each flagged `required` or discardable. |
-| `attachments.instructions` | Instruction documents the client read from disk (for example `SMISTA.md`).                            |
-| `attachments.skills`       | Invoked skills as `name` + `description` + the `SKILL.md` body only.                                  |
-| `policy`                   | The deterministic `routing`, `tools` and `privacy` policy, sent verbatim.                             |
-| `local_preferences`        | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                          |
-| `providers`                | Providers offered for this run and the per-model credential status.                                   |
+| Field                          | Contents                                                                                              |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `input`                        | The prompt `text`, an optional `command` (forces the intent) and an optional `explicit_model`.        |
+| `workspace`                    | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced paths, active file.                 |
+| `attachments.files`            | Explicit `@path` files **with content** and a `content_hash`, each flagged `required` or discardable. |
+| `attachments.instructions`     | Instruction documents the client read from disk (for example `SMISTA.md`).                            |
+| `attachments.invoked_skills`   | Skills the user explicitly invoked, each `name` + `content` (the `SKILL.md` body).                    |
+| `attachments.available_skills` | Skills offered for the model to activate, same `name` + `content` shape.                              |
+| `policy`                       | The deterministic `routing`, `tools` and `privacy` policy, sent verbatim.                             |
+| `local_preferences`            | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                          |
+| `providers`                    | Providers offered for this run and the per-model credential status.                                   |
 
 The router cannot read the filesystem, so every file, instruction and skill the
-task may need from disk is the client's to supply. Skills travel as name plus
-the `SKILL.md` body; the router decides which are **relevant** deterministically
-(it never discovers or fetches a skill itself).
+task may need from disk is the client's to supply. Skills travel as `name` plus
+their `SKILL.md` content. The router never discovers a skill or infers which are
+relevant: a routing rule matches only the skills the user **explicitly invoked**,
+while **available** skills are offered for the model to activate.
 
 What the client does **not** send: session history, memory, or any assembled
 context. Those are the router's.
@@ -185,7 +187,8 @@ one JSON body; `stream` returns it as a stream (see [Streaming](#streaming)).
       { "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true }
     ],
     "instructions": [{ "source": "SMISTA.md", "content": "..." }],
-    "skills": []
+    "invoked_skills": [],
+    "available_skills": []
   },
   "policy": { "version": 1, "source": "merged", "classification": { }, "routing": { }, "tools": { }, "privacy": { } },
   "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
@@ -272,6 +275,11 @@ When the model requests tools, the router checks each call against
 `requires_approval` is `allow` (run it) or `ask` (confirm with the user first).
 The client executes each call, correlated by `call_id`, and advances the run
 with the results.
+
+A tool that takes a file path may receive a **relative** one. The client
+resolves it against the workspace root (`workspace.root`), and, for a path an
+active skill refers to, against that skill's own directory. The router never
+resolves paths itself.
 
 ### Approvals
 

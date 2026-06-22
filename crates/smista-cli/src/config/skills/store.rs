@@ -178,15 +178,16 @@ impl SkillStore {
 
         let (raw, body) = split_front_matter(&contents).unwrap_or(("", contents.as_str()));
 
-        let meta = parse_front_matter(raw).map_err(|source| SkillError::Parse {
+        // Parse the front matter to validate it; the description is read at
+        // discovery time, so only the body is needed for the loaded skill.
+        parse_front_matter(raw).map_err(|source| SkillError::Parse {
             path: skill_file.display().to_string(),
             source,
         })?;
 
         Ok(Skill {
             name: name.to_string(),
-            description: meta.description.unwrap_or_default(),
-            instructions: body.trim().to_string(),
+            content: body.trim().to_string(),
         })
     }
 
@@ -349,8 +350,7 @@ mod tests {
         store.ingest(&root);
         let skill = store.load("code-review").unwrap();
         assert_eq!(skill.name, "code-review");
-        assert_eq!(skill.description, "Review changes.");
-        assert_eq!(skill.instructions, "Report findings by severity.");
+        assert_eq!(skill.content, "Report findings by severity.");
     }
 
     #[test]

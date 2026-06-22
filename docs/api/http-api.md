@@ -388,21 +388,22 @@ continuations and the streaming flow, see
   "attachments": {
     "files": [{ "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true }],
     "instructions": [{ "source": "SMISTA.md", "content": "..." }],
-    "skills": []
+    "invoked_skills": [{ "name": "code-review", "content": "Report findings by severity." }],
+    "available_skills": [{ "name": "changelog", "content": "Summarize changes under a heading." }]
   }
 }
 ```
 
 The top-level fields are:
 
-| Field               | Purpose                                                                                                   |
-| ------------------- | --------------------------------------------------------------------------------------------------------- |
-| `input`             | The prompt `text`, an optional `command` and an optional `explicit_model`.                                |
-| `workspace`         | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced/active files.                           |
-| `policy`            | The deterministic `classification`, `routing`, `tools` and `privacy` policy (see below).                  |
-| `local_preferences` | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                              |
-| `providers`         | Providers offered for this request and per-model credential status.                                       |
-| `attachments`       | Local content the router cannot read: `files` (each `required` or discardable), `instructions`, `skills`. |
+| Field               | Purpose                                                                                                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input`             | The prompt `text`, an optional `command` and an optional `explicit_model`.                                                                                                                                        |
+| `workspace`         | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced/active files.                                                                                                                                   |
+| `policy`            | The deterministic `classification`, `routing`, `tools` and `privacy` policy (see below).                                                                                                                          |
+| `local_preferences` | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                                                                                                                                      |
+| `providers`         | Providers offered for this request and per-model credential status.                                                                                                                                               |
+| `attachments`       | Local content the router cannot read: `files` (each `required` or discardable), `instructions`, `invoked_skills` (explicitly invoked, can drive routing), `available_skills` (offered for the model to activate). |
 
 `input.command` forces a task type (`edit`, `review`, …) and `input.explicit_model`
 forces a `provider/model`, bypassing routing entirely; both may be `null`.

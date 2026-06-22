@@ -11,9 +11,6 @@ use std::path::PathBuf;
 
 use globset::{Glob, GlobSetBuilder};
 use smista_core::api::Workspace;
-use smista_core::skill::Skill;
-
-use super::fuzzy::{token_matches, tokenize};
 
 /// Derives the available context kinds from the workspace snapshot.
 ///
@@ -63,29 +60,6 @@ fn diff_paths(diff: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Selects the skills relevant to the prompt.
-///
-/// Skills declare no triggers today, so relevance is name-based: a skill is
-/// relevant when every token of its name appears in the prompt. This lets a
-/// hyphenated name such as `security-review` match the words "security review".
-/// Coupling to the classified intent is a planned refinement (see the spec).
-pub(super) fn relevant_skills(skills: &[Skill], tokens: &[String]) -> Vec<Skill> {
-    skills
-        .iter()
-        .filter(|skill| skill_is_relevant(&skill.name, tokens))
-        .cloned()
-        .collect()
-}
-
-/// Whether every token of `name` appears among the prompt `tokens`.
-fn skill_is_relevant(name: &str, tokens: &[String]) -> bool {
-    let name_tokens = tokenize(name);
-    !name_tokens.is_empty()
-        && name_tokens
-            .iter()
-            .all(|name_token| token_matches(name_token, tokens))
-}
-
 /// Returns `true` when any of `paths` matches any of the `globs`.
 ///
 /// The router compiles the globs itself, so it owns routing-rule path matching
@@ -127,14 +101,6 @@ mod tests {
         }
     }
 
-    fn skill(name: &str) -> Skill {
-        Skill {
-            name: name.to_string(),
-            description: format!("{name} skill"),
-            instructions: "do the thing".to_string(),
-        }
-    }
-
     #[test]
     fn should_derive_context_kinds_from_present_fields() {
         let mut ws = workspace();
@@ -165,16 +131,6 @@ mod tests {
                 PathBuf::from("Cargo.toml"),
             ]
         );
-    }
-
-    #[test]
-    fn should_select_skills_whose_every_name_token_appears() {
-        let skills = vec![skill("security-review"), skill("changelog")];
-        let tokens = tokenize("run a security review");
-
-        let relevant = relevant_skills(&skills, &tokens);
-        assert_eq!(relevant.len(), 1);
-        assert_eq!(relevant[0].name, "security-review");
     }
 
     #[test]
