@@ -1129,7 +1129,8 @@
         "description": "The kind of a [`PendingApproval`].",
         "enum": [
           "remote_disclosure",
-          "cost_limit"
+          "cost_limit",
+          "plan"
         ]
       },
       "ApprovalPayload": {

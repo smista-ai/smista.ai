@@ -386,6 +386,9 @@ pub enum ApprovalKind {
     RemoteDisclosure,
     /// Confirming a per-task cost ceiling would be exceeded.
     CostLimit,
+    /// Accepting or rejecting a generated plan before execution begins. The
+    /// decision has no tool to run, so it travels as a standalone approval.
+    Plan,
 }
 
 /// How a task was routed to a model.

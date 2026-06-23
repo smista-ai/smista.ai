@@ -292,7 +292,8 @@ round trip for a tool.
 
 A standalone `awaiting_approval` is reserved for decisions with **no tool to
 execute** — chiefly disclosing context to a remote provider when
-`privacy.remote.mode` is `ask`, and an optional `cost_limit` confirmation:
+`privacy.remote.mode` is `ask`, an optional `cost_limit` confirmation, and
+accepting or rejecting a generated `plan` before execution begins:
 
 ```json
 {
@@ -306,8 +307,8 @@ execute** — chiefly disclosing context to a remote provider when
 }
 ```
 
-`kind` is `remote_disclosure` or `cost_limit`. The client returns the decision
-in the advance bundle.
+`kind` is `remote_disclosure`, `cost_limit` or `plan`. The client returns the
+decision in the advance bundle.
 
 ### Decrypt and encrypt
 
