@@ -920,6 +920,97 @@ async fn should_append_and_read_encrypted_message_content() {
 }
 
 #[tokio::test]
+async fn should_list_session_messages_with_content_oldest_first() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let older_id = Uuid::now_v7();
+    let (mut older, _) = message_for(older_id, session_id, user_id);
+    older.created_at = Utc::now() - Duration::minutes(5);
+    let older_content = SessionMessageContent {
+        id: record_id::<SessionMessageContent, _>(older_id),
+        content: SecretContent::plaintext("first"),
+    };
+    db.append_message(user_id, older, older_content)
+        .await
+        .expect("failed to append older message");
+
+    let newer_id = Uuid::now_v7();
+    let (newer, _) = message_for(newer_id, session_id, user_id);
+    let newer_content = SessionMessageContent {
+        id: record_id::<SessionMessageContent, _>(newer_id),
+        content: SecretContent::plaintext("second"),
+    };
+    db.append_message(user_id, newer, newer_content)
+        .await
+        .expect("failed to append newer message");
+
+    let listed = db
+        .list_session_messages_with_content(user_id, session_id)
+        .await
+        .expect("failed to list session messages with content");
+
+    // Oldest first, each paired with its own content.
+    assert_eq!(listed.len(), 2);
+    assert_eq!(listed[0].1.content, SecretContent::plaintext("first"));
+    assert_eq!(listed[1].1.content, SecretContent::plaintext("second"));
+}
+
+#[tokio::test]
+async fn should_list_session_messages_with_sealed_content() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let id = Uuid::now_v7();
+    let (message, _) = message_for(id, session_id, user_id);
+    let sealed = ContentEnvelope {
+        version: 1,
+        algorithm: "xchacha20poly1305".to_string(),
+        key_id: "kf_ab12".to_string(),
+        nonce: "bm9uY2U".to_string(),
+        ciphertext: "Y2lwaGVydGV4dA".to_string(),
+    };
+    let content = SessionMessageContent {
+        id: record_id::<SessionMessageContent, _>(id),
+        content: SecretContent::Encrypted(sealed.clone()),
+    };
+    db.append_message(user_id, message, content)
+        .await
+        .expect("failed to append sealed message");
+
+    let listed = db
+        .list_session_messages_with_content(user_id, session_id)
+        .await
+        .expect("failed to list session messages with content");
+
+    // Storage returns the envelope opaquely; it never decrypts.
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].1.content, SecretContent::Encrypted(sealed));
+}
+
+#[tokio::test]
+async fn should_not_list_session_messages_with_content_of_other_user() {
+    let db = memory_db().await;
+    let (owner, session_id) = user_with_session(&db).await;
+
+    let (message, content) = message_for(Uuid::now_v7(), session_id, owner);
+    db.append_message(owner, message, content)
+        .await
+        .expect("failed to append message");
+
+    let other = Uuid::now_v7();
+    db.create_user(user(other))
+        .await
+        .expect("failed to create other user");
+
+    let listed = db
+        .list_session_messages_with_content(other, session_id)
+        .await
+        .expect("failed to list session messages with content");
+    assert!(listed.is_empty(), "messages of another user disclosed");
+}
+
+#[tokio::test]
 async fn should_not_append_message_to_unowned_session() {
     let db = memory_db().await;
     let (_owner, session_id) = user_with_session(&db).await;

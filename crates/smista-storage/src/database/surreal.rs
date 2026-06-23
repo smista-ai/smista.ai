@@ -765,6 +765,52 @@ impl Database for SurrealDatabase {
         }))
     }
 
+    async fn list_session_messages_with_content(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> StorageResult<Vec<(SessionMessage, SessionMessageContent)>> {
+        tracing::debug!(
+            "listing session messages with content for user {user_id} in session {session_id}"
+        );
+        let session = record_id::<Session, _>(session_id);
+        let user = record_id::<User, _>(user_id);
+
+        let bases: Vec<SessionMessage> = self
+            .0
+            .query(
+                "SELECT * FROM $table WHERE session = $sess \
+                 AND user = $user ORDER BY created_at",
+            )
+            .bind(("table", SessionMessage::table()))
+            .bind(("sess", session.clone()))
+            .bind(("user", user.clone()))
+            .await?
+            .take(0)?;
+
+        // The `_content` payloads share each message's record key; pair them by key.
+        let contents: Vec<SessionMessageContent> = self
+            .0
+            .query(
+                "SELECT * FROM $content_table WHERE record::id(id) IN \
+                 (SELECT VALUE record::id(id) FROM $base_table \
+                  WHERE session = $sess AND user = $user)",
+            )
+            .bind(("content_table", SessionMessageContent::table()))
+            .bind(("base_table", SessionMessage::table()))
+            .bind(("sess", session))
+            .bind(("user", user))
+            .await?
+            .take(0)?;
+
+        Ok(pair_by_key(
+            bases,
+            &contents,
+            |message| &message.id,
+            |content| &content.id,
+        ))
+    }
+
     async fn get_session_trace_events(
         &self,
         user_id: Uuid,
