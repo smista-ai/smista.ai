@@ -16,14 +16,6 @@
 //! eligible, and that wins over the rules and over an explicit override. The
 //! behaviour is specified, user-facing, in `docs/technical/routing.md`.
 
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by the execution orchestrator that drives the resolver"
-    )
-)]
-
 use std::collections::{HashMap, HashSet};
 
 use smista_core::model::{ModelDescriptor, ModelReference, Provider, RoutingRequirements};

@@ -14,27 +14,19 @@
 //!
 //! See `docs/technical/task-classification.md` for the user-facing description.
 
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by the policy matcher and the execution orchestrator"
-    )
-)]
-
 mod fuzzy;
 mod signals;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use smista_core::api::{TaskInput, Workspace};
 use smista_core::intent::TaskIntent;
 use smista_core::policy::{
     Classification, ClassificationConfig, ClassificationRule, Confidence, IntentSource, RoutingRule,
 };
 
 use self::fuzzy::KeywordHit;
+use crate::router::resolver::{TaskInput, Workspace};
 
 /// The normalized form of one turn's request.
 ///

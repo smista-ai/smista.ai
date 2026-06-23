@@ -10,7 +10,8 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use globset::{Glob, GlobSetBuilder};
-use smista_core::api::Workspace;
+
+use crate::router::resolver::Workspace;
 
 /// Derives the available context kinds from the workspace snapshot.
 ///
