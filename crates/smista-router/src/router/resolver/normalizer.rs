@@ -18,7 +18,7 @@
     not(test),
     expect(
         dead_code,
-        reason = "wired by the policy matcher (#141) and orchestrator (#148) later"
+        reason = "consumed by the policy matcher and the execution orchestrator"
     )
 )]
 
@@ -100,9 +100,17 @@ impl TaskNormalizer {
         config: &ClassificationConfig,
     ) -> NormalizedTask {
         let tokens = fuzzy::tokenize(&input.text);
+        let classification = self.classify(input, &tokens, workspace, config);
+        let touched_files = signals::touched_files(workspace);
+        tracing::debug!(
+            intent = %classification.intent,
+            source = ?classification.source,
+            touched_files = touched_files.len(),
+            "normalized task"
+        );
         NormalizedTask {
-            classification: self.classify(input, &tokens, workspace, config),
-            touched_files: signals::touched_files(workspace),
+            classification,
+            touched_files,
         }
     }
 
@@ -119,6 +127,7 @@ impl TaskNormalizer {
         config: &ClassificationConfig,
     ) -> Classification {
         if let Some(intent) = input.command {
+            tracing::trace!(%intent, "classified by explicit command");
             return Classification {
                 intent,
                 source: IntentSource::Explicit,
@@ -133,10 +142,19 @@ impl TaskNormalizer {
             if let Some(classification) =
                 self.match_rule(&config.rules[index], index, tokens, &contexts)
             {
+                tracing::trace!(
+                    rule = index,
+                    intent = %classification.intent,
+                    "classified by matched rule"
+                );
                 return classification;
             }
         }
 
+        tracing::trace!(
+            intent = %config.default_intent,
+            "no rule matched; using the default intent"
+        );
         Classification {
             intent: config.default_intent,
             source: IntentSource::Inferred,

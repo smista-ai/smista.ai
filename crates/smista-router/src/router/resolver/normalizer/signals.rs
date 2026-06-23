@@ -30,6 +30,7 @@ pub(super) fn context_kinds(workspace: &Workspace) -> HashSet<&'static str> {
     if !workspace.referenced_paths.is_empty() {
         kinds.insert("referenced_paths");
     }
+    tracing::trace!(kinds = kinds.len(), "derived available context kinds");
     kinds
 }
 
@@ -46,9 +47,11 @@ pub(super) fn touched_files(workspace: &Workspace) -> Vec<PathBuf> {
         .chain(workspace.git_diff.iter().flat_map(|diff| diff_paths(diff)));
 
     let mut seen = HashSet::new();
-    candidates
+    let touched: Vec<PathBuf> = candidates
         .filter(|path| seen.insert(path.clone()))
-        .collect()
+        .collect();
+    tracing::trace!(touched_files = touched.len(), "collected touched files");
+    touched
 }
 
 /// Extracts the target paths from unified-diff `diff --git a/… b/…` headers.

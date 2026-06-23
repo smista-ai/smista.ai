@@ -312,6 +312,22 @@ pub trait Database: Send + Sync {
         id: Uuid,
     ) -> impl Future<Output = StorageResult<Option<SessionState>>> + Send;
 
+    /// Lists the messages of a session owned by `user_id`, each paired with its
+    /// stored content, oldest first.
+    ///
+    /// The chronological order is the session's conversation history, the shape
+    /// the router's context selection recalls. Like
+    /// [`Self::list_context_memory_with_content`], the content of an encrypted
+    /// session is returned sealed as a
+    /// [`SecretContent::Encrypted`](crate::types::SecretContent::Encrypted)
+    /// envelope; storage holds no key and never decrypts it. A session owned by
+    /// a different user, or one with no messages, yields an empty list.
+    fn list_session_messages_with_content(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Vec<(SessionMessage, SessionMessageContent)>>> + Send;
+
     /// Loads a page of trace events for a session owned by `user_id`, assembled
     /// into a [`Trace`].
     ///

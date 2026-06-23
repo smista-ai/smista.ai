@@ -35,10 +35,13 @@ enum MatchKind {
 /// Every non-alphanumeric character is a separator, so `security-review` becomes
 /// `["security", "review"]`.
 pub(super) fn tokenize(text: &str) -> Vec<String> {
-    text.split(|c: char| !c.is_alphanumeric())
+    let tokens: Vec<String> = text
+        .split(|c: char| !c.is_alphanumeric())
         .filter(|token| !token.is_empty())
         .map(str::to_lowercase)
-        .collect()
+        .collect();
+    tracing::trace!(tokens = tokens.len(), "tokenized prompt text");
+    tokens
 }
 
 /// Finds the first keyword that matches a prompt token.

@@ -8,8 +8,8 @@
 //!
 //! Matching is **purely deterministic and never calls an LLM**, the core
 //! invariant of smista.ai. It also never consults a provider: availability,
-//! capability gating, fallback walking and locality are the next stage (model
-//! selection, #142), which reads the [`RouteMatch`] this stage emits.
+//! capability gating, fallback walking and locality belong to model selection,
+//! which reads the [`RouteMatch`] this stage emits.
 //!
 //! The precedence rules are described, user-facing, in
 //! `docs/technical/routing.md`.
@@ -18,7 +18,7 @@
     not(test),
     expect(
         dead_code,
-        reason = "wired by model selection (#142) and the orchestrator (#148) later"
+        reason = "consumed by model selection and the execution orchestrator"
     )
 )]
 
@@ -71,7 +71,7 @@ pub enum RouteSource<'a> {
 /// [source](Self::source) of the decision and a human-readable
 /// [reason](Self::reason). The selected [model](Self::model) and its
 /// [fallback chain](Self::fallbacks) are read from the source; capability,
-/// availability and locality are resolved by the later model-selection stage.
+/// availability and locality are resolved by the model-selection stage.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteMatch<'a> {
     /// The task intent that drove routing.
@@ -155,6 +155,7 @@ impl PolicyMatcher {
         let intent = task.intent();
 
         if let Some(model) = override_model {
+            tracing::debug!(%intent, %model, "routed by explicit model override");
             return Ok(RouteMatch {
                 intent,
                 reason: format!("explicit model override '{model}'"),
@@ -163,6 +164,13 @@ impl PolicyMatcher {
         }
 
         if let Some((index, rule)) = self.first_matching_rule(task, policy) {
+            tracing::debug!(
+                %intent,
+                rule = index,
+                rule.name = %rule.name,
+                model = %rule.model,
+                "routed by matched rule"
+            );
             return Ok(RouteMatch {
                 intent,
                 reason: rule_reason(rule),
@@ -171,15 +179,21 @@ impl PolicyMatcher {
         }
 
         match policy.default.as_ref() {
-            Some(route) => Ok(RouteMatch {
-                intent,
-                reason: format!(
-                    "no rule matched; using the default route to '{}'",
-                    route.model
-                ),
-                source: RouteSource::Default { route },
-            }),
-            None => Err(PolicyMatchError::NoRoute),
+            Some(route) => {
+                tracing::debug!(%intent, model = %route.model, "routed by default route");
+                Ok(RouteMatch {
+                    intent,
+                    reason: format!(
+                        "no rule matched; using the default route to '{}'",
+                        route.model
+                    ),
+                    source: RouteSource::Default { route },
+                })
+            }
+            None => {
+                tracing::warn!(%intent, "no rule matched and the policy declares no default route");
+                Err(PolicyMatchError::NoRoute)
+            }
         }
     }
 
