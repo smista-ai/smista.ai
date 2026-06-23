@@ -727,20 +727,6 @@ impl Database for SurrealDatabase {
         self.create_paired(event, content).await
     }
 
-    async fn seal_content<C>(&self, id: Uuid, content: C) -> StorageResult<()>
-    where
-        C: Table + SurrealValue + Send + 'static,
-    {
-        tracing::debug!("sealing {table} content {id}", table = C::name());
-
-        let updated: Option<C> = self
-            .0
-            .update(record_id::<C, _>(id))
-            .content(content)
-            .await?;
-        updated.map(|_| ()).ok_or(StorageError::NotFound)
-    }
-
     async fn get_session_state(
         &self,
         user_id: Uuid,

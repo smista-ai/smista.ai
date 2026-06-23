@@ -6,12 +6,19 @@
 //! session-scoped — constructed once per `(session_id, user_id)` — and wraps the
 //! storage handle, so a stage never touches the database directly.
 //!
-//! Each `record_*` method mirrors one [`TraceEventType`] variant. It takes the
-//! shared [`TraceContext`] (the routing context every event carries) plus a
-//! typed payload whose shape matches the `trace_event_content` row documented in
-//! `docs/technical/schema.md`. The payload is serialized to JSON and stored as a
-//! [`SecretContent`]; in clear for a normal session, and sealed in a follow-up
-//! turn for an end-to-end encrypted one (see [`Tracer::encrypt_trace_event`]).
+//! Recording is two steps. First a stage turns its typed payload into a
+//! [`SerializedPayload`] with the matching constructor (for example
+//! [`SerializedPayload::message`]); that yields the JSON exactly as it will be
+//! stored. Then the stage hands a [`SecretContent`] to the matching `record_*`
+//! method. The event and its content are written together, sharing one record
+//! id, in a single append.
+//!
+//! Content is never re-encrypted in place after that write. For a normal session
+//! the stage wraps the serialized payload with [`SecretContent::plaintext`]. For
+//! an end-to-end encrypted session the run pauses, the client seals the
+//! serialized payload, and the stage records the resulting
+//! [`SecretContent::Encrypted`] envelope. Either way the `record_*` method takes
+//! the content exactly as it is to be stored, and the trace never holds a key.
 //!
 //! Per the trace invariants, payloads never carry secret or restricted content:
 //! context and tool payloads record references (paths, tool names, statuses),
@@ -31,7 +38,7 @@ use smista_storage::database::Database as _;
 use smista_storage::database::surreal::SurrealDatabase;
 use smista_storage::entity::{Session, Table, TraceEvent, TraceEventContent, User};
 use smista_storage::surrealdb::RecordId;
-use smista_storage::types::{ContentEnvelope, SecretContent};
+use smista_storage::types::SecretContent;
 use uuid::Uuid;
 
 /// The tracer is responsible for providing a simple interface to trace each event that must be tracked for each session.
@@ -57,6 +64,161 @@ pub enum TracerError {
 
 /// Result type for [`Tracer`].
 pub type TracerResult<T> = Result<T, TracerError>;
+
+/// A trace payload serialized to the JSON form it is stored as.
+///
+/// A stage builds one from its typed payload with the matching constructor, then
+/// either wraps it with [`SecretContent::plaintext`] for a normal session or
+/// sends it to the client to seal for an encrypted one. The serialized form is
+/// the tagged [`Payload`] representation, so the read path can recover the typed
+/// payload from a plaintext event.
+#[derive(Debug, Clone)]
+pub struct SerializedPayload(String);
+
+impl SerializedPayload {
+    /// Serializes a [`TraceEventType::Message`] payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TracerError`] if the payload cannot be serialized.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "wired by the routing stages and trace endpoint later"
+        )
+    )]
+    pub fn message(payload: MessagePayload) -> TracerResult<Self> {
+        Self::encode(Payload::Message(payload))
+    }
+
+    /// Serializes a [`TraceEventType::Classification`] payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TracerError`] if the payload cannot be serialized.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "wired by the routing stages and trace endpoint later"
+        )
+    )]
+    pub fn classification(classification: Classification) -> TracerResult<Self> {
+        Self::encode(Payload::Classification(classification))
+    }
+
+    /// Serializes a [`TraceEventType::RoutingDecision`] payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TracerError`] if the payload cannot be serialized.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "wired by the routing stages and trace endpoint later"
+        )
+    )]
+    pub fn routing_decision(payload: RoutingDecisionPayload) -> TracerResult<Self> {
+        Self::encode(Payload::RoutingDecision(payload))
+    }
+
+    /// Serializes a [`TraceEventType::ContextSelection`] payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TracerError`] if the payload cannot be serialized.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "wired by the routing stages and trace endpoint later"
+        )
+    )]
+    pub fn context_selection(payload: ContextSelectionPayload) -> TracerResult<Self> {
+        Self::encode(Payload::ContextSelection(payload))
+    }
+
+    /// Serializes a [`TraceEventType::ToolCall`] payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TracerError`] if the payload cannot be serialized.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "wired by the routing stages and trace endpoint later"
+        )
+    )]
+    pub fn tool_call(payload: ToolCallPayload) -> TracerResult<Self> {
+        Self::encode(Payload::ToolCall(payload))
+    }
+
+    /// Serializes a [`TraceEventType::Approval`] payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TracerError`] if the payload cannot be serialized.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "wired by the routing stages and trace endpoint later"
+        )
+    )]
+    pub fn approval(payload: ApprovalPayload) -> TracerResult<Self> {
+        Self::encode(Payload::Approval(payload))
+    }
+
+    /// Serializes a [`TraceEventType::Cost`] payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TracerError`] if the payload cannot be serialized.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "wired by the routing stages and trace endpoint later"
+        )
+    )]
+    pub fn cost(payload: CostPayload) -> TracerResult<Self> {
+        Self::encode(Payload::Cost(payload))
+    }
+
+    /// Borrows the serialized JSON, the form a client seals for an encrypted
+    /// session.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "wired by the routing stages and trace endpoint later"
+        )
+    )]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consumes the payload, returning the serialized JSON, the form
+    /// [`SecretContent::plaintext`] wraps for a normal session.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "wired by the routing stages and trace endpoint later"
+        )
+    )]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+
+    /// Serializes `payload` to its tagged JSON form.
+    fn encode(payload: Payload) -> TracerResult<Self> {
+        Ok(Self(serde_json::to_string(&payload)?))
+    }
+}
 
 /// The routing context every recorded event carries.
 ///
@@ -103,12 +265,14 @@ impl Tracer {
         }
     }
 
-    /// Records a [`TraceEventType::Message`] event.
+    /// Records a [`TraceEventType::Message`] event with the given `content`.
+    ///
+    /// `content` is the serialized [`SerializedPayload::message`] payload, in
+    /// clear or sealed.
     ///
     /// # Errors
     ///
-    /// Returns [`TracerError`] if the payload cannot be serialized or the event
-    /// cannot be persisted.
+    /// Returns [`TracerError`] if the event cannot be persisted.
     #[cfg_attr(
         not(test),
         expect(
@@ -119,17 +283,19 @@ impl Tracer {
     pub async fn record_message(
         &self,
         context: TraceContext,
-        payload: MessagePayload,
+        content: SecretContent,
     ) -> TracerResult<Uuid> {
-        self.record(context, Payload::Message(payload)).await
+        self.record(context, TraceEventType::Message, content).await
     }
 
-    /// Records a [`TraceEventType::Classification`] event.
+    /// Records a [`TraceEventType::Classification`] event with the given `content`.
+    ///
+    /// `content` is the serialized [`SerializedPayload::classification`] payload,
+    /// in clear or sealed.
     ///
     /// # Errors
     ///
-    /// Returns [`TracerError`] if the payload cannot be serialized or the event
-    /// cannot be persisted.
+    /// Returns [`TracerError`] if the event cannot be persisted.
     #[cfg_attr(
         not(test),
         expect(
@@ -140,18 +306,20 @@ impl Tracer {
     pub async fn record_classification(
         &self,
         context: TraceContext,
-        classification: Classification,
+        content: SecretContent,
     ) -> TracerResult<Uuid> {
-        self.record(context, Payload::Classification(classification))
+        self.record(context, TraceEventType::Classification, content)
             .await
     }
 
-    /// Records a [`TraceEventType::RoutingDecision`] event.
+    /// Records a [`TraceEventType::RoutingDecision`] event with the given `content`.
+    ///
+    /// `content` is the serialized [`SerializedPayload::routing_decision`]
+    /// payload, in clear or sealed.
     ///
     /// # Errors
     ///
-    /// Returns [`TracerError`] if the payload cannot be serialized or the event
-    /// cannot be persisted.
+    /// Returns [`TracerError`] if the event cannot be persisted.
     #[cfg_attr(
         not(test),
         expect(
@@ -162,18 +330,20 @@ impl Tracer {
     pub async fn record_routing_decision(
         &self,
         context: TraceContext,
-        payload: RoutingDecisionPayload,
+        content: SecretContent,
     ) -> TracerResult<Uuid> {
-        self.record(context, Payload::RoutingDecision(payload))
+        self.record(context, TraceEventType::RoutingDecision, content)
             .await
     }
 
-    /// Records a [`TraceEventType::ContextSelection`] event.
+    /// Records a [`TraceEventType::ContextSelection`] event with the given `content`.
+    ///
+    /// `content` is the serialized [`SerializedPayload::context_selection`]
+    /// payload, in clear or sealed.
     ///
     /// # Errors
     ///
-    /// Returns [`TracerError`] if the payload cannot be serialized or the event
-    /// cannot be persisted.
+    /// Returns [`TracerError`] if the event cannot be persisted.
     #[cfg_attr(
         not(test),
         expect(
@@ -184,18 +354,20 @@ impl Tracer {
     pub async fn record_context_selection(
         &self,
         context: TraceContext,
-        payload: ContextSelectionPayload,
+        content: SecretContent,
     ) -> TracerResult<Uuid> {
-        self.record(context, Payload::ContextSelection(payload))
+        self.record(context, TraceEventType::ContextSelection, content)
             .await
     }
 
-    /// Records a [`TraceEventType::ToolCall`] event.
+    /// Records a [`TraceEventType::ToolCall`] event with the given `content`.
+    ///
+    /// `content` is the serialized [`SerializedPayload::tool_call`] payload, in
+    /// clear or sealed.
     ///
     /// # Errors
     ///
-    /// Returns [`TracerError`] if the payload cannot be serialized or the event
-    /// cannot be persisted.
+    /// Returns [`TracerError`] if the event cannot be persisted.
     #[cfg_attr(
         not(test),
         expect(
@@ -206,17 +378,20 @@ impl Tracer {
     pub async fn record_tool_call(
         &self,
         context: TraceContext,
-        payload: ToolCallPayload,
+        content: SecretContent,
     ) -> TracerResult<Uuid> {
-        self.record(context, Payload::ToolCall(payload)).await
+        self.record(context, TraceEventType::ToolCall, content)
+            .await
     }
 
-    /// Records a [`TraceEventType::Approval`] event.
+    /// Records a [`TraceEventType::Approval`] event with the given `content`.
+    ///
+    /// `content` is the serialized [`SerializedPayload::approval`] payload, in
+    /// clear or sealed.
     ///
     /// # Errors
     ///
-    /// Returns [`TracerError`] if the payload cannot be serialized or the event
-    /// cannot be persisted.
+    /// Returns [`TracerError`] if the event cannot be persisted.
     #[cfg_attr(
         not(test),
         expect(
@@ -227,17 +402,20 @@ impl Tracer {
     pub async fn record_approval(
         &self,
         context: TraceContext,
-        payload: ApprovalPayload,
+        content: SecretContent,
     ) -> TracerResult<Uuid> {
-        self.record(context, Payload::Approval(payload)).await
+        self.record(context, TraceEventType::Approval, content)
+            .await
     }
 
-    /// Records a [`TraceEventType::Cost`] event.
+    /// Records a [`TraceEventType::Cost`] event with the given `content`.
+    ///
+    /// `content` is the serialized [`SerializedPayload::cost`] payload, in clear
+    /// or sealed.
     ///
     /// # Errors
     ///
-    /// Returns [`TracerError`] if the payload cannot be serialized or the event
-    /// cannot be persisted.
+    /// Returns [`TracerError`] if the event cannot be persisted.
     #[cfg_attr(
         not(test),
         expect(
@@ -248,9 +426,9 @@ impl Tracer {
     pub async fn record_cost(
         &self,
         context: TraceContext,
-        payload: CostPayload,
+        content: SecretContent,
     ) -> TracerResult<Uuid> {
-        self.record(context, Payload::Cost(payload)).await
+        self.record(context, TraceEventType::Cost, content).await
     }
 
     /// Returns a page of the session's [`Trace`], oldest event first.
@@ -276,11 +454,13 @@ impl Tracer {
             .map_err(TracerError::Database)
     }
 
-    /// Serializes `payload` and appends an event with `context`; the event kind
-    /// is taken from the [`Payload`] variant.
-    async fn record(&self, context: TraceContext, payload: Payload) -> TracerResult<Uuid> {
-        let event_type = payload.event_type();
-        let content = SecretContent::plaintext(serde_json::to_string(&payload)?);
+    /// Appends an event of `event_type` carrying `content`, with `context`.
+    async fn record(
+        &self,
+        context: TraceContext,
+        event_type: TraceEventType,
+        content: SecretContent,
+    ) -> TracerResult<Uuid> {
         self.trace_event(TraceEventArgs {
             event_type,
             task_type: context.task_type,
@@ -295,8 +475,7 @@ impl Tracer {
     /// Traces an event for the current session and user.
     ///
     /// Returns the shared record id of the persisted [`TraceEvent`] and its
-    /// paired [`TraceEventContent`]. That id can later seal the content through
-    /// [`Tracer::encrypt_trace_event`].
+    /// paired [`TraceEventContent`].
     async fn trace_event(
         &self,
         TraceEventArgs {
@@ -342,21 +521,6 @@ impl Tracer {
                 id
             })
     }
-
-    /// Encrypts the content of a [`TraceEvent`] with the given `id` and [`ContentEnvelope`].
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
-    async fn encrypt_trace_event(&self, id: Uuid, content: ContentEnvelope) -> TracerResult<()> {
-        self.database
-            .seal_content(id, TraceEventContent::new(id, content.into()))
-            .await
-            .map_err(TracerError::Database)
-    }
 }
 
 #[cfg(test)]
@@ -367,6 +531,7 @@ mod tests {
     use smista_core::tool::ToolCallStatus;
     use smista_core::trace::TraceEventPayload;
     use smista_storage::database::surreal::{SurrealBackend, SurrealOptions};
+    use smista_storage::types::ContentEnvelope;
 
     use super::*;
 
@@ -428,22 +593,29 @@ mod tests {
         }
     }
 
+    /// Wraps a serialized payload as plaintext content, the normal-session form.
+    fn plaintext(payload: SerializedPayload) -> SecretContent {
+        SecretContent::plaintext(payload.into_string())
+    }
+
+    fn message_payload() -> SerializedPayload {
+        SerializedPayload::message(MessagePayload {
+            role: MessageRole::User,
+            provider: Provider::Anthropic,
+            model: "claude".to_string(),
+        })
+        .expect("failed to serialize message payload")
+    }
+
     #[tokio::test]
-    async fn should_seal_recorded_event_content() {
+    async fn should_record_event_content_as_given() {
         let (tracer, _session_id, _user_id) = tracer().await;
 
-        let id = tracer
-            .record_message(
-                context(),
-                MessagePayload {
-                    role: MessageRole::User,
-                    provider: Provider::Anthropic,
-                    model: "claude".to_string(),
-                },
-            )
-            .await
-            .expect("failed to record message");
-
+        // An encrypted session seals the serialized payload (the bytes a client
+        // reads through `as_str`) and hands the tracer the resulting envelope;
+        // the tracer stores it verbatim, so the read model surfaces it as
+        // encrypted.
+        assert!(!message_payload().as_str().is_empty());
         let envelope = ContentEnvelope {
             version: 1,
             algorithm: "xchacha20poly1305".to_string(),
@@ -452,12 +624,10 @@ mod tests {
             ciphertext: "Y2lwaGVydGV4dA".to_string(),
         };
         tracer
-            .encrypt_trace_event(id, envelope)
+            .record_message(context(), SecretContent::from(envelope))
             .await
-            .expect("failed to seal content");
+            .expect("failed to record message");
 
-        // After sealing, storage holds no key, so the read model surfaces the
-        // sealed envelope rather than a readable payload.
         let trace = tracer
             .traces(Pagination::default())
             .await
@@ -475,90 +645,101 @@ mod tests {
         let (tracer, session_id, _user_id) = tracer().await;
 
         tracer
-            .record_message(
-                context(),
-                MessagePayload {
-                    role: MessageRole::User,
-                    provider: Provider::Anthropic,
-                    model: "claude".to_string(),
-                },
-            )
+            .record_message(context(), plaintext(message_payload()))
             .await
             .expect("failed to record message");
         tracer
             .record_classification(
                 context(),
-                Classification {
-                    intent: TaskIntent::Review,
-                    source: IntentSource::Inferred,
-                    reason: "keyword 'review' matched".to_string(),
-                    matched_rule: Some(0),
-                    confidence: Some(Confidence::High),
-                },
+                plaintext(
+                    SerializedPayload::classification(Classification {
+                        intent: TaskIntent::Review,
+                        source: IntentSource::Inferred,
+                        reason: "keyword 'review' matched".to_string(),
+                        matched_rule: Some(0),
+                        confidence: Some(Confidence::High),
+                    })
+                    .expect("failed to serialize classification"),
+                ),
             )
             .await
             .expect("failed to record classification");
         tracer
             .record_routing_decision(
                 context(),
-                RoutingDecisionPayload {
-                    provider: Provider::Anthropic,
-                    model: "claude".to_string(),
-                    matched_rule: Some("edit -> claude".to_string()),
-                    fallback_used: false,
-                    override_used: false,
-                    reason: "best for edit".to_string(),
-                },
+                plaintext(
+                    SerializedPayload::routing_decision(RoutingDecisionPayload {
+                        provider: Provider::Anthropic,
+                        model: "claude".to_string(),
+                        matched_rule: Some("edit -> claude".to_string()),
+                        fallback_used: false,
+                        override_used: false,
+                        reason: "best for edit".to_string(),
+                    })
+                    .expect("failed to serialize routing decision"),
+                ),
             )
             .await
             .expect("failed to record routing decision");
         tracer
             .record_context_selection(
                 context(),
-                ContextSelectionPayload {
-                    path: Some("src/auth/middleware.rs".to_string()),
-                    kind: "file".to_string(),
-                    included: true,
-                    reason: "referenced by the prompt".to_string(),
-                },
+                plaintext(
+                    SerializedPayload::context_selection(ContextSelectionPayload {
+                        path: Some("src/auth/middleware.rs".to_string()),
+                        kind: "file".to_string(),
+                        included: true,
+                        reason: "referenced by the prompt".to_string(),
+                    })
+                    .expect("failed to serialize context selection"),
+                ),
             )
             .await
             .expect("failed to record context selection");
         tracer
             .record_tool_call(
                 context(),
-                ToolCallPayload {
-                    tool_name: "read_file".to_string(),
-                    status: ToolCallStatus::Completed,
-                    arguments: Some("src/auth/middleware.rs".to_string()),
-                    result: None,
-                    error: None,
-                },
+                plaintext(
+                    SerializedPayload::tool_call(ToolCallPayload {
+                        tool_name: "read_file".to_string(),
+                        status: ToolCallStatus::Completed,
+                        arguments: Some("src/auth/middleware.rs".to_string()),
+                        result: None,
+                        error: None,
+                    })
+                    .expect("failed to serialize tool call"),
+                ),
             )
             .await
             .expect("failed to record tool call");
         tracer
             .record_approval(
                 context(),
-                ApprovalPayload {
-                    target_type: "tool_call".to_string(),
-                    target_id: "c1".to_string(),
-                    decision: ApprovalDecision::Approved,
-                    reason: None,
-                },
+                plaintext(
+                    SerializedPayload::approval(ApprovalPayload {
+                        target_type: "tool_call".to_string(),
+                        target_id: "c1".to_string(),
+                        decision: ApprovalDecision::Approved,
+                        reason: None,
+                    })
+                    .expect("failed to serialize approval"),
+                ),
             )
             .await
             .expect("failed to record approval");
         tracer
             .record_cost(
                 context(),
-                CostPayload {
-                    provider: Provider::Anthropic,
-                    model: "claude".to_string(),
-                    input_tokens: 1_200,
-                    output_tokens: 500,
-                    cost: Some("0.08".to_string()),
-                },
+                plaintext(
+                    SerializedPayload::cost(CostPayload {
+                        provider: Provider::Anthropic,
+                        model: "claude".to_string(),
+                        input_tokens: 1_200,
+                        output_tokens: 500,
+                        cost: Some("0.08".to_string()),
+                    })
+                    .expect("failed to serialize cost"),
+                ),
             )
             .await
             .expect("failed to record cost");
@@ -597,13 +778,16 @@ mod tests {
         tracer
             .record_classification(
                 context(),
-                Classification {
-                    intent: TaskIntent::Review,
-                    source: IntentSource::Inferred,
-                    reason: "keyword 'review' matched".to_string(),
-                    matched_rule: Some(2),
-                    confidence: Some(Confidence::High),
-                },
+                plaintext(
+                    SerializedPayload::classification(Classification {
+                        intent: TaskIntent::Review,
+                        source: IntentSource::Inferred,
+                        reason: "keyword 'review' matched".to_string(),
+                        matched_rule: Some(2),
+                        confidence: Some(Confidence::High),
+                    })
+                    .expect("failed to serialize classification"),
+                ),
             )
             .await
             .expect("failed to record classification");
@@ -637,11 +821,14 @@ mod tests {
             tracer
                 .record_message(
                     context(),
-                    MessagePayload {
-                        role: MessageRole::User,
-                        provider: Provider::Anthropic,
-                        model: format!("claude-{index}"),
-                    },
+                    plaintext(
+                        SerializedPayload::message(MessagePayload {
+                            role: MessageRole::User,
+                            provider: Provider::Anthropic,
+                            model: format!("claude-{index}"),
+                        })
+                        .expect("failed to serialize message"),
+                    ),
                 )
                 .await
                 .expect("failed to record message");
@@ -672,14 +859,7 @@ mod tests {
     async fn should_not_read_trace_of_unowned_session() {
         let (owner_tracer, session_id, _owner_id) = tracer().await;
         owner_tracer
-            .record_message(
-                context(),
-                MessagePayload {
-                    role: MessageRole::User,
-                    provider: Provider::Anthropic,
-                    model: "claude".to_string(),
-                },
-            )
+            .record_message(context(), plaintext(message_payload()))
             .await
             .expect("failed to record message");
 

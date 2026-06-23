@@ -2,8 +2,9 @@
 
 use chrono::{DateTime, Utc};
 use surrealdb::types::{RecordId, SurrealValue};
+use uuid::Uuid;
 
-use super::Table;
+use super::{Table, record_uuid};
 
 /// A resumable user interaction with smista.ai.
 ///
@@ -36,6 +37,13 @@ pub struct Session {
     pub updated_at: DateTime<Utc>,
     /// When the session was archived, if applicable.
     pub archived_at: Option<DateTime<Utc>>,
+}
+
+impl Session {
+    /// Returns this session's UUIDv7 key.
+    pub fn uuid(&self) -> Uuid {
+        record_uuid(&self.id)
+    }
 }
 
 impl Table for Session {
