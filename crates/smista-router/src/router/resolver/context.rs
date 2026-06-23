@@ -33,13 +33,13 @@ mod estimator;
 
 use std::path::{Path, PathBuf};
 
-use smista_core::api::{Attachments, ContextOutcome, Workspace};
 use smista_core::message::MessageRole;
 use smista_core::model::ModelDescriptor;
 use smista_core::policy::PrivacyPolicy;
 use smista_core::skill::Skill;
 
 use crate::router::resolver::policy_matcher::RouteMatch;
+use crate::router::resolver::{Attachments, Workspace};
 
 /// Base relevance score for an attached file.
 const SCORE_FILE: u32 = 5_000;
@@ -72,6 +72,7 @@ const DEFAULT_REPLY_RESERVE_TOKENS: u64 = 256;
 ///
 /// [`TaskNormalizer`]: crate::router::resolver::normalizer::TaskNormalizer
 /// [`PolicyMatcher`]: crate::router::resolver::policy_matcher::PolicyMatcher
+#[derive(Default, Debug)]
 pub struct ContextSelector;
 
 impl ContextSelector {
@@ -459,6 +460,35 @@ pub struct CandidateSet {
     pub candidates: Vec<Candidate>,
 }
 
+impl CandidateSet {
+    /// Whether any required candidate is restricted from remote providers.
+    ///
+    /// When this holds the turn must be served locally: required restricted
+    /// content can never be dropped, so a remote model would inevitably receive
+    /// it. Model selection reads this to foreclose remote models, exactly as
+    /// `docs/technical/routing.md` specifies.
+    #[must_use]
+    pub fn has_restricted_required_content(&self) -> bool {
+        self.candidates
+            .iter()
+            .any(|candidate| candidate.restricted_for_remote && candidate.required)
+    }
+
+    /// The token floor a model must accommodate: the sum of the required
+    /// candidates' sizes.
+    ///
+    /// Discardable context is trimmed to fit in [`ContextSelector::finalize`], so
+    /// only the required candidates set the minimum window a chosen model needs.
+    #[must_use]
+    pub fn required_tokens(&self) -> u64 {
+        self.candidates
+            .iter()
+            .filter(|candidate| candidate.required)
+            .map(|candidate| candidate.estimated_tokens)
+            .sum()
+    }
+}
+
 /// One piece of candidate context, with its relevance and privacy marks.
 #[derive(Debug, Clone)]
 pub struct Candidate {
@@ -520,6 +550,19 @@ pub struct ResolvedContext {
     pub references: Vec<ContextReference>,
 }
 
+/// The human-readable summary of what context was included and excluded.
+///
+/// The resolver's own form, distinct from the wire
+/// [`ContextOutcome`](smista_core::api::ContextOutcome): the caller maps it onto
+/// the wire type for the turn response.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ContextOutcome {
+    /// Human-readable descriptions of included context.
+    pub included: Vec<String>,
+    /// Human-readable descriptions of excluded context.
+    pub excluded: Vec<String>,
+}
+
 /// A references-only record of one context decision, for the trace.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContextReference {
@@ -574,13 +617,13 @@ fn matches_route_paths(route: &RouteMatch<'_>, path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
-    use smista_core::api::{ContextFile, ContextInstruction};
     use smista_core::intent::TaskIntent;
     use smista_core::model::{ModelAuthRequirement, ModelCapabilities, ModelParameters, Provider};
     use smista_core::policy::{DefaultRoute, RoutingRule};
 
     use super::*;
     use crate::router::resolver::policy_matcher::RouteSource;
+    use crate::router::resolver::{ContextFile, ContextInstruction};
 
     fn default_route() -> DefaultRoute {
         serde_json::from_value(json!({ "model": "ollama/llama3" })).expect("default route")
@@ -607,7 +650,6 @@ mod tests {
         ContextFile {
             path: PathBuf::from(path),
             content: content.to_string(),
-            content_hash: "sha256:test".to_string(),
             required,
         }
     }

@@ -14,14 +14,6 @@
 //! The precedence rules are described, user-facing, in
 //! `docs/technical/routing.md`.
 
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by model selection and the execution orchestrator"
-    )
-)]
-
 use smista_core::intent::TaskIntent;
 use smista_core::model::ModelReference;
 use smista_core::policy::{DefaultRoute, RoutingPolicy, RoutingRule, Specificity};
