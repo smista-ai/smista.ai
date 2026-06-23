@@ -57,9 +57,8 @@ pub use crypto::{EncryptedPayload, PlainRecord, SealedRecord};
 pub use error::{ApiError, ApiErrorBody, ApiErrorCode, ApiErrorResponse};
 pub use execute::{
     ApprovalKind, Attachments, CompletedTurn, ContextFile, ContextInstruction, ContextOutcome,
-    ExecutePolicy, ExecuteRequest, LocalPreferences, PendingApproval, ProviderCredentialInfo,
-    ProviderModelInfo, RoutingOutcome, TaskInput, ToolApproval, ToolRequest, TurnResponse,
-    Workspace,
+    ExecutePolicy, ExecuteRequest, LocalPreferences, PendingApproval, RoutingOutcome, TaskInput,
+    ToolApproval, ToolRequest, TurnResponse, Workspace,
 };
 pub use llm::{ListModelsResponse, ListProvidersResponse, UnavailableProvider};
 pub use preview::{CostRange, PreviewResponse, RequiredPermission};

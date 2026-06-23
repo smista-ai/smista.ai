@@ -318,9 +318,9 @@ X-Smista-Provider-{provider}-Api-Key: <api-key>
 ```
 
 The body carries everything the router needs to make a deterministic decision:
-the user input, a workspace snapshot, the merged policy, local preferences, the
-available providers with their credential status, and the local `attachments`
-(files, instructions and skills) the router cannot read for itself. Session
+the user input, a workspace snapshot, the merged policy, local preferences, and
+the local `attachments` (files, instructions and skills) the router cannot read
+for itself. Session
 history, memory and the assembled context are **not** sent — the router owns
 them and recalls them from storage. The `policy` block is the same routing,
 tool-permission and privacy vocabulary the CLI loads from `config.toml` — sent
@@ -381,10 +381,6 @@ continuations and the streaming flow, see
     }
   },
   "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
-  "providers": [
-    { "id": "anthropic", "models": [{ "model": "claude-sonnet", "requires_api_key": true, "credential_available": true }] },
-    { "id": "ollama", "models": [{ "model": "qwen2.5-coder", "requires_api_key": false, "credential_available": true }] }
-  ],
   "attachments": {
     "files": [{ "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true }],
     "instructions": [{ "source": "SMISTA.md", "content": "..." }],
@@ -402,16 +398,15 @@ The top-level fields are:
 | `workspace`         | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced/active files.                                                                                                                                             |
 | `policy`            | The deterministic `classification`, `routing`, `tools` and `privacy` policy (see below).                                                                                                                                    |
 | `local_preferences` | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                                                                                                                                                |
-| `providers`         | Providers offered for this request and per-model credential status.                                                                                                                                                         |
 | `attachments`       | Local content the router cannot read: `files` (each `required` or discardable), `instructions`, `invoked_skills` (explicitly invoked, added to the model preamble), `available_skills` (offered for the model to activate). |
 
 `input.command` forces a task type (`edit`, `review`, …) and `input.explicit_model`
 forces a `provider/model`, bypassing routing entirely; both may be `null`.
 
-For an end-to-end encrypted session the body also carries `input_ciphertext`, the
-sealed form of the user prompt that the router persists; the plaintext in
-`input.text` is what calls the model. It is absent for a plaintext session. See
-[the execution protocol](../technical/execution-protocol.md).
+The request never lists providers or credential status: the router owns the
+model catalog and reads any supplied provider credentials from the
+`X-Smista-Provider-<Provider>-Api-Key` headers, so it decides availability for
+itself.
 
 ### Policy
 
@@ -445,10 +440,10 @@ holds ordered `rules` plus an optional `default` route (`model` and ordered
 sub-policy, each with an optional `mode` (`remote` defaults to `ask`, `local` to
 `allow`) and the `remote` block adds `blocked_paths` never sent to remote models.
 
-Each entry in `providers` carries the provider `id` and its `models`, where each
-model reports `requires_api_key` and whether a `credential_available` for it was
-supplied. The credentials themselves never appear in the body — they travel as
-`X-Smista-Provider-<Provider>-Api-Key` headers.
+Provider credentials never appear in the body. They travel as
+`X-Smista-Provider-<Provider>-Api-Key` headers, and the router combines them
+with its own model catalog to decide which models are available — the client
+declares nothing about providers or credential status.
 
 ### Execute the task
 

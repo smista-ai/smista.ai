@@ -192,19 +192,16 @@ one JSON body; `stream` returns it as a stream (see [Streaming](#streaming)).
     "available_skills": []
   },
   "policy": { "version": 1, "source": "merged", "classification": { }, "routing": { }, "tools": { }, "privacy": { } },
-  "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
-  "providers": [
-    { "id": "anthropic", "models": [{ "model": "claude-sonnet", "requires_api_key": true, "credential_available": true }] }
-  ]
+  "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false }
 }
 ```
 
 The `policy` block is the canonical routing, tool-permission and privacy
 vocabulary, sent verbatim — see the [HTTP API reference](../api/http-api.md) for
-its fields. For an encrypted session the body also carries the user prompt's
-ciphertext for storage, alongside the plaintext the model needs; this is the one
-piece of content sealed without a round trip (see
-[Decrypt and encrypt](#decrypt-and-encrypt)).
+its fields. The body never lists providers or credentials: the router owns the
+model catalog and reads any provider credentials from the request headers. For
+an encrypted session the content the router authors and persists is sealed
+through the encrypt turn (see [Decrypt and encrypt](#decrypt-and-encrypt)).
 
 ### Response: completion or continuation
 

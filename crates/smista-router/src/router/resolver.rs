@@ -13,5 +13,6 @@
 //! a usable model.
 
 mod context;
+mod model;
 mod normalizer;
 mod policy_matcher;
