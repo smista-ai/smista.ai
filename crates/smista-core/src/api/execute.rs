@@ -2,8 +2,8 @@
 //!
 //! [`ExecuteRequest`] is the input to `POST /sessions/{id}/execute` and,
 //! unchanged, to `/stream` and `/preview`: the user's input, the workspace
-//! snapshot, the deterministic policy, local preferences, the available
-//! providers, and the local [`Attachments`] (files, instructions and skills)
+//! snapshot, the deterministic policy, local preferences, and the local
+//! [`Attachments`] (files, instructions and skills)
 //! the router cannot read for itself. Session history, memory and the assembled
 //! context are never sent — the router owns them and recalls them from storage.
 //!
@@ -43,7 +43,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::{ApiErrorBody, EncryptedPayload, PlainRecord, SealedRecord};
+use super::{ApiErrorBody, PlainRecord, SealedRecord};
 use crate::intent::TaskIntent;
 use crate::message::Message;
 use crate::model::{ModelReference, Provider};
@@ -67,16 +67,8 @@ pub struct ExecuteRequest {
     pub policy: ExecutePolicy,
     /// Client-side execution preferences.
     pub local_preferences: LocalPreferences,
-    /// Providers available for this request and their credential status.
-    pub providers: Vec<ProviderCredentialInfo>,
     /// Local content the router cannot read for itself.
     pub attachments: Attachments,
-    /// For an encrypted session, the sealed form of the user prompt, persisted
-    /// as the user message; the plaintext in `input.text` is what calls the
-    /// model. Absent for a plaintext session.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub input_ciphertext: Option<EncryptedPayload>,
 }
 
 /// The user's request: prompt text, optional command and explicit model.
@@ -163,32 +155,6 @@ pub struct LocalPreferences {
     pub local_only: bool,
     /// Forbid any network access for this request.
     pub no_network: bool,
-}
-
-/// A provider available to the request and the credential status of its models.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "ts", ts(export))]
-pub struct ProviderCredentialInfo {
-    /// Provider identifier.
-    pub id: Provider,
-    /// Models offered by the provider and their credential status.
-    pub models: Vec<ProviderModelInfo>,
-}
-
-/// A model offered by a provider and whether its credential is available.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "ts", ts(export))]
-pub struct ProviderModelInfo {
-    /// Model name.
-    pub model: String,
-    /// Whether the model requires an API key.
-    pub requires_api_key: bool,
-    /// Whether a credential for the model is available to the request.
-    pub credential_available: bool,
 }
 
 /// Local content the client supplies because the router has no filesystem.
@@ -428,6 +394,7 @@ pub struct ContextOutcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::EncryptedPayload;
     use crate::effort::Effort;
     use crate::policy::{IntentSource, PermissionMode};
 
@@ -475,10 +442,6 @@ mod tests {
             }
         },
         "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
-        "providers": [
-            { "id": "anthropic", "models": [ { "model": "claude-sonnet", "requires_api_key": true, "credential_available": true } ] },
-            { "id": "ollama", "models": [ { "model": "qwen2.5-coder", "requires_api_key": false, "credential_available": true } ] }
-        ],
         "attachments": {
             "files": [ { "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true } ],
             "instructions": [ { "source": "SMISTA.md", "content": "..." } ],
@@ -527,7 +490,6 @@ mod tests {
         assert_eq!(request.attachments.invoked_skills[0].name, "code-review");
         assert_eq!(request.attachments.available_skills.len(), 1);
         assert_eq!(request.attachments.available_skills[0].name, "changelog");
-        assert_eq!(request.providers.len(), 2);
     }
 
     #[test]

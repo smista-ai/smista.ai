@@ -55,6 +55,10 @@ lives in `docs/`.
   depend on Elastic-2.0 crates.
 - **Rust**: follow the project rustfmt config; `clippy` must pass with
   `-D warnings`. Use `module_name.rs`, not `mod.rs`.
+- **Tracing**: business-logic code MUST emit `tracing` events. Every
+  decision, branch and failure path on a meaningful code path is observable —
+  log what was chosen and, crucially, _why_ each alternative was rejected.
+  Never log secrets (see [Secrets](#secrets)).
 - **TypeScript**: Biome for lint + format; strict `tsconfig`. No `any`.
 - **TS bindings**: the types under `sdk/src/bindings/` are generated from the
   Rust `ts-rs` types — never edit them by hand. After changing any

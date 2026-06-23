@@ -108,13 +108,15 @@ flowchart TD
 
 ### Resolving and availability
 
-The reference is resolved against the providers the request offered in
-`providers` (`ProviderCredentialInfo`). A model is **available** when its
-provider is present, the model is listed, and — when it `requires_api_key` — a
-`credential_available` was supplied. An unknown provider or model is an
-`unknown_provider` / `unknown_model` error; a reference not in `provider/model`
-form is `invalid_model_reference`. An available-but-uncredentialled model is not
-usable and falls through to the next candidate.
+The reference is resolved against the router's own model catalog and the
+provider credentials the request supplied through its headers. The request
+itself declares nothing about providers: the router owns the catalog (so it
+knows each model's facts, including whether it `requires_api_key`) and reads any
+`X-Smista-Provider-<Provider>-Api-Key` header for itself, so it decides
+availability without trusting the client. A model is **available** when the
+router knows it and — when it needs an API key — a credential for its provider
+was supplied. A model the router does not know, or one that needs a credential
+none was supplied for, is not usable and falls through to the next candidate.
 
 ### Capability and context validation
 

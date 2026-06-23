@@ -1717,7 +1717,6 @@
           "workspace",
           "policy",
           "local_preferences",
-          "providers",
           "attachments"
         ],
         "properties": {
@@ -1737,27 +1736,9 @@
             "$ref": "#/components/schemas/LocalPreferences",
             "description": "Client-side execution preferences."
           },
-          "providers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProviderCredentialInfo"
-            },
-            "description": "Providers available for this request and their credential status."
-          },
           "attachments": {
             "$ref": "#/components/schemas/Attachments",
             "description": "Local content the router cannot read for itself."
-          },
-          "input_ciphertext": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/EncryptedPayload",
-                "description": "For an encrypted session, the sealed form of the user prompt, persisted\nas the user message; the plaintext in `input.text` is what calls the\nmodel. Absent for a plaintext session."
-              }
-            ]
           }
         }
       },
@@ -2480,27 +2461,6 @@
         "type": "string",
         "description": "A provider identifier, e.g. `anthropic`, `openai`, or `openai-compat:<name>`."
       },
-      "ProviderCredentialInfo": {
-        "type": "object",
-        "description": "A provider available to the request and the credential status of its models.",
-        "required": [
-          "id",
-          "models"
-        ],
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/Provider",
-            "description": "Provider identifier."
-          },
-          "models": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProviderModelInfo"
-            },
-            "description": "Models offered by the provider and their credential status."
-          }
-        }
-      },
       "ProviderDescriptor": {
         "type": "object",
         "description": "A provider that is available for routing.\n\nThis is the shape returned by `GET /llm/providers`, which lists only the\nproviders that are currently available — those configured with usable\ncredentials (or a base URL, for local providers). A provider that is not\navailable is omitted from the listing entirely, so this descriptor carries\nno availability flag.",
@@ -2542,29 +2502,6 @@
           "unknown",
           "unsupported_capability"
         ]
-      },
-      "ProviderModelInfo": {
-        "type": "object",
-        "description": "A model offered by a provider and whether its credential is available.",
-        "required": [
-          "model",
-          "requires_api_key",
-          "credential_available"
-        ],
-        "properties": {
-          "model": {
-            "type": "string",
-            "description": "Model name."
-          },
-          "requires_api_key": {
-            "type": "boolean",
-            "description": "Whether the model requires an API key."
-          },
-          "credential_available": {
-            "type": "boolean",
-            "description": "Whether a credential for the model is available to the request."
-          }
-        }
       },
       "RemotePrivacy": {
         "type": "object",
