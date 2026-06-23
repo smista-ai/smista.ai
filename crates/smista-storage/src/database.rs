@@ -280,26 +280,6 @@ pub trait Database: Send + Sync {
         status: DiffStatus,
     ) -> impl Future<Output = StorageResult<SessionDiff>> + Send;
 
-    /// Overwrites the `_content` row identified by `id` with `content`.
-    ///
-    /// Content-bearing entities split their encryptable payload into a paired
-    /// `_content` row sharing the base record id (see [`crate::entity`]). The
-    /// end-to-end encryption protocol uses this to replace a payload in place
-    /// with its sealed form: `content` already carries the
-    /// [`SecretContent`](crate::types::SecretContent) field(s), in clear or
-    /// sealed, and storage just persists it without ever holding a key.
-    ///
-    /// Ownership is the caller's responsibility — the row is addressed directly
-    /// by id. Returns [`StorageError::NotFound`](crate::StorageError::NotFound)
-    /// if no such `_content` row exists.
-    fn seal_content<C>(
-        &self,
-        id: Uuid,
-        content: C,
-    ) -> impl Future<Output = StorageResult<()>> + Send
-    where
-        C: crate::entity::Table + surrealdb::types::SurrealValue + Send + 'static;
-
     // -- Reads ---------------------------------------------------------------
 
     /// Loads the full state of a session owned by `user_id`, or `None`.

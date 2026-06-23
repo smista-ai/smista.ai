@@ -15,6 +15,7 @@ mod config;
 mod log;
 mod retention;
 mod router;
+mod session;
 mod signal;
 mod storage;
 mod trace;
