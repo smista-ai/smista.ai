@@ -1970,3 +1970,185 @@ async fn should_purge_run_state_with_old_session() {
         "run state survived session purge"
     );
 }
+
+// -- Plan and diff status transitions ----------------------------------------
+
+fn plan_for(plan_id: Uuid, session_id: Uuid, user_id: Uuid) -> SessionPlan {
+    SessionPlan {
+        id: RecordId::new(SessionPlan::name(), plan_id.to_string()),
+        session: RecordId::new(Session::name(), session_id.to_string()),
+        user: RecordId::new(User::name(), user_id.to_string()),
+        path: "src/lib.rs".to_string(),
+        status: PlanStatus::Draft,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        approved_at: None,
+        content_hash: None,
+    }
+}
+
+fn diff_for(diff_id: Uuid, session_id: Uuid, user_id: Uuid) -> SessionDiff {
+    SessionDiff {
+        id: RecordId::new(SessionDiff::name(), diff_id.to_string()),
+        session: RecordId::new(Session::name(), session_id.to_string()),
+        user: RecordId::new(User::name(), user_id.to_string()),
+        path: "src/lib.rs".to_string(),
+        status: DiffStatus::Proposed,
+        created_at: Utc::now(),
+        applied_at: None,
+    }
+}
+
+async fn append_draft_plan(db: &SurrealDatabase, user_id: Uuid, session_id: Uuid) -> Uuid {
+    let plan_id = Uuid::now_v7();
+    let content = SessionPlanContent {
+        id: RecordId::new(SessionPlanContent::name(), plan_id.to_string()),
+        content_snapshot: Some(SecretContent::plaintext("1. do the thing")),
+    };
+    db.append_plan(user_id, plan_for(plan_id, session_id, user_id), content)
+        .await
+        .expect("failed to append plan");
+    plan_id
+}
+
+async fn append_proposed_diff(db: &SurrealDatabase, user_id: Uuid, session_id: Uuid) -> Uuid {
+    let diff_id = Uuid::now_v7();
+    let content = SessionDiffContent {
+        id: RecordId::new(SessionDiffContent::name(), diff_id.to_string()),
+        diff: SecretContent::plaintext("@@ -1 +1 @@\n-old\n+new"),
+    };
+    db.append_diff(user_id, diff_for(diff_id, session_id, user_id), content)
+        .await
+        .expect("failed to append diff");
+    diff_id
+}
+
+#[tokio::test]
+async fn should_approve_plan_and_stamp_approved_at() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    let plan_id = append_draft_plan(&db, user_id, session_id).await;
+
+    let approved = db
+        .set_plan_status(user_id, plan_id, PlanStatus::Approved)
+        .await
+        .expect("failed to approve plan");
+
+    assert_eq!(approved.status, PlanStatus::Approved);
+    assert!(
+        approved.approved_at.is_some(),
+        "approving a plan must stamp approved_at"
+    );
+    assert_eq!(
+        count::<SessionPlan>(&db).await,
+        1,
+        "plan transition was not applied in place"
+    );
+}
+
+#[tokio::test]
+async fn should_reject_plan_and_clear_approved_at() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    let plan_id = append_draft_plan(&db, user_id, session_id).await;
+
+    // Approve first, so a later rejection has an approved_at to clear.
+    db.set_plan_status(user_id, plan_id, PlanStatus::Approved)
+        .await
+        .expect("failed to approve plan");
+
+    let rejected = db
+        .set_plan_status(user_id, plan_id, PlanStatus::Rejected)
+        .await
+        .expect("failed to reject plan");
+
+    assert_eq!(rejected.status, PlanStatus::Rejected);
+    assert!(
+        rejected.approved_at.is_none(),
+        "rejecting a plan must clear approved_at"
+    );
+}
+
+#[tokio::test]
+async fn should_apply_diff_and_stamp_applied_at() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    let diff_id = append_proposed_diff(&db, user_id, session_id).await;
+
+    let applied = db
+        .set_diff_status(user_id, diff_id, DiffStatus::Applied)
+        .await
+        .expect("failed to apply diff");
+
+    assert_eq!(applied.status, DiffStatus::Applied);
+    assert!(
+        applied.applied_at.is_some(),
+        "applying a diff must stamp applied_at"
+    );
+}
+
+#[tokio::test]
+async fn should_reject_diff_and_leave_applied_at_unset() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    let diff_id = append_proposed_diff(&db, user_id, session_id).await;
+
+    let rejected = db
+        .set_diff_status(user_id, diff_id, DiffStatus::Rejected)
+        .await
+        .expect("failed to reject diff");
+
+    assert_eq!(rejected.status, DiffStatus::Rejected);
+    assert!(
+        rejected.applied_at.is_none(),
+        "rejecting a diff must leave applied_at unset"
+    );
+}
+
+#[tokio::test]
+async fn should_reject_plan_status_for_unowned_plan() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    let plan_id = append_draft_plan(&db, user_id, session_id).await;
+
+    let intruder = Uuid::now_v7();
+    db.create_user(user(intruder))
+        .await
+        .expect("failed to create intruder");
+
+    let result = db
+        .set_plan_status(intruder, plan_id, PlanStatus::Approved)
+        .await;
+
+    assert!(matches!(result, Err(StorageError::NotFound)));
+}
+
+#[tokio::test]
+async fn should_reject_diff_status_for_unowned_diff() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    let diff_id = append_proposed_diff(&db, user_id, session_id).await;
+
+    let intruder = Uuid::now_v7();
+    db.create_user(user(intruder))
+        .await
+        .expect("failed to create intruder");
+
+    let result = db
+        .set_diff_status(intruder, diff_id, DiffStatus::Applied)
+        .await;
+
+    assert!(matches!(result, Err(StorageError::NotFound)));
+}
+
+#[tokio::test]
+async fn should_reject_plan_status_for_absent_plan() {
+    let db = memory_db().await;
+    let (user_id, _session_id) = user_with_session(&db).await;
+
+    let result = db
+        .set_plan_status(user_id, Uuid::now_v7(), PlanStatus::Approved)
+        .await;
+
+    assert!(matches!(result, Err(StorageError::NotFound)));
+}

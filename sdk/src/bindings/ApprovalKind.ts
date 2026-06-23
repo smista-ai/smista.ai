@@ -3,4 +3,4 @@
 /**
  * The kind of a [`PendingApproval`].
  */
-export type ApprovalKind = "remote_disclosure" | "cost_limit";
+export type ApprovalKind = "remote_disclosure" | "cost_limit" | "plan";

@@ -109,6 +109,8 @@ pub enum ApprovalKind {
     RemoteDisclosure,
     /// Confirming a cost limit.
     CostLimit,
+    /// Accepting or rejecting a generated plan before execution begins.
+    Plan,
 }
 
 #[cfg(test)]

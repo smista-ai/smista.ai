@@ -21,8 +21,8 @@ pub use self::options::SurrealOptions;
 use crate::api::{MemoryRef, Pagination, SessionState};
 use crate::database::Database;
 use crate::entity::{
-    AuthToken, ContextMemory, ContextMemoryContent, RunState, Session, SessionApproval,
-    SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
+    AuthToken, ContextMemory, ContextMemoryContent, DiffStatus, PlanStatus, RunState, Session,
+    SessionApproval, SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
     SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
     SessionToolCall, SessionToolCallContent, Table, TraceEvent, TraceEventContent, User,
     UserMemory, UserMemoryContent,
@@ -650,6 +650,58 @@ impl Database for SurrealDatabase {
         self.assert_write_owned(user_id, &diff.session, &diff.user)
             .await?;
         self.create_paired(diff, content).await
+    }
+
+    async fn set_plan_status(
+        &self,
+        user_id: Uuid,
+        plan_id: Uuid,
+        status: PlanStatus,
+    ) -> StorageResult<SessionPlan> {
+        tracing::debug!("setting plan {plan_id} status for user {user_id}");
+        let user = record_id::<User, _>(user_id);
+
+        // Ownership: a row owned by another user (or absent) is treated as
+        // absent, so the transition never reveals it exists.
+        let stored: Option<SessionPlan> =
+            self.0.select(record_id::<SessionPlan, _>(plan_id)).await?;
+        let Some(mut plan) = stored.filter(|plan| plan.user == user) else {
+            tracing::error!("refusing to update plan {plan_id} not owned by user {user_id}");
+            return Err(StorageError::NotFound);
+        };
+
+        let now = Utc::now();
+        plan.status = status;
+        plan.updated_at = now;
+        plan.approved_at = matches!(status, PlanStatus::Approved).then_some(now);
+
+        let updated: Option<SessionPlan> = self.0.update(plan.id.clone()).content(plan).await?;
+        updated.ok_or(StorageError::NotFound)
+    }
+
+    async fn set_diff_status(
+        &self,
+        user_id: Uuid,
+        diff_id: Uuid,
+        status: DiffStatus,
+    ) -> StorageResult<SessionDiff> {
+        tracing::debug!("setting diff {diff_id} status for user {user_id}");
+        let user = record_id::<User, _>(user_id);
+
+        // Ownership: a row owned by another user (or absent) is treated as
+        // absent, so the transition never reveals it exists.
+        let stored: Option<SessionDiff> =
+            self.0.select(record_id::<SessionDiff, _>(diff_id)).await?;
+        let Some(mut diff) = stored.filter(|diff| diff.user == user) else {
+            tracing::error!("refusing to update diff {diff_id} not owned by user {user_id}");
+            return Err(StorageError::NotFound);
+        };
+
+        diff.status = status;
+        diff.applied_at = matches!(status, DiffStatus::Applied).then_some(Utc::now());
+
+        let updated: Option<SessionDiff> = self.0.update(diff.id.clone()).content(diff).await?;
+        updated.ok_or(StorageError::NotFound)
     }
 
     async fn append_approval(

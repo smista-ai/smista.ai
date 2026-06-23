@@ -613,9 +613,10 @@ if approved or reports a rejection, and returns the outcome in the tool result's
 `decision`. The approval and the result arrive together.
 
 A standalone `awaiting_approval` is raised only for a decision with **no tool to
-run**, such as disclosing context to a remote provider when
-`privacy.remote.mode` is `ask`. The client returns the decision in the
-`approval_decisions` bundle:
+run**: disclosing context to a remote provider when `privacy.remote.mode` is
+`ask` (`remote_disclosure`), confirming a per-task cost ceiling (`cost_limit`),
+or accepting a generated plan before execution begins (`plan`). The client
+returns the decision in the `approval_decisions` bundle:
 
 ```json
 { "approval_decisions": [{ "approval_id": "a1", "decision": "approved", "reason": null }] }

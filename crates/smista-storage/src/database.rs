@@ -38,8 +38,8 @@ use uuid::Uuid;
 use crate::StorageResult;
 use crate::api::{MemoryRef, Pagination, SessionState};
 use crate::entity::{
-    AuthToken, ContextMemory, ContextMemoryContent, RunState, Session, SessionApproval,
-    SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
+    AuthToken, ContextMemory, ContextMemoryContent, DiffStatus, PlanStatus, RunState, Session,
+    SessionApproval, SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
     SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
     SessionToolCall, SessionToolCallContent, TraceEvent, TraceEventContent, User, UserMemory,
     UserMemoryContent,
@@ -246,6 +246,39 @@ pub trait Database: Send + Sync {
         event: TraceEvent,
         content: TraceEventContent,
     ) -> impl Future<Output = StorageResult<TraceEvent>> + Send;
+
+    // -- Status transitions --------------------------------------------------
+
+    /// Moves a stored plan owned by `user_id` into `status`, returning the row.
+    ///
+    /// The plan keeps every other field; only its `status` and `updated_at`
+    /// change, and `approved_at` is stamped when `status` is
+    /// [`PlanStatus::Approved`] and cleared otherwise. An append leaves a plan
+    /// at [`PlanStatus::Draft`]; this is the only way to reach the approved or
+    /// rejected state. Fails with
+    /// [`StorageError::NotFound`](crate::StorageError::NotFound) when the plan is
+    /// absent or owned by another user.
+    fn set_plan_status(
+        &self,
+        user_id: Uuid,
+        plan_id: Uuid,
+        status: PlanStatus,
+    ) -> impl Future<Output = StorageResult<SessionPlan>> + Send;
+
+    /// Moves a stored diff owned by `user_id` into `status`, returning the row.
+    ///
+    /// The diff keeps every other field; only its `status` changes, and
+    /// `applied_at` is stamped when `status` is [`DiffStatus::Applied`] and
+    /// cleared otherwise. An append leaves a diff at [`DiffStatus::Proposed`];
+    /// this is the only way to reach the applied or rejected state. Fails with
+    /// [`StorageError::NotFound`](crate::StorageError::NotFound) when the diff is
+    /// absent or owned by another user.
+    fn set_diff_status(
+        &self,
+        user_id: Uuid,
+        diff_id: Uuid,
+        status: DiffStatus,
+    ) -> impl Future<Output = StorageResult<SessionDiff>> + Send;
 
     /// Overwrites the `_content` row identified by `id` with `content`.
     ///
