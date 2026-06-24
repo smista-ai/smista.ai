@@ -40,6 +40,34 @@ pub fn global_config_dir() -> Option<PathBuf> {
     }
 }
 
+/// Returns the per-user runtime directory for smista: a short-lived location for
+/// process-state files such as a router pidfile.
+///
+/// Runtime state is ephemeral and must not live alongside persistent
+/// configuration, so this resolves a dedicated runtime location rather than the
+/// configuration directory:
+///
+/// - Linux/BSD: `$XDG_RUNTIME_DIR/smista` when the runtime directory is set.
+/// - Otherwise (macOS, Windows, or no `XDG_RUNTIME_DIR`): the per-user
+///   temporary directory plus `smista`.
+///
+/// It always resolves to a path a normal user can write to, so it returns a
+/// [`PathBuf`] rather than an [`Option`].
+///
+/// # Examples
+///
+/// ```
+/// use smista_core::paths::runtime_dir;
+///
+/// assert!(runtime_dir().ends_with("smista"));
+/// ```
+#[must_use]
+pub fn runtime_dir() -> PathBuf {
+    dirs::runtime_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join(APP_DIR)
+}
+
 /// Returns the home `.smista` directory: `~/.smista`, or `None` if the home
 /// directory cannot be determined.
 ///
@@ -164,5 +192,11 @@ mod tests {
                 assert!(dir.ends_with("smista"));
             }
         }
+    }
+
+    #[test]
+    fn should_place_runtime_dir_under_smista() {
+        // Always resolves to a writable location; only the suffix is fixed.
+        assert!(runtime_dir().ends_with("smista"));
     }
 }

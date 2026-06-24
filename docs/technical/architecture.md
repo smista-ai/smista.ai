@@ -15,15 +15,15 @@ its backend.
 
 ## Components
 
-| Component              | Kind           | Responsibility                                                                 |
-| ---------------------- | -------------- | ------------------------------------------------------------------------------ |
-| `smista-cli`           | CLI binary     | User interaction, command parsing, rendering, approvals, talks to router.      |
-| `smista-router`        | Service binary | Auth, sessions, classification, routing, context, tool mediation, traces.      |
-| `smista-router-client` | Library        | Async Rust client for the router HTTP API; used by the CLI and Rust frontends. |
-| `smista-core`          | Library        | Shared domain types, config, policy, trace structures, validation, errors.     |
-| `smista-providers`     | Library        | Model abstraction and provider adapters (OpenAI, Anthropic, Ollama, …).        |
-| `smista-storage`       | Library        | Storage traits, entities (incl. trace events) and the SurrealDB layer.         |
-| `@smista-ai/sdk`       | TypeScript SDK | Typed client over the router HTTP API.                                         |
+| Component              | Kind           | Responsibility                                                                                         |
+| ---------------------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| `smista-cli`           | CLI binary     | User interaction, command parsing, rendering, approvals, runs and talks to router.                     |
+| `smista-router`        | Library        | Auth, sessions, classification, routing, context, tool mediation, traces; embedded and run by the CLI. |
+| `smista-router-client` | Library        | Async Rust client for the router HTTP API; used by the CLI and Rust frontends.                         |
+| `smista-core`          | Library        | Shared domain types, config, policy, trace structures, validation, errors.                             |
+| `smista-providers`     | Library        | Model abstraction and provider adapters (OpenAI, Anthropic, Ollama, …).                                |
+| `smista-storage`       | Library        | Storage traits, entities (incl. trace events) and the SurrealDB layer.                                 |
+| `@smista-ai/sdk`       | TypeScript SDK | Typed client over the router HTTP API.                                                                 |
 
 ## Principles
 

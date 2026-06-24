@@ -4,6 +4,7 @@
   - [Where configuration lives](#where-configuration-lives)
   - [A complete example](#a-complete-example)
   - [Server](#server)
+  - [Starting and stopping](#starting-and-stopping)
   - [Storage](#storage)
   - [Authentication](#authentication)
   - [Runtime limits](#runtime-limits)
@@ -102,6 +103,34 @@ The `[router]` table accepts:
 | ------ | ------- | ----------- | ---------- |
 | `host` | string  | `127.0.0.1` | Bind host. |
 | `port` | integer | `7331`      | Bind port. |
+
+## Starting and stopping
+
+smista.ai ships as a single binary, so the router runs inside the `smista`
+process rather than as a separate program. Start a local router with the CLI:
+
+```sh
+smista start
+```
+
+By default this daemonizes: the router starts in the background and the command
+returns. It records its process id in a pidfile, and refuses to start a second
+router on top of one that is already running. Stop it again with:
+
+```sh
+smista stop
+```
+
+Pass `--foreground` to run the router in the current process instead, which is
+what a service manager (systemd, launchd) wants:
+
+```sh
+smista start --foreground
+```
+
+The pidfile defaults to a per-user location under the runtime directory. Set a
+different path with `--pidfile <path>` on both `start` and `stop`, or with the
+`SMISTA_ROUTER_PIDFILE` environment variable.
 
 ## Storage
 

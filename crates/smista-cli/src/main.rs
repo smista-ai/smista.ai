@@ -10,22 +10,35 @@
 //! The CLI never decides which model executes a task; model selection belongs
 //! to the router. The developer may, however, express a preference.
 //!
-//! Implementation is tracked in milestone M6.
+//! The CLI is both the client for the router, and the router itself, based on the subcommand invoked.
 
-pub mod config;
+mod args;
+mod command;
+mod config;
+mod log;
+mod signal;
 
-use tracing_subscriber::EnvFilter;
+use clap::Parser as _;
+
+const STACK_SIZE: usize = 10 * 1024 * 1024; // 10MiB
 
 fn main() -> anyhow::Result<()> {
-    // TODO: change, use different and adeguate config
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
-    tracing::debug!("smista CLI starting");
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(STACK_SIZE)
+        .build()?
+        .block_on(tokio_main())
+}
 
-    println!("smista: not yet implemented");
+async fn tokio_main() -> anyhow::Result<()> {
+    // parse CLI args and env vars
+    let args = args::Args::parse();
+    // init logging
+    log::init(&args.log_filter, args.log_file.as_deref())?;
+    tracing::info!("smista-cli starting");
 
-    Ok(())
+    // dispatch the selected subcommand. A foreground router runs until it is
+    // told to stop and owns its own shutdown handling; one-shot commands return
+    // as soon as their work is done.
+    command::run(args).await
 }

@@ -16,6 +16,16 @@
 //! types. Path resolution lives in [`paths`] and secret resolution in
 //! [`secrets`].
 
+// The configuration subsystem is fully built but, apart from path resolution,
+// is not yet wired into a command: the interactive CLI consumes these types in
+// milestone M6. `expect` (rather than `allow`) makes the lint fire again — and
+// forces this annotation to be removed — the moment they are actually used.
+#![expect(
+    dead_code,
+    unused_imports,
+    reason = "config types are consumed by the interactive CLI in milestone M6"
+)]
+
 pub mod layers;
 pub mod paths;
 pub mod secrets;
