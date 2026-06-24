@@ -7,10 +7,13 @@ use std::path::{Path, PathBuf};
 
 use smista_sdk::core::paths::{
     global_config_dir, home_agents_dir, home_smista_dir, project_agents_dir, project_dir,
+    runtime_dir,
 };
 
 /// Configuration file name within a configuration directory.
 const CONFIG_FILE: &str = "config.toml";
+/// Router pidfile name within the global configuration directory.
+const ROUTER_PIDFILE: &str = "router.pid";
 /// Secrets file name within the project directory.
 const SECRETS_FILE: &str = "secrets";
 /// Skills directory name within the project directory.
@@ -22,6 +25,20 @@ const PLANS_DIR: &str = "plans";
 #[must_use]
 pub fn global_config_toml() -> Option<PathBuf> {
     global_config_dir().map(|dir| dir.join(CONFIG_FILE))
+}
+
+/// Returns the default router pidfile path: `router.pid` under the per-user
+/// runtime directory.
+///
+/// Both `smista start` and `smista stop` fall back to this path when no
+/// `--pidfile` is given, so the two always agree on where a locally started
+/// router records its process id. A pidfile is ephemeral process state, so it
+/// lives under the runtime directory (see [`runtime_dir`]) rather than alongside
+/// persistent configuration. That location always resolves and is writable by a
+/// normal user on every platform.
+#[must_use]
+pub fn router_pidfile() -> PathBuf {
+    runtime_dir().join(ROUTER_PIDFILE)
 }
 
 /// Returns the project `config.toml` path: `<cwd>/.smista/config.toml`.
@@ -117,6 +134,11 @@ mod tests {
     fn should_place_project_skills_under_agents() {
         let path = skills_dir(Path::new("/repo"));
         assert_eq!(path, Path::new("/repo").join(".agents").join("skills"));
+    }
+
+    #[test]
+    fn should_build_router_pidfile_under_runtime_dir() {
+        assert!(router_pidfile().ends_with("router.pid"));
     }
 
     #[test]

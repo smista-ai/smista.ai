@@ -21,20 +21,24 @@ behind a local HTTP JSON API.
 Routing here is **deterministic**: it never depends on an LLM's judgment, and
 every decision is explainable through a trace.
 
-## Install
+## Use the library
 
 ```sh
-cargo install smista-router
+cargo add smista-router
 ```
 
-## Run the service
+smista.ai ships as a single binary, so the router is a **library** rather than a
+standalone program: the [`smista` CLI](../smista-cli) embeds it and launches it
+in-process with `smista_router::run`. End users start and stop a local router
+through the CLI:
 
 ```sh
-smista-router
+smista start        # run a local router in the background
+smista stop         # stop it again
 ```
 
-The router listens locally and serves the API under `/api/v1`. Point the
-[CLI](../smista-cli) or a client —
+Once running, the router listens locally and serves the API under `/api/v1`.
+Point the [CLI](../smista-cli) or a client —
 [`smista-router-client`](../smista-router-client) (Rust) or
 [`@smista-ai/sdk`](../../sdk) (TypeScript) — at it.
 

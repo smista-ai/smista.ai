@@ -6,18 +6,30 @@ use smista_storage::database::surreal::{
 
 use crate::config::{StorageConfig, StorageMode};
 
+#[derive(Debug, thiserror::Error)]
+pub enum StorageError {
+    #[error("invalid configuration: {0}")]
+    ConfigInvalid(&'static str),
+    #[error("invalid URL scheme: {0}")]
+    InvalidScheme(String),
+    #[error(transparent)]
+    Storage(#[from] smista_storage::StorageError),
+}
+
 /// Builds a [`SurrealDatabase`] instance from the given [`StorageConfig`].
 ///
 /// At the moment only a [`SurrealDatabase`] is supported, even if the `engine` params exists on [`StorageConfig`] to allow for future extensibility.
 /// In case extension is needed, we have to change the [`Database`](smista_storage::database::Database) trait to use `async_trait` to allow v-table.
-pub async fn build_storage(config: &StorageConfig) -> anyhow::Result<SurrealDatabase> {
+pub async fn build_storage(config: &StorageConfig) -> Result<SurrealDatabase, StorageError> {
     let options = match config.mode {
         StorageMode::Embedded => {
             let path = config
                 .path
                 .clone()
                 .or(crate::config::paths::db_path())
-                .ok_or_else(|| anyhow::anyhow!("path must be specified for `Embedded` engine"))?;
+                .ok_or(StorageError::ConfigInvalid(
+                    "path must be specified for `Embedded` engine",
+                ))?;
             tracing::debug!(
                 "Using embedded SurrealDB storage with path: {path}",
                 path = path.display()
@@ -29,10 +41,9 @@ pub async fn build_storage(config: &StorageConfig) -> anyhow::Result<SurrealData
             }
         }
         StorageMode::Remote => {
-            let url = config
-                .url
-                .clone()
-                .ok_or_else(|| anyhow::anyhow!("url must be specified for `Remote` engine"))?;
+            let url = config.url.clone().ok_or(StorageError::ConfigInvalid(
+                "url must be specified for `Remote` engine",
+            ))?;
             let username = config.username.clone();
             tracing::debug!("Using remote SurrealDB storage with URL: {url}");
             let password = config.password.clone();
@@ -54,7 +65,9 @@ pub async fn build_storage(config: &StorageConfig) -> anyhow::Result<SurrealData
                     backend: SurrealBackend::Http(remote_options),
                 },
                 scheme => {
-                    anyhow::bail!("unsupported URL scheme {scheme} for SurrealDB remote storage")
+                    return Err(StorageError::InvalidScheme(format!(
+                        "unsupported URL scheme {scheme} for SurrealDB remote storage"
+                    )));
                 }
             }
         }
@@ -62,7 +75,7 @@ pub async fn build_storage(config: &StorageConfig) -> anyhow::Result<SurrealData
 
     SurrealDatabase::new(options)
         .await
-        .map_err(anyhow::Error::from)
+        .map_err(StorageError::from)
 }
 
 #[cfg(test)]
