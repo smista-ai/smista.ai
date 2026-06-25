@@ -39,11 +39,12 @@
 //! assert!(json.contains("\"command\":\"edit\""));
 //! ```
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::{ApiErrorBody, PlainRecord, SealedRecord};
+use super::{ApiErrorBody, ContentRef, ContinueKind, EncryptedPayload};
 use crate::intent::TaskIntent;
 use crate::message::Message;
 use crate::model::{ModelReference, Provider};
@@ -220,17 +221,39 @@ pub struct ContextInstruction {
 
 /// The outcome of one turn, returned by `/execute` and `/continue`.
 ///
-/// Internally tagged by `status`. A [`Completed`](Self::Completed) turn carries
-/// the assistant message and routing explanation; every other variant is a
-/// continuation the client must act on before resuming the run with
-/// `/continue`, or a terminal [`Error`](Self::Error).
+/// The envelope flattens the [`TurnOutcome`] (tagged by `status`, payload under
+/// `data`) and adds `allowed_continuations` alongside it. A
+/// [`Completed`](TurnOutcome::Completed) turn carries the assistant message and
+/// routing explanation; every other outcome is a continuation the client must
+/// act on before resuming the run with `/continue`, or a terminal
+/// [`Error`](TurnOutcome::Error).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[serde(tag = "status", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts", ts(export))]
-pub enum TurnResponse {
-    /// The model finished; an assistant message is included.
+pub struct TurnResponse {
+    /// The turn's outcome, tagged by `status` with its payload under `data`.
+    #[serde(flatten)]
+    pub outcome: TurnOutcome,
+    /// The valid next client messages the client may send; always includes
+    /// `break` while the run is live. Empty for a terminal plaintext
+    /// `completed`, an `idle` ack, or an `error`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_continuations: Vec<ContinueKind>,
+}
+
+/// The outcome of one turn, tagged by `status` with its payload under `data`.
+///
+/// Carried by [`TurnResponse`], which adds `allowed_continuations` alongside it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(tag = "status", content = "data", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", ts(export))]
+pub enum TurnOutcome {
+    /// The model finished; an assistant message is included. Terminal for a
+    /// plaintext session; for an encrypted session it carries `to_encrypt` and
+    /// expects a trailing `sealed` message.
     ///
     /// Boxed because this is by far the largest variant.
     Completed(Box<CompletedTurn>),
@@ -238,6 +261,10 @@ pub enum TurnResponse {
     AwaitingTool {
         /// The tool calls the client must run, correlated by `call_id`.
         tool_requests: Vec<ToolRequest>,
+        /// Router-authored rows to seal (assistant message, tool arguments),
+        /// keyed by content reference. Empty unless end-to-end encrypted.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        to_encrypt: BTreeMap<ContentRef, String>,
         /// Identifier of the recorded trace.
         trace_id: String,
     },
@@ -245,20 +272,31 @@ pub enum TurnResponse {
     AwaitingApproval {
         /// The decision the client must obtain.
         approval: PendingApproval,
+        /// Router-authored rows to seal (for example a plan snapshot), keyed by
+        /// content reference. Empty unless end-to-end encrypted.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        to_encrypt: BTreeMap<ContentRef, String>,
         /// Identifier of the recorded trace.
         trace_id: String,
     },
     /// The router needs sealed history opened to build the prompt.
     AwaitingDecrypt {
-        /// Records the client must decrypt, correlated by `record_id`.
-        records: Vec<SealedRecord>,
+        /// Sealed records the client must open, keyed by content reference.
+        to_decrypt: BTreeMap<ContentRef, EncryptedPayload>,
         /// Identifier of the recorded trace.
         trace_id: String,
     },
-    /// The router needs its own output sealed before it can be persisted.
+    /// The router needs its own output sealed before it can be persisted, with
+    /// no other outstanding work (an interrupted partial turn).
     AwaitingEncrypt {
-        /// Records the client must encrypt, correlated by `record_id`.
-        records: Vec<PlainRecord>,
+        /// Router-authored rows to seal, keyed by content reference.
+        to_encrypt: BTreeMap<ContentRef, String>,
+        /// Identifier of the recorded trace.
+        trace_id: String,
+    },
+    /// The run finished and its content was persisted; nothing to render. The
+    /// ack returned after a trailing `sealed` message.
+    Idle {
         /// Identifier of the recorded trace.
         trace_id: String,
     },
@@ -269,7 +307,7 @@ pub enum TurnResponse {
     },
 }
 
-/// The payload of a [`completed`](TurnResponse::Completed) turn.
+/// The payload of a [`completed`](TurnOutcome::Completed) turn.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -285,6 +323,12 @@ pub struct CompletedTurn {
     pub context: ContextOutcome,
     /// Token usage and cost for the turn.
     pub usage: Usage,
+    /// Router-authored content to seal before persistence (the assistant
+    /// message, trace payloads), keyed by content reference. Empty unless the
+    /// session is end-to-end encrypted; when non-empty, the wrapping
+    /// [`TurnResponse`] advertises `[sealed, break]`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub to_encrypt: BTreeMap<ContentRef, String>,
     /// Identifier of the recorded trace.
     pub trace_id: String,
 }
@@ -506,23 +550,25 @@ mod tests {
     fn should_deserialize_completed_turn() {
         let json = r#"{
             "status": "completed",
-            "message": { "role": "assistant", "content": "..." },
-            "classification": { "intent": "edit", "source": "inferred", "reason": "keyword matched", "confidence": "high" },
-            "routing": {
-                "task_type": "edit",
-                "provider": "anthropic",
-                "model": "claude-sonnet",
-                "matched_rule": "edit + src/auth/** -> anthropic/claude-sonnet",
-                "fallback_used": false,
-                "override_used": false
-            },
-            "context": { "included": ["src/auth/middleware.rs"], "excluded": [".env"] },
-            "usage": { "input_tokens": 1200, "output_tokens": 500, "estimated_cost": "0.08", "currency": "USD" },
-            "trace_id": "trace:xyz"
+            "data": {
+                "message": { "role": "assistant", "content": "..." },
+                "classification": { "intent": "edit", "source": "inferred", "reason": "keyword matched", "confidence": "high" },
+                "routing": {
+                    "task_type": "edit",
+                    "provider": "anthropic",
+                    "model": "claude-sonnet",
+                    "matched_rule": "edit + src/auth/** -> anthropic/claude-sonnet",
+                    "fallback_used": false,
+                    "override_used": false
+                },
+                "context": { "included": ["src/auth/middleware.rs"], "excluded": [".env"] },
+                "usage": { "input_tokens": 1200, "output_tokens": 500, "estimated_cost": "0.08", "currency": "USD" },
+                "trace_id": "trace:xyz"
+            }
         }"#;
         let response: TurnResponse = serde_json::from_str(json).unwrap();
 
-        let TurnResponse::Completed(completed) = response else {
+        let TurnOutcome::Completed(completed) = response.outcome else {
             panic!("expected a completed turn");
         };
         assert_eq!(completed.classification.intent, TaskIntent::Edit);
@@ -530,54 +576,71 @@ mod tests {
         assert_eq!(completed.routing.provider, Provider::Anthropic);
         assert_eq!(completed.usage.input_tokens, Some(1200));
         assert_eq!(completed.trace_id, "trace:xyz");
+        assert!(response.allowed_continuations.is_empty());
     }
 
     #[test]
-    fn should_serialize_awaiting_tool_with_status_tag() {
-        let response = TurnResponse::AwaitingTool {
-            tool_requests: vec![ToolRequest {
-                call_id: "c1".to_string(),
-                name: "shell".to_string(),
-                arguments: serde_json::json!({ "command": "cargo test" }),
-                requires_approval: ToolApproval::Ask,
-            }],
-            trace_id: "trace:xyz".to_string(),
+    fn should_serialize_awaiting_tool_under_data() {
+        let response = TurnResponse {
+            outcome: TurnOutcome::AwaitingTool {
+                tool_requests: vec![ToolRequest {
+                    call_id: "c1".to_string(),
+                    name: "shell".to_string(),
+                    arguments: serde_json::json!({ "command": "cargo test" }),
+                    requires_approval: ToolApproval::Ask,
+                }],
+                to_encrypt: BTreeMap::new(),
+                trace_id: "trace:xyz".to_string(),
+            },
+            allowed_continuations: vec![ContinueKind::ToolResults, ContinueKind::Break],
         };
+        let value = serde_json::to_value(&response).unwrap();
+        assert_eq!(value["status"], "awaiting_tool");
         assert_eq!(
-            serde_json::to_value(&response).unwrap(),
-            serde_json::json!({
-                "status": "awaiting_tool",
-                "tool_requests": [
-                    { "call_id": "c1", "name": "shell", "arguments": { "command": "cargo test" }, "requires_approval": "ask" }
-                ],
-                "trace_id": "trace:xyz"
-            })
+            value["data"]["tool_requests"][0]["requires_approval"],
+            "ask"
+        );
+        assert_eq!(
+            value["allowed_continuations"],
+            serde_json::json!(["tool_results", "break"])
+        );
+        assert!(value["data"].get("to_encrypt").is_none());
+        assert_eq!(
+            serde_json::from_value::<TurnResponse>(value).unwrap(),
+            response
         );
     }
 
     #[test]
     fn should_serialize_awaiting_approval_with_kind() {
-        let response = TurnResponse::AwaitingApproval {
-            approval: PendingApproval {
-                approval_id: "a1".to_string(),
-                kind: ApprovalKind::RemoteDisclosure,
-                detail: serde_json::json!({ "provider": "anthropic" }),
+        let response = TurnResponse {
+            outcome: TurnOutcome::AwaitingApproval {
+                approval: PendingApproval {
+                    approval_id: "a1".to_string(),
+                    kind: ApprovalKind::RemoteDisclosure,
+                    detail: serde_json::json!({ "provider": "anthropic" }),
+                },
+                to_encrypt: BTreeMap::new(),
+                trace_id: "trace:xyz".to_string(),
             },
-            trace_id: "trace:xyz".to_string(),
+            allowed_continuations: vec![ContinueKind::ApprovalDecisions, ContinueKind::Break],
         };
         let value = serde_json::to_value(&response).unwrap();
         assert_eq!(value["status"], "awaiting_approval");
-        assert_eq!(value["approval"]["kind"], "remote_disclosure");
+        assert_eq!(value["data"]["approval"]["kind"], "remote_disclosure");
     }
 
     #[test]
     fn should_roundtrip_error_turn() {
-        let response = TurnResponse::Error {
-            error: ApiErrorBody {
-                code: "no_route".to_string(),
-                message: "No routing rule matched.".to_string(),
-                details: None,
+        let response = TurnResponse {
+            outcome: TurnOutcome::Error {
+                error: ApiErrorBody {
+                    code: "no_route".to_string(),
+                    message: "No routing rule matched.".to_string(),
+                    details: None,
+                },
             },
+            allowed_continuations: Vec::new(),
         };
         let json = serde_json::to_string(&response).unwrap();
         assert_eq!(
@@ -588,24 +651,74 @@ mod tests {
 
     #[test]
     fn should_roundtrip_awaiting_decrypt() {
-        let response = TurnResponse::AwaitingDecrypt {
-            records: vec![SealedRecord {
-                record_id: "session_message:0194".to_string(),
-                envelope: EncryptedPayload {
-                    version: 1,
-                    algorithm: "xchacha20poly1305".to_string(),
-                    key_id: "kf_ab12".to_string(),
-                    nonce: "bm9uY2U".to_string(),
-                    ciphertext: "Y2lwaGVydGV4dA".to_string(),
-                },
-            }],
-            trace_id: "trace:xyz".to_string(),
+        let mut to_decrypt = BTreeMap::new();
+        to_decrypt.insert(
+            ContentRef::Message("0194".to_string()),
+            EncryptedPayload {
+                version: 1,
+                algorithm: "xchacha20poly1305".to_string(),
+                key_id: "kf_ab12".to_string(),
+                nonce: "bm9uY2U".to_string(),
+                ciphertext: "Y2lwaGVydGV4dA".to_string(),
+            },
+        );
+        let response = TurnResponse {
+            outcome: TurnOutcome::AwaitingDecrypt {
+                to_decrypt,
+                trace_id: "trace:xyz".to_string(),
+            },
+            allowed_continuations: vec![ContinueKind::Decrypted, ContinueKind::Break],
         };
         let value = serde_json::to_value(&response).unwrap();
         assert_eq!(value["status"], "awaiting_decrypt");
         assert_eq!(
+            value["data"]["to_decrypt"]["message:0194"]["key_id"],
+            "kf_ab12"
+        );
+        assert_eq!(
             serde_json::from_value::<TurnResponse>(value).unwrap(),
             response
+        );
+    }
+
+    #[test]
+    fn should_roundtrip_idle_ack() {
+        let response = TurnResponse {
+            outcome: TurnOutcome::Idle {
+                trace_id: "trace:xyz".to_string(),
+            },
+            allowed_continuations: Vec::new(),
+        };
+        let value = serde_json::to_value(&response).unwrap();
+        assert_eq!(value["status"], "idle");
+        assert_eq!(
+            serde_json::from_value::<TurnResponse>(value).unwrap(),
+            response
+        );
+    }
+
+    #[test]
+    fn should_fold_encrypt_onto_completed() {
+        let json = r#"{
+            "status": "completed",
+            "data": {
+                "message": { "role": "assistant", "content": "hi" },
+                "classification": { "intent": "edit", "source": "inferred", "reason": "k", "confidence": "high" },
+                "routing": { "task_type": "edit", "provider": "anthropic", "model": "claude-sonnet", "fallback_used": false, "override_used": false },
+                "context": { "included": [], "excluded": [] },
+                "usage": { "input_tokens": 10, "output_tokens": 5 },
+                "to_encrypt": { "message:0195": "the reply" },
+                "trace_id": "trace:xyz"
+            },
+            "allowed_continuations": ["sealed", "break"]
+        }"#;
+        let response: TurnResponse = serde_json::from_str(json).unwrap();
+        let value = serde_json::to_value(&response).unwrap();
+        assert_eq!(value["status"], "completed");
+        assert_eq!(value["data"]["to_encrypt"]["message:0195"], "the reply");
+        assert_eq!(
+            value["allowed_continuations"],
+            serde_json::json!(["sealed", "break"])
         );
     }
 

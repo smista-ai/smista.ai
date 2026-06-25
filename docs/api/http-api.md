@@ -223,7 +223,7 @@ fingerprint of the per-session key your client holds) is also required:
 ```
 
 `encrypted` is fixed for the life of the session and cannot be changed later. See
-[End-to-end encryption](../technical/e2e.md). Returns `201` with the new session
+[End-to-end encryption](../technical/e2e_encryption.md). Returns `201` with the new session
 summary:
 
 ```json
@@ -452,34 +452,38 @@ POST /api/v1/sessions/{session_id}/execute
 ```
 
 The router classifies the task, applies the policy, selects a model, builds the
-request and runs one **turn**. A turn resolves to exactly one outcome, named by
-`status`. A `completed` turn carries the assistant message and a routing
-explanation:
+request and runs one **turn**. A turn resolves to one envelope of
+`{ status, data, allowed_continuations }`: `status` names the outcome, `data`
+carries its payload, and `allowed_continuations` lists the messages the client
+may send next. A `completed` turn carries the assistant message and a routing
+explanation under `data`:
 
 ```json
 {
   "status": "completed",
-  "message": { "role": "assistant", "content": "..." },
-  "classification": { "intent": "edit", "source": "inferred", "reason": "keyword matched rule 0", "confidence": "high" },
-  "routing": {
-    "task_type": "edit",
-    "provider": "anthropic",
-    "model": "claude-sonnet",
-    "matched_rule": "edit + src/auth/** -> anthropic/claude-sonnet",
-    "fallback_used": false,
-    "override_used": false
-  },
-  "context": {
-    "included": ["src/auth/middleware.rs", "SMISTA.md", "current git diff"],
-    "excluded": [".env", "secrets/**"]
-  },
-  "usage": {
-    "input_tokens": 1200,
-    "output_tokens": 500,
-    "estimated_cost": "0.08",
-    "currency": "USD"
-  },
-  "trace_id": "trace:xyz"
+  "data": {
+    "message": { "role": "assistant", "content": "..." },
+    "classification": { "intent": "edit", "source": "inferred", "reason": "keyword matched rule 0", "confidence": "high" },
+    "routing": {
+      "task_type": "edit",
+      "provider": "anthropic",
+      "model": "claude-sonnet",
+      "matched_rule": "edit + src/auth/** -> anthropic/claude-sonnet",
+      "fallback_used": false,
+      "override_used": false
+    },
+    "context": {
+      "included": ["src/auth/middleware.rs", "SMISTA.md", "current git diff"],
+      "excluded": [".env", "secrets/**"]
+    },
+    "usage": {
+      "input_tokens": 1200,
+      "output_tokens": 500,
+      "estimated_cost": "0.08",
+      "currency": "USD"
+    },
+    "trace_id": "trace:xyz"
+  }
 }
 ```
 
@@ -488,23 +492,32 @@ instead — the router needs the client to do the next step:
 
 | `status`            | The router needs the client to                       |
 | ------------------- | ---------------------------------------------------- |
-| `completed`         | nothing; render and wait for the next prompt.        |
+| `completed`         | render; seal `to_encrypt` if present, else done.     |
 | `awaiting_tool`     | run one or more tools and return the results.        |
 | `awaiting_approval` | decide a yes/no with no tool to run.                 |
 | `awaiting_decrypt`  | open sealed history so the prompt can be built.      |
 | `awaiting_encrypt`  | seal router-authored content before it is persisted. |
+| `idle`              | nothing; the run finished and was persisted.         |
 | `error`             | nothing; the run is over.                            |
 
-An `awaiting_tool` turn lists the calls to run, correlated by `call_id`; each
-carries `requires_approval` of `allow` (run it) or `ask` (confirm first):
+`allowed_continuations` lists the message types the client may send next; `break`
+is always among them while the run is live, and it is empty for a terminal
+outcome.
+
+An `awaiting_tool` turn lists the calls to run under `data`, correlated by
+`call_id`; each carries `requires_approval` of `allow` (run it) or `ask` (confirm
+first):
 
 ```json
 {
   "status": "awaiting_tool",
-  "tool_requests": [
-    { "call_id": "c1", "name": "shell", "arguments": { "command": "cargo test" }, "requires_approval": "ask" }
-  ],
-  "trace_id": "trace:xyz"
+  "data": {
+    "tool_requests": [
+      { "call_id": "c1", "name": "shell", "arguments": { "command": "cargo test" }, "requires_approval": "ask" }
+    ],
+    "trace_id": "trace:xyz"
+  },
+  "allowed_continuations": ["tool_results", "inject", "break"]
 }
 ```
 
@@ -518,24 +531,30 @@ set of continuation payloads.
 POST /api/v1/sessions/{session_id}/continue
 ```
 
-Resumes the in-flight run after a continuation. The body is a bundle; every
-field is optional and several may be sent at once (for example tool results
-plus a queued user message). It returns the next turn in the same shape as
-`/execute`, buffered or streamed by the `Accept` header.
+Resumes the in-flight run with a single tagged `{ type, data }` message that
+answers the current pause. The valid `type` values are what the previous
+response advertised in `allowed_continuations`; `break` is always valid. It
+returns the next turn in the same shape as `/execute`, buffered or streamed by
+the `Accept` header.
 
-| Field                | Answers                                                                                 |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `tool_results`       | `awaiting_tool`: `{ call_id, content, is_error, decision }`; `decision` folds approval. |
-| `approval_decisions` | `awaiting_approval`: `{ approval_id, decision, reason }`.                               |
-| `decrypted`          | `awaiting_decrypt`: `{ record_id, plaintext }`.                                         |
-| `encrypted`          | `awaiting_encrypt`: `{ record_id, envelope }`.                                          |
-| `user_messages`      | Mid-run input the user typed while the run was working.                                 |
-| `interrupt`          | `true` to abort the in-flight turn (the Esc path).                                      |
+| `type`               | Answers             | `data`                                                               |
+| -------------------- | ------------------- | -------------------------------------------------------------------- |
+| `tool_results`       | `awaiting_tool`     | `{ results: [{ call_id, content, is_error, decision }], encrypted }` |
+| `approval_decisions` | `awaiting_approval` | `{ decisions: [{ approval_id, decision, reason }], encrypted }`      |
+| `decrypted`          | `awaiting_decrypt`  | `{ plaintext }` — a content-ref → plaintext map                      |
+| `sealed`             | a folded encrypt    | `{ encrypted }` — a content-ref → envelope map                       |
+| `inject`             | any live state      | `{ messages: [{ text, ciphertext }] }` — mid-run input; supersedes   |
+| `break`              | any live state      | none — aborts the in-flight turn                                     |
+
+The `encrypted` and `plaintext` maps are keyed by a content reference of the
+form `kind:id` (`message`, `tool_call`, `diff`, `plan`, `memory` or `trace`).
 
 ```json
 {
-  "tool_results": [{ "call_id": "c1", "content": "test result: ok", "is_error": false, "decision": "approved" }],
-  "interrupt": false
+  "type": "tool_results",
+  "data": {
+    "results": [{ "call_id": "c1", "content": "test result: ok", "is_error": false, "decision": "approved" }]
+  }
 }
 ```
 
@@ -565,7 +584,8 @@ the actual cost of the invocation. Local models report a zero cost.
 
 Every stream ends with exactly one `turn_end` event, whose `status` is the
 same value the buffered response carries (`completed`, `awaiting_tool`,
-`awaiting_approval`, `awaiting_decrypt`, `awaiting_encrypt` or `error`). It
+`awaiting_approval`, `awaiting_decrypt`, `awaiting_encrypt`, `idle` or
+`error`). It
 tells the client whether the turn finished or paused for a continuation, so the
 client never has to infer it. Models that cannot stream still answer here: the
 full response is replayed as a short stream of the same events.

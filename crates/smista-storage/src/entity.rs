@@ -37,7 +37,9 @@ pub use self::session_diff::{DiffStatus, SessionDiff, SessionDiffContent};
 pub use self::session_message::{SessionMessage, SessionMessageContent};
 pub use self::session_plan::{PlanStatus, SessionPlan, SessionPlanContent};
 pub use self::session_routing_decision::SessionRoutingDecision;
-pub use self::session_run_state::{ApprovalKind, RunPhase, RunState};
+pub use self::session_run_state::{
+    ActiveTurn, ApprovalKind, ResumeStep, RunPhase, RunState, ToolApproval, ToolWait,
+};
 pub use self::session_tool_call::{SessionToolCall, SessionToolCallContent, ToolCallStatus};
 pub use self::trace_event::{TraceEvent, TraceEventContent, TraceEventType};
 pub use self::user::User;

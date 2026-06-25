@@ -1313,7 +1313,7 @@
       },
       "CompletedTurn": {
         "type": "object",
-        "description": "The payload of a [`completed`](TurnResponse::Completed) turn.",
+        "description": "The payload of a [`completed`](TurnOutcome::Completed) turn.",
         "required": [
           "message",
           "classification",
@@ -1342,6 +1342,17 @@
           "usage": {
             "$ref": "#/components/schemas/Usage",
             "description": "Token usage and cost for the turn."
+          },
+          "to_encrypt": {
+            "type": "object",
+            "description": "Router-authored content to seal before persistence (the assistant\nmessage, trace payloads), keyed by content reference. Empty unless the\nsession is end-to-end encrypted; when non-empty, the wrapping\n[`TurnResponse`] advertises `[sealed, break]`.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string",
+              "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+            }
           },
           "trace_id": {
             "type": "string",
@@ -1458,50 +1469,227 @@
           }
         }
       },
+      "ContinueKind": {
+        "type": "string",
+        "description": "The kind of a [`ContinueRequest`], as advertised in\n[`allowed_continuations`](super::TurnResponse).",
+        "enum": [
+          "tool_results",
+          "approval_decisions",
+          "decrypted",
+          "sealed",
+          "inject",
+          "break"
+        ]
+      },
       "ContinueRequest": {
-        "type": "object",
-        "description": "Bundle that advances an in-flight run after a continuation.\n\nEvery field defaults to empty, so a bare `{}` is a valid no-op and a bare\n`{ \"interrupt\": true }` aborts the in-flight turn with no other input.",
-        "properties": {
-          "tool_results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ToolResult"
-            },
-            "description": "Results of tools the client ran, answering an `awaiting_tool` turn."
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Results of tools the client ran, answering an `awaiting_tool` turn.",
+            "required": [
+              "data",
+              "type"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "description": "Results of tools the client ran, answering an `awaiting_tool` turn.",
+                "required": [
+                  "results"
+                ],
+                "properties": {
+                  "results": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ToolResult"
+                    },
+                    "description": "One entry per executed call, correlated by `call_id`."
+                  },
+                  "encrypted": {
+                    "type": "object",
+                    "description": "Sealed forms of router-authored rows (the assistant message, tool\narguments) and of the tool results, keyed by [`ContentRef`]. Empty\nunless the session is end-to-end encrypted.",
+                    "additionalProperties": {
+                      "$ref": "#/components/schemas/EncryptedPayload"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                    }
+                  }
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "tool_results"
+                ]
+              }
+            }
           },
-          "approval_decisions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ApprovalDecisionEntry"
-            },
-            "description": "Decisions for approvals with no tool to run, answering an\n`awaiting_approval` turn."
+          {
+            "type": "object",
+            "description": "Decisions for standalone approvals, answering an `awaiting_approval` turn.",
+            "required": [
+              "data",
+              "type"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "description": "Decisions for standalone approvals, answering an `awaiting_approval` turn.",
+                "required": [
+                  "decisions"
+                ],
+                "properties": {
+                  "decisions": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ApprovalDecisionEntry"
+                    },
+                    "description": "One entry per pending approval."
+                  },
+                  "encrypted": {
+                    "type": "object",
+                    "description": "Sealed router-authored rows (for example a plan snapshot), keyed by\n[`ContentRef`]. Empty unless the session is end-to-end encrypted.",
+                    "additionalProperties": {
+                      "$ref": "#/components/schemas/EncryptedPayload"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                    }
+                  }
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "approval_decisions"
+                ]
+              }
+            }
           },
-          "decrypted": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PlainRecord"
-            },
-            "description": "Records the client decrypted, answering an `awaiting_decrypt` turn."
+          {
+            "type": "object",
+            "description": "Plaintext of records the client opened, answering an `awaiting_decrypt`\nturn. Keyed by [`ContentRef`].",
+            "required": [
+              "data",
+              "type"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "description": "Plaintext of records the client opened, answering an `awaiting_decrypt`\nturn. Keyed by [`ContentRef`].",
+                "required": [
+                  "plaintext"
+                ],
+                "properties": {
+                  "plaintext": {
+                    "type": "object",
+                    "description": "[`ContentRef`] -> opened plaintext.",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                    }
+                  }
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "decrypted"
+                ]
+              }
+            }
           },
-          "encrypted": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SealedRecord"
-            },
-            "description": "Records the client encrypted, answering an `awaiting_encrypt` turn."
+          {
+            "type": "object",
+            "description": "Ciphertext the client sealed for the encrypt request folded onto a\ncompleted or interrupted turn. Keyed by [`ContentRef`].",
+            "required": [
+              "data",
+              "type"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "description": "Ciphertext the client sealed for the encrypt request folded onto a\ncompleted or interrupted turn. Keyed by [`ContentRef`].",
+                "required": [
+                  "encrypted"
+                ],
+                "properties": {
+                  "encrypted": {
+                    "type": "object",
+                    "description": "[`ContentRef`] -> sealed envelope.",
+                    "additionalProperties": {
+                      "$ref": "#/components/schemas/EncryptedPayload"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                    }
+                  }
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sealed"
+                ]
+              }
+            }
           },
-          "user_messages": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UserMessage"
-            },
-            "description": "User input typed while the run was working, delivered at this boundary."
+          {
+            "type": "object",
+            "description": "Mid-run input the user typed: supersede the in-flight turn and continue\nwith it.",
+            "required": [
+              "data",
+              "type"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "description": "Mid-run input the user typed: supersede the in-flight turn and continue\nwith it.",
+                "required": [
+                  "messages"
+                ],
+                "properties": {
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/UserMessage"
+                    },
+                    "description": "The queued user messages, in order."
+                  }
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "inject"
+                ]
+              }
+            }
           },
-          "interrupt": {
-            "type": "boolean",
-            "description": "Whether to abort the in-flight turn (the Esc path)."
+          {
+            "type": "object",
+            "description": "Abort the in-flight turn with no further input (the Esc path).",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "break"
+                ]
+              }
+            }
           }
-        }
+        ],
+        "description": "A single tagged message that advances an in-flight run.\n\nSerialized adjacently tagged: `{ \"type\": <kind>, \"data\": { … } }`, except the\ndata-less [`Break`](Self::Break), which is just `{ \"type\": \"break\" }`."
       },
       "CostPayload": {
         "type": "object",
@@ -2354,24 +2542,6 @@
           "deny"
         ]
       },
-      "PlainRecord": {
-        "type": "object",
-        "description": "A storage record paired with its cleartext.\n\nThe router sends these in an `awaiting_encrypt` turn (content to seal); the\nclient returns them in the `/continue` bundle after opening the records of\nan `awaiting_decrypt` turn. Correlated by `record_id`.",
-        "required": [
-          "record_id",
-          "plaintext"
-        ],
-        "properties": {
-          "record_id": {
-            "type": "string",
-            "description": "Identifier of the storage record the cleartext belongs to."
-          },
-          "plaintext": {
-            "type": "string",
-            "description": "The cleartext payload."
-          }
-        }
-      },
       "PreviewResponse": {
         "type": "object",
         "description": "The predicted routing of a task, without calling the model.",
@@ -2723,24 +2893,6 @@
             "type": "string",
             "description": "Per-task cost ceiling for the matched route, in account currency.\n\nSerialized as a string for exact precision.",
             "example": "0.50"
-          }
-        }
-      },
-      "SealedRecord": {
-        "type": "object",
-        "description": "A storage record paired with its sealed payload.\n\nThe router sends these in an `awaiting_decrypt` turn (history to open); the\nclient returns them in the `/continue` bundle after sealing the content of\nan `awaiting_encrypt` turn. Correlated by `record_id`.",
-        "required": [
-          "record_id",
-          "envelope"
-        ],
-        "properties": {
-          "record_id": {
-            "type": "string",
-            "description": "Identifier of the storage record the envelope belongs to."
-          },
-          "envelope": {
-            "$ref": "#/components/schemas/EncryptedPayload",
-            "description": "The sealed envelope."
           }
         }
       },
@@ -3416,50 +3568,67 @@
         ],
         "description": "A single event in a streamed turn.\n\nSerialized with an internally tagged `type` discriminator in snake_case."
       },
-      "TurnResponse": {
+      "TurnOutcome": {
         "oneOf": [
           {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/CompletedTurn",
-                "description": "The model finished; an assistant message is included.\n\nBoxed because this is by far the largest variant."
-              },
-              {
-                "type": "object",
-                "required": [
-                  "status"
-                ],
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "completed"
-                    ]
-                  }
-                }
-              }
+            "type": "object",
+            "description": "The model finished; an assistant message is included. Terminal for a\nplaintext session; for an encrypted session it carries `to_encrypt` and\nexpects a trailing `sealed` message.\n\nBoxed because this is by far the largest variant.",
+            "required": [
+              "data",
+              "status"
             ],
-            "description": "The model finished; an assistant message is included.\n\nBoxed because this is by far the largest variant."
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/CompletedTurn",
+                "description": "The model finished; an assistant message is included. Terminal for a\nplaintext session; for an encrypted session it carries `to_encrypt` and\nexpects a trailing `sealed` message.\n\nBoxed because this is by far the largest variant."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "completed"
+                ]
+              }
+            }
           },
           {
             "type": "object",
             "description": "The model requested one or more client-executed tools.",
             "required": [
-              "tool_requests",
-              "trace_id",
+              "data",
               "status"
             ],
             "properties": {
-              "tool_requests": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/ToolRequest"
-                },
-                "description": "The tool calls the client must run, correlated by `call_id`."
-              },
-              "trace_id": {
-                "type": "string",
-                "description": "Identifier of the recorded trace."
+              "data": {
+                "type": "object",
+                "description": "The model requested one or more client-executed tools.",
+                "required": [
+                  "tool_requests",
+                  "trace_id"
+                ],
+                "properties": {
+                  "tool_requests": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ToolRequest"
+                    },
+                    "description": "The tool calls the client must run, correlated by `call_id`."
+                  },
+                  "to_encrypt": {
+                    "type": "object",
+                    "description": "Router-authored rows to seal (assistant message, tool arguments),\nkeyed by content reference. Empty unless end-to-end encrypted.",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                    }
+                  },
+                  "trace_id": {
+                    "type": "string",
+                    "description": "Identifier of the recorded trace."
+                  }
+                }
               },
               "status": {
                 "type": "string",
@@ -3473,18 +3642,38 @@
             "type": "object",
             "description": "The router needs a yes/no decision with no tool to run.",
             "required": [
-              "approval",
-              "trace_id",
+              "data",
               "status"
             ],
             "properties": {
-              "approval": {
-                "$ref": "#/components/schemas/PendingApproval",
-                "description": "The decision the client must obtain."
-              },
-              "trace_id": {
-                "type": "string",
-                "description": "Identifier of the recorded trace."
+              "data": {
+                "type": "object",
+                "description": "The router needs a yes/no decision with no tool to run.",
+                "required": [
+                  "approval",
+                  "trace_id"
+                ],
+                "properties": {
+                  "approval": {
+                    "$ref": "#/components/schemas/PendingApproval",
+                    "description": "The decision the client must obtain."
+                  },
+                  "to_encrypt": {
+                    "type": "object",
+                    "description": "Router-authored rows to seal (for example a plan snapshot), keyed by\ncontent reference. Empty unless end-to-end encrypted.",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                    }
+                  },
+                  "trace_id": {
+                    "type": "string",
+                    "description": "Identifier of the recorded trace."
+                  }
+                }
               },
               "status": {
                 "type": "string",
@@ -3498,21 +3687,34 @@
             "type": "object",
             "description": "The router needs sealed history opened to build the prompt.",
             "required": [
-              "records",
-              "trace_id",
+              "data",
               "status"
             ],
             "properties": {
-              "records": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/SealedRecord"
-                },
-                "description": "Records the client must decrypt, correlated by `record_id`."
-              },
-              "trace_id": {
-                "type": "string",
-                "description": "Identifier of the recorded trace."
+              "data": {
+                "type": "object",
+                "description": "The router needs sealed history opened to build the prompt.",
+                "required": [
+                  "to_decrypt",
+                  "trace_id"
+                ],
+                "properties": {
+                  "to_decrypt": {
+                    "type": "object",
+                    "description": "Sealed records the client must open, keyed by content reference.",
+                    "additionalProperties": {
+                      "$ref": "#/components/schemas/EncryptedPayload"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                    }
+                  },
+                  "trace_id": {
+                    "type": "string",
+                    "description": "Identifier of the recorded trace."
+                  }
+                }
               },
               "status": {
                 "type": "string",
@@ -3524,23 +3726,36 @@
           },
           {
             "type": "object",
-            "description": "The router needs its own output sealed before it can be persisted.",
+            "description": "The router needs its own output sealed before it can be persisted, with\nno other outstanding work (an interrupted partial turn).",
             "required": [
-              "records",
-              "trace_id",
+              "data",
               "status"
             ],
             "properties": {
-              "records": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/PlainRecord"
-                },
-                "description": "Records the client must encrypt, correlated by `record_id`."
-              },
-              "trace_id": {
-                "type": "string",
-                "description": "Identifier of the recorded trace."
+              "data": {
+                "type": "object",
+                "description": "The router needs its own output sealed before it can be persisted, with\nno other outstanding work (an interrupted partial turn).",
+                "required": [
+                  "to_encrypt",
+                  "trace_id"
+                ],
+                "properties": {
+                  "to_encrypt": {
+                    "type": "object",
+                    "description": "Router-authored rows to seal, keyed by content reference.",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                    }
+                  },
+                  "trace_id": {
+                    "type": "string",
+                    "description": "Identifier of the recorded trace."
+                  }
+                }
               },
               "status": {
                 "type": "string",
@@ -3552,15 +3767,53 @@
           },
           {
             "type": "object",
-            "description": "A terminal error ended the turn.",
+            "description": "The run finished and its content was persisted; nothing to render. The\nack returned after a trailing `sealed` message.",
             "required": [
-              "error",
+              "data",
               "status"
             ],
             "properties": {
-              "error": {
-                "$ref": "#/components/schemas/ApiErrorBody",
-                "description": "The structured error body."
+              "data": {
+                "type": "object",
+                "description": "The run finished and its content was persisted; nothing to render. The\nack returned after a trailing `sealed` message.",
+                "required": [
+                  "trace_id"
+                ],
+                "properties": {
+                  "trace_id": {
+                    "type": "string",
+                    "description": "Identifier of the recorded trace."
+                  }
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "idle"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A terminal error ended the turn.",
+            "required": [
+              "data",
+              "status"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "description": "A terminal error ended the turn.",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "$ref": "#/components/schemas/ApiErrorBody",
+                    "description": "The structured error body."
+                  }
+                }
               },
               "status": {
                 "type": "string",
@@ -3571,7 +3824,28 @@
             }
           }
         ],
-        "description": "The outcome of one turn, returned by `/execute` and `/continue`.\n\nInternally tagged by `status`. A [`Completed`](Self::Completed) turn carries\nthe assistant message and routing explanation; every other variant is a\ncontinuation the client must act on before resuming the run with\n`/continue`, or a terminal [`Error`](Self::Error)."
+        "description": "The outcome of one turn, tagged by `status` with its payload under `data`.\n\nCarried by [`TurnResponse`], which adds `allowed_continuations` alongside it."
+      },
+      "TurnResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TurnOutcome",
+            "description": "The turn's outcome, tagged by `status` with its payload under `data`."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "allowed_continuations": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ContinueKind"
+                },
+                "description": "The valid next client messages the client may send; always includes\n`break` while the run is live. Empty for a terminal plaintext\n`completed`, an `idle` ack, or an `error`."
+              }
+            }
+          }
+        ],
+        "description": "The outcome of one turn, returned by `/execute` and `/continue`.\n\nThe envelope flattens the [`TurnOutcome`] (tagged by `status`, payload under\n`data`) and adds `allowed_continuations` alongside it. A\n[`Completed`](TurnOutcome::Completed) turn carries the assistant message and\nrouting explanation; every other outcome is a continuation the client must\nact on before resuming the run with `/continue`, or a terminal\n[`Error`](TurnOutcome::Error)."
       },
       "UnavailableProvider": {
         "type": "object",
@@ -3725,6 +3999,17 @@
           "text": {
             "type": "string",
             "description": "The message text."
+          },
+          "ciphertext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EncryptedPayload",
+                "description": "Sealed form for storage, present only for an end-to-end-encrypted\nsession."
+              }
+            ]
           }
         }
       },

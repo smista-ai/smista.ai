@@ -39,6 +39,7 @@
 mod advance;
 mod approval;
 mod auth;
+mod content_ref;
 mod crypto;
 mod error;
 mod execute;
@@ -50,15 +51,16 @@ mod trace;
 mod turn_event;
 mod usage;
 
-pub use advance::{ApprovalDecisionEntry, ContinueRequest, ToolResult, UserMessage};
+pub use advance::{ApprovalDecisionEntry, ContinueKind, ContinueRequest, ToolResult, UserMessage};
 pub use approval::ApprovalDecision;
 pub use auth::{BootstrapResponse, MeResponse, SignInResponse, SignOutResponse};
-pub use crypto::{EncryptedPayload, PlainRecord, SealedRecord};
+pub use content_ref::ContentRef;
+pub use crypto::EncryptedPayload;
 pub use error::{ApiError, ApiErrorBody, ApiErrorCode, ApiErrorResponse};
 pub use execute::{
     ApprovalKind, Attachments, CompletedTurn, ContextFile, ContextInstruction, ContextOutcome,
     ExecutePolicy, ExecuteRequest, LocalPreferences, PendingApproval, RoutingOutcome, TaskInput,
-    ToolApproval, ToolRequest, TurnResponse, Workspace,
+    ToolApproval, ToolRequest, TurnOutcome, TurnResponse, Workspace,
 };
 pub use llm::{ListModelsResponse, ListProvidersResponse, UnavailableProvider};
 pub use preview::{CostRange, PreviewResponse, RequiredPermission};

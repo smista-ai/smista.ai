@@ -53,7 +53,7 @@ These rules hold for every table in the schema:
   table holds only the encryptable payload. This enables end-to-end encryption
   with no later migration: metadata stays queryable while content is stored
   either in clear or sealed as a ciphertext envelope. See
-  [End-to-end encryption](./e2e.md) for the full design.
+  [End-to-end encryption](./e2e_encryption.md) for the full design.
 - **User ownership is enforced at the query boundary.** Every session-scoped row
   stores `user` redundantly so ownership checks and scoped queries never need a
   join. A user can only ever reach rows they own.
@@ -128,7 +128,9 @@ erDiagram
         uuid session FK
         uuid user FK
         string run_id
+        int turn
         enum phase
+        object active
     }
     session_plan {
         uuid id PK
@@ -217,7 +219,7 @@ as a flexible object in one of two shapes:
 Whether a session's content is plaintext or encrypted is fixed by the owning
 `session`'s `encrypted` flag. `user_memory_content` is the one exception: it is
 user-scoped rather than session-scoped, so it is not yet encryptable and keeps a
-plain `string`. See [End-to-end encryption](./e2e.md).
+plain `string`. See [End-to-end encryption](./e2e_encryption.md).
 
 ## Tables
 
@@ -280,7 +282,7 @@ user, who is the only identity allowed to access it.
 flipping it would orphan content the router cannot re-key. When `true`, every
 paired `_content` row in the session stores a sealed payload and `key_id` names
 the per-session key that sealed it. The key itself never reaches storage. See
-[End-to-end encryption](./e2e.md).
+[End-to-end encryption](./e2e_encryption.md).
 
 ### session_message
 
@@ -391,26 +393,35 @@ Persists the execution state machine of a session's in-flight run, so the router
 can pause between protocol turns and resume on the next request without holding
 the run in memory. A session has at most one in-flight run, so this row is keyed
 by the session id and there is at most one per session; a write replaces it in
-place. Metadata-only: the phase carries only references to rows already stored,
-never content, so the row is never encrypted. Reading no row means the run is
-idle. See [Execution protocol](./execution-protocol.md) for the run lifecycle.
+place. `phase` is the durable checkpoint the run resumes from; `active` is the
+orthogonal processing lock, present only while a turn is being served. Because
+the lock never overwrites the checkpoint, a crash mid-turn loses nothing: startup
+clears `active` and the run resumes from `phase`. Metadata-only: the phase
+carries only references to rows already stored, never content, so the row is
+never encrypted. Reading no row means the run is idle. See
+[Run state machine](./run-state-machine.md) for the run lifecycle.
 
-| Field        | Type              | Description                         |
-| ------------ | ----------------- | ----------------------------------- |
-| `id`         | UUIDv7            | Record id; the owning session's id. |
-| `session`    | session reference | Session the run belongs to.         |
-| `user`       | user reference    | Owner, enforced on every query.     |
-| `run_id`     | string            | Id of the in-flight run.            |
-| `phase`      | `RunPhase` enum   | The phase the run is paused in.     |
-| `updated_at` | datetime          | When the state was last written.    |
+| Field        | Type                | Description                                          |
+| ------------ | ------------------- | ---------------------------------------------------- |
+| `id`         | UUIDv7              | Record id; the owning session's id.                  |
+| `session`    | session reference   | Session the run belongs to.                          |
+| `user`       | user reference      | Owner, enforced on every query.                      |
+| `run_id`     | string              | Id of the in-flight run.                             |
+| `turn`       | int                 | Count of turns served so far in this run.            |
+| `phase`      | `RunPhase` enum     | The durable checkpoint the run is paused at.         |
+| `active`     | `ActiveTurn` object | The processing lock; present while a turn is served. |
+| `updated_at` | datetime            | When the state was last written.                     |
 
-`phase` is one of: `Idle` (nothing outstanding), `Running` (a turn is in
-flight), `AwaitingTool` (blocked on client-run tools, recovered from the
-`session_tool_call` rows still requested), `AwaitingApproval` (blocked on a
-yes/no decision with no tool), `AwaitingDecrypt` (blocked on one sealed record
-being opened) and `AwaitingEncrypt` (blocked on one record being sealed). Each
-`Awaiting*` variant carries only the references it needs, never content. The
-enum serializes to an object, so `phase` is stored as a flexible object.
+`phase` is one of: `Idle` (nothing outstanding), `AwaitingDecrypt` (blocked on
+the client opening one or more sealed records before the prompt can be built),
+`AwaitingTool` (blocked on client-run `allow`/`ask` calls), `AwaitingApproval`
+(blocked on a yes/no decision with no tool) and `AwaitingEncrypt` (blocked on the
+client sealing one or more records). Every `Awaiting*` variant also records a
+`resume` step naming where the run continues once the wait is answered, and
+carries only the references it needs, never content. There is no `Running`
+phase: an in-flight turn is the presence of `active`, not a checkpoint. The enum
+serializes to an object, so `phase` is stored as a flexible object, and `active`
+as an optional flexible object.
 
 ### session_plan
 
