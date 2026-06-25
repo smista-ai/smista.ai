@@ -102,9 +102,13 @@ mod tests {
 
     #[test]
     fn should_flatten_turn_response_under_turn_end() {
-        let event = TurnEvent::TurnEnd(Box::new(TurnResponse::AwaitingTool {
-            tool_requests: Vec::new(),
-            trace_id: "trace:xyz".to_string(),
+        let event = TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: crate::api::TurnOutcome::AwaitingTool {
+                tool_requests: Vec::new(),
+                to_encrypt: std::collections::BTreeMap::new(),
+                trace_id: "trace:xyz".to_string(),
+            },
+            allowed_continuations: Vec::new(),
         }));
         let value = serde_json::to_value(&event).unwrap();
         assert_eq!(value["type"], "turn_end");

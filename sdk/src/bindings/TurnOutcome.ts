@@ -2,28 +2,16 @@
 import type { ApiErrorBody } from "./ApiErrorBody.js";
 import type { CompletedTurn } from "./CompletedTurn.js";
 import type { ContentRef } from "./ContentRef.js";
-import type { ContinueKind } from "./ContinueKind.js";
 import type { EncryptedPayload } from "./EncryptedPayload.js";
 import type { PendingApproval } from "./PendingApproval.js";
 import type { ToolRequest } from "./ToolRequest.js";
 
 /**
- * The outcome of one turn, returned by `/execute` and `/continue`.
+ * The outcome of one turn, tagged by `status` with its payload under `data`.
  *
- * The envelope flattens the [`TurnOutcome`] (tagged by `status`, payload under
- * `data`) and adds `allowed_continuations` alongside it. A
- * [`Completed`](TurnOutcome::Completed) turn carries the assistant message and
- * routing explanation; every other outcome is a continuation the client must
- * act on before resuming the run with `/continue`, or a terminal
- * [`Error`](TurnOutcome::Error).
+ * Carried by [`TurnResponse`], which adds `allowed_continuations` alongside it.
  */
-export type TurnResponse = { 
-/**
- * The valid next client messages the client may send; always includes
- * `break` while the run is live. Empty for a terminal plaintext
- * `completed`, an `idle` ack, or an `error`.
- */
-allowed_continuations?: Array<ContinueKind>, } & ({ "status": "completed", "data": CompletedTurn } | { "status": "awaiting_tool", "data": { 
+export type TurnOutcome = { "status": "completed", "data": CompletedTurn } | { "status": "awaiting_tool", "data": { 
 /**
  * The tool calls the client must run, correlated by `call_id`.
  */
@@ -73,4 +61,4 @@ trace_id: string, } } | { "status": "error", "data": {
 /**
  * The structured error body.
  */
-error: ApiErrorBody, } });
+error: ApiErrorBody, } };

@@ -49,7 +49,7 @@ A task is a conversation between two parties with a strict division of labour.
 The router may be **remote**. The protocol never assumes the router shares a
 filesystem or a host with the client, which is why the client must ship file
 contents itself and why end-to-end encryption exists (see
-[End-to-end encryption](./e2e.md)).
+[End-to-end encryption](./e2e_encryption.md)).
 
 Two trust boundaries follow, and they are not the same:
 
@@ -115,7 +115,7 @@ stateDiagram-v2
     awaiting_client --> running: advance with results
     running --> idle: completed
     running --> error: terminal error
-    awaiting_client --> idle: interrupt, no new input
+    awaiting_client --> idle: break, no new input
     error --> idle
 ```
 
@@ -124,8 +124,11 @@ router needs the client to run a tool, decide an approval, or seal/open
 ciphertext before it can proceed.
 
 The run's state lives in storage, not in router memory, so a dropped connection
-or a remote router never loses it. One rule makes abort, mid-run input and
-reconnection share a single path:
+or a remote router never loses it. The full set of pause states, the processing
+lock that rejects parallel requests, and where each wait resumes are specified in
+the [run state machine](./run-state-machine.md); this page covers the wire
+protocol. One rule makes abort, mid-run input and reconnection share a single
+path:
 
 > **Supersede rule.** A new client request for a run cancels any in-flight turn
 > for that run — the partial output is persisted, pending tool calls are
@@ -205,35 +208,45 @@ through the encrypt turn (see [Decrypt and encrypt](#decrypt-and-encrypt)).
 
 ### Response: completion or continuation
 
-A turn resolves to exactly one outcome, named by `status`:
+A turn resolves to one envelope with three top-level fields: `status` names the
+outcome, `data` carries that outcome's payload, and `allowed_continuations` lists
+the messages the client may send next. The outcomes are:
 
-| `status`            | Meaning                                                          | Client's next move                       |
-| ------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
-| `completed`         | The model finished; an assistant message is included.            | Render; wait for the next prompt.        |
-| `awaiting_tool`     | The model requested one or more client-executed tools.           | Run them; advance with the results.      |
-| `awaiting_approval` | The router needs a yes/no with no tool to run.                   | Ask the user; advance with the decision. |
-| `awaiting_decrypt`  | The router needs sealed history opened to build the prompt.      | Decrypt; advance with the plaintext.     |
-| `awaiting_encrypt`  | The router needs its own output sealed before it can persist it. | Seal; advance with the ciphertext.       |
-| `error`             | A terminal error ended the turn.                                 | Surface it; the run is over.             |
+| `status`            | Meaning                                                          | Client's next move                           |
+| ------------------- | ---------------------------------------------------------------- | -------------------------------------------- |
+| `completed`         | The model finished; an assistant message is included.            | Render; seal `to_encrypt` if set, else done. |
+| `awaiting_tool`     | The model requested one or more client-executed tools.           | Run them; advance with the results.          |
+| `awaiting_approval` | The router needs a yes/no with no tool to run.                   | Ask the user; advance with the decision.     |
+| `awaiting_decrypt`  | The router needs sealed history opened to build the prompt.      | Decrypt; advance with the plaintext.         |
+| `awaiting_encrypt`  | The router needs its own output sealed before it can persist it. | Seal; advance with the ciphertext.           |
+| `idle`              | The run finished and its content was persisted.                  | Nothing to render; the run is over.          |
+| `error`             | A terminal error ended the turn.                                 | Surface it; the run is over.                 |
+
+`allowed_continuations` is empty for a terminal outcome and otherwise always
+includes `break`. A `completed` turn is terminal for a plaintext session; for an
+encrypted session its `data` carries a `to_encrypt` map and `allowed_continuations`
+is `[sealed, break]`, after which the router answers `idle`.
 
 A completed turn:
 
 ```json
 {
   "status": "completed",
-  "message": { "role": "assistant", "content": "...", "provider": "anthropic", "model": "claude-sonnet" },
-  "classification": { "intent": "edit", "source": "inferred", "reason": "keyword matched", "confidence": "high" },
-  "routing": {
-    "task_type": "edit",
-    "provider": "anthropic",
-    "model": "claude-sonnet",
-    "matched_rule": "edit + src/auth/** -> anthropic/claude-sonnet",
-    "fallback_used": false,
-    "override_used": false
-  },
-  "context": { "included": ["src/auth/middleware.rs", "SMISTA.md"], "excluded": [".env"] },
-  "usage": { "input_tokens": 1200, "output_tokens": 500, "estimated_cost": "0.08", "currency": "USD" },
-  "trace_id": "trace:xyz"
+  "data": {
+    "message": { "role": "assistant", "content": "...", "provider": "anthropic", "model": "claude-sonnet" },
+    "classification": { "intent": "edit", "source": "inferred", "reason": "keyword matched", "confidence": "high" },
+    "routing": {
+      "task_type": "edit",
+      "provider": "anthropic",
+      "model": "claude-sonnet",
+      "matched_rule": "edit + src/auth/** -> anthropic/claude-sonnet",
+      "fallback_used": false,
+      "override_used": false
+    },
+    "context": { "included": ["src/auth/middleware.rs", "SMISTA.md"], "excluded": [".env"] },
+    "usage": { "input_tokens": 1200, "output_tokens": 500, "estimated_cost": "0.08", "currency": "USD" },
+    "trace_id": "trace:xyz"
+  }
 }
 ```
 
@@ -262,11 +275,14 @@ When the model requests tools, the router checks each call against
 ```json
 {
   "status": "awaiting_tool",
-  "tool_requests": [
-    { "call_id": "c1", "name": "read_file", "arguments": { "path": "src/auth/middleware.rs" }, "requires_approval": "allow" },
-    { "call_id": "c2", "name": "shell", "arguments": { "command": "cargo test" }, "requires_approval": "ask" }
-  ],
-  "trace_id": "trace:xyz"
+  "data": {
+    "tool_requests": [
+      { "call_id": "c1", "name": "read_file", "arguments": { "path": "src/auth/middleware.rs" }, "requires_approval": "allow" },
+      { "call_id": "c2", "name": "shell", "arguments": { "command": "cargo test" }, "requires_approval": "ask" }
+    ],
+    "trace_id": "trace:xyz"
+  },
+  "allowed_continuations": ["tool_results", "inject", "break"]
 }
 ```
 
@@ -295,12 +311,15 @@ accepting or rejecting a generated `plan` before execution begins:
 ```json
 {
   "status": "awaiting_approval",
-  "approval": {
-    "approval_id": "a1",
-    "kind": "remote_disclosure",
-    "detail": { "provider": "anthropic", "model": "claude-sonnet", "paths": ["src/auth/middleware.rs"] }
+  "data": {
+    "approval": {
+      "approval_id": "a1",
+      "kind": "remote_disclosure",
+      "detail": { "provider": "anthropic", "model": "claude-sonnet", "paths": ["src/auth/middleware.rs"] }
+    },
+    "trace_id": "trace:xyz"
   },
-  "trace_id": "trace:xyz"
+  "allowed_continuations": ["approval_decisions", "break"]
 }
 ```
 
@@ -309,27 +328,42 @@ decision in the advance bundle.
 
 ### Decrypt and encrypt
 
-In an encrypted session the router holds only ciphertext and no key, so two
-continuations bridge the gap (see [End-to-end encryption](./e2e.md)):
+In an encrypted session the router holds only ciphertext and no key, so it leans
+on the client for crypto. The two directions differ (see
+[End-to-end encryption](./e2e_encryption.md), and the
+[run state machine](./run-state-machine.md) for the resume points):
 
-- `awaiting_decrypt` — the router selected sealed history it needs to build the
-  prompt. It sends the envelopes; the client opens them and advances with the
-  plaintext. This precedes the model call.
-- `awaiting_encrypt` — the router produced content to persist (the assistant
-  reply, tool results, trace payloads, an interrupted partial turn). It sends
-  the plaintext; the client seals it and advances with the ciphertext. Only the
-  ciphertext is stored.
+- **Decrypt is a standalone step.** To build the prompt the router needs sealed
+  history opened, and cannot proceed without it. `awaiting_decrypt` sends a
+  `to_decrypt` map; the client opens it and advances with the plaintext.
+- **Encrypt rides the data response.** Content the router authors (the assistant
+  reply, tool-call arguments, a plan snapshot, trace payloads, an interrupted
+  partial) travels out as a `to_encrypt` map **on the data-bearing response**;
+  the client seals it and returns the ciphertext on its next continuation. Only
+  the ciphertext is stored, and the user never waits to see the output. A
+  completed turn with nothing else outstanding uses the dedicated `sealed`
+  continuation; `awaiting_encrypt` is the standalone case (an interrupted
+  partial).
 
-Each record is correlated by its storage `record_id`:
+Both maps are keyed by a content reference of the form `kind:id`, where `kind` is
+one of `message`, `tool_call`, `diff`, `plan`, `memory` or `trace`, so the router
+dispatches each payload to the right content store:
 
 ```json
 {
   "status": "awaiting_decrypt",
-  "decrypt": { "records": [{ "record_id": "session_message:0194...", "envelope": { "version": 1, "algorithm": "xchacha20-poly1305", "key_id": "kf_ab12", "nonce": "...", "ciphertext": "..." } }] }
+  "data": {
+    "to_decrypt": {
+      "message:0194": { "version": 1, "algorithm": "xchacha20poly1305", "key_id": "kf_ab12", "nonce": "...", "ciphertext": "..." }
+    },
+    "trace_id": "trace:xyz"
+  },
+  "allowed_continuations": ["decrypted", "break"]
 }
 ```
 
-A plaintext session never sees either continuation.
+A plaintext session never sees decrypt or encrypt; `to_encrypt` is absent and the
+router stores content directly.
 
 ## Advancing a run
 
@@ -337,35 +371,46 @@ A plaintext session never sees either continuation.
 POST /sessions/{session_id}/continue
 ```
 
-`continue` resumes the in-flight run. Its body is a bundle; every field is
-optional, and one request may carry several at once (for example tool results
-plus a queued user message). It returns the next turn's outcome in the same
-shape as [`/execute`](#response-completion-or-continuation), buffered or streamed
-by the `Accept` header.
+`continue` resumes the in-flight run with a single tagged `{ type, data }`
+message answering the current pause. It returns the next turn's outcome in the
+same shape as [`/execute`](#response-completion-or-continuation), buffered or
+streamed by the `Accept` header. The valid `type` values are what the previous
+response advertised in `allowed_continuations`; `break` is always valid.
 
-| Field                | Answers                                                                                   |
-| -------------------- | ----------------------------------------------------------------------------------------- |
-| `tool_results`       | `awaiting_tool` — `{ call_id, content, is_error, decision }`; `decision` folds approval.  |
-| `approval_decisions` | `awaiting_approval` — `{ approval_id, decision, reason }`.                                |
-| `decrypted`          | `awaiting_decrypt` — `{ record_id, plaintext }`.                                          |
-| `encrypted`          | `awaiting_encrypt` — `{ record_id, envelope }`.                                           |
-| `user_messages`      | Mid-run input the user typed; `{ text, ciphertext }` (ciphertext for encrypted sessions). |
-| `interrupt`          | `true` to abort the in-flight turn (the Esc path).                                        |
+| `type`               | Answers             | `data`                                                               |
+| -------------------- | ------------------- | -------------------------------------------------------------------- |
+| `tool_results`       | `awaiting_tool`     | `{ results: [{ call_id, content, is_error, decision }], encrypted }` |
+| `approval_decisions` | `awaiting_approval` | `{ decisions: [{ approval_id, decision, reason }], encrypted }`      |
+| `decrypted`          | `awaiting_decrypt`  | `{ plaintext }` — a content-ref → plaintext map                      |
+| `sealed`             | a folded encrypt    | `{ encrypted }` — a content-ref → envelope map                       |
+| `inject`             | any live state      | `{ messages: [{ text, ciphertext }] }` — mid-run input; supersedes   |
+| `break`              | any live state      | none — aborts the in-flight turn (the Esc path)                      |
+
+A tool's approval rides the `decision` on its result, so an `ask` call confirms
+and executes in one message. In an encrypted session the client's `encrypted`
+map carries the ciphertext for the router-authored rows the response asked it to
+seal (and for the tool results themselves), keyed by content reference.
 
 ```json
 {
-  "tool_results": [
-    { "call_id": "c1", "content": "pub fn middleware() { ... }", "is_error": false },
-    { "call_id": "c2", "content": "test result: ok", "is_error": false, "decision": "approved" }
-  ],
-  "user_messages": [],
-  "interrupt": false
+  "type": "tool_results",
+  "data": {
+    "results": [
+      { "call_id": "c1", "content": "pub fn middleware() { ... }", "is_error": false },
+      { "call_id": "c2", "content": "test result: ok", "is_error": false, "decision": "approved" }
+    ]
+  }
 }
+```
+
+```json
+{ "type": "break" }
 ```
 
 This single endpoint replaces the old standalone approval endpoint: approval
 decisions ride `approval_decisions`, and tool approvals ride the `decision` on a
-tool result.
+tool result. Mid-run input and aborts are their own messages (`inject` and
+`break`), each superseding the in-flight turn.
 
 ## Streaming
 
@@ -394,29 +439,24 @@ completed or paused — `turn_end` says so explicitly.
 
 ## Mid-run input and aborting
 
-The user can type while a run is working. The client buffers that input and
-delivers it on the next [`/continue`](#advancing-a-run) as `user_messages`. The
-router appends it to the conversation **after** the current turn's output and
-tool results, persists it, and the next turn's classification consumes it as
-fresh state — so "stop, do Y instead" becomes the latest user turn and routing
-adapts on its own. No special engine: injected input is simply more state at the
-loop head, picked up for free by per-turn re-classification.
+The user can type while a run is working, or abort it. Both are their own
+[`/continue`](#advancing-a-run) messages, and both are always accepted — even
+while a turn is generating:
 
-Two delivery modes:
+- **`inject`** — mid-run input ("stop, do Y instead"). The router appends it to
+  the conversation **after** the current turn's output and tool results,
+  persists it, and the next turn's classification consumes it as fresh state, so
+  routing adapts on its own. No special engine: injected input is simply more
+  state at the loop head, picked up for free by per-turn re-classification.
+- **`break`** — a bare abort with no input (the Esc path).
 
-- **Queue at the boundary** (default) — the input is delivered when the current
-  turn ends. Nothing is cancelled.
-- **Interrupt** (`interrupt: true`, the Esc path) — the client cancels the
-  in-flight turn immediately and delivers the input now.
-
-An interrupt is the supersede rule in action. The router cancels the model call,
-**persists the partial assistant turn marked interrupted** (with whatever usage
-the provider reported before the cut — it may be incomplete), and cancels any
-unresolved pending tool calls. Then: if the bundle carried `user_messages`, the
-run continues with them; if the interrupt was bare, the run goes idle and waits
-for the next prompt. In an encrypted session the interrupted partial is
-router-authored content, so it rides the normal `awaiting_encrypt` path before
-it is stored.
+Both apply the supersede rule: the router cancels the model call, **persists the
+partial assistant turn marked interrupted** (with whatever usage the provider
+reported before the cut — it may be incomplete), and cancels any unresolved
+pending tool calls. After that, `inject` continues the run with the new input,
+while `break` lets the run go idle and wait for the next prompt. In an encrypted
+session the interrupted partial is router-authored content, so it rides the
+encrypt path before it is stored.
 
 ## Privacy and model locality
 
@@ -536,13 +576,13 @@ sequenceDiagram
     Router->>Model: invoke (stream)
     Model-->>Router: text deltas
     Router-->>Client: text_delta events
-    User->>Client: Esc (and maybe a new instruction)
-    Client->>Router: POST /continue (interrupt=true, user_messages?)
+    User->>Client: Esc, or types a new instruction
+    Client->>Router: POST /continue (inject) or (break)
     Router->>Model: cancel
     Router->>Storage: persist partial assistant (interrupted) + usage
-    alt new input
+    alt inject (new input)
         Router->>Router: re-classify -> next turn
-    else bare interrupt
+    else break (bare abort)
         Router-->>Client: run idle
     end
 ```
@@ -560,21 +600,21 @@ sequenceDiagram
     Client->>Router: POST /stream (prompt plaintext + ciphertext)
     Router->>Storage: persist user ciphertext
     Router->>Router: select relevant history (ciphertext)
-    Router-->>Client: turn_end (awaiting_decrypt)
+    Router-->>Client: turn_end (awaiting_decrypt: to_decrypt map)
     Client->>Client: open envelopes with the session key
-    Client->>Router: POST /continue (decrypted)
+    Client->>Router: POST /continue (decrypted: plaintext map)
     Router->>Model: invoke (context now plaintext)
     Model-->>Router: reply
-    Router-->>Client: turn_end (awaiting_encrypt: assistant + trace)
-    Client->>Client: seal with the session key
-    Client->>Router: POST /continue (encrypted)
+    Router-->>Client: turn_end (completed + to_encrypt: assistant + trace)
+    Client->>Client: render reply, seal to_encrypt with the session key
+    Client->>Router: POST /continue (sealed: ciphertext map)
     Router->>Storage: persist ciphertext
-    Router-->>Client: turn_end (completed)
+    Router-->>Client: turn_end (idle)
 ```
 
 ## Error and terminal states
 
-A run ends in `completed`, `error`, or idle after a bare interrupt. Errors use
+A run ends in `completed`, `error`, or idle after a bare `break`. Errors use
 the shared error shape and stable `code` from the
 [HTTP API reference](../api/http-api.md#error-codes); the ones the execution
 flow raises most often:

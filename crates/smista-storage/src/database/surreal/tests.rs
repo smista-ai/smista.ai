@@ -7,7 +7,7 @@ use surrealdb::types::RecordId;
 
 use super::*;
 use crate::api::Pagination;
-use crate::entity::{ApprovalKind, RunPhase, RunState, ToolCallStatus, TraceEventType};
+use crate::entity::{ApprovalKind, ResumeStep, RunPhase, RunState, ToolCallStatus, TraceEventType};
 use crate::types::{ContentEnvelope, SecretContent};
 
 async fn memory_db() -> SurrealDatabase {
@@ -1890,6 +1890,16 @@ fn run_state_for(session_id: Uuid, user_id: Uuid, phase: RunPhase) -> RunState {
     RunState::new(session_id, user_id, Uuid::now_v7(), phase)
 }
 
+/// An `AwaitingTool` checkpoint with no outstanding calls, for tests that only
+/// care about the phase being persisted and overwritten.
+fn awaiting_tool() -> RunPhase {
+    RunPhase::AwaitingTool {
+        calls: Vec::new(),
+        resume: ResumeStep::NextTurn,
+        to_seal: Vec::new(),
+    }
+}
+
 #[tokio::test]
 async fn should_set_and_get_run_state() {
     let db = memory_db().await;
@@ -1902,6 +1912,8 @@ async fn should_set_and_get_run_state() {
             approval_id: "a1".to_string(),
             kind: ApprovalKind::RemoteDisclosure,
             detail: r#"{"provider":"anthropic"}"#.to_string(),
+            resume: ResumeStep::Invoke,
+            to_seal: Vec::new(),
         },
     );
     let stored = db
@@ -1927,28 +1939,28 @@ async fn should_overwrite_run_state_in_place() {
         run_state_for(
             session_id,
             user_id,
-            RunPhase::Running {
-                turn: 0,
-                started_at: Utc::now(),
+            RunPhase::AwaitingApproval {
+                approval_id: "a1".to_string(),
+                kind: ApprovalKind::CostLimit,
+                detail: "{}".to_string(),
+                resume: ResumeStep::Invoke,
+                to_seal: Vec::new(),
             },
         ),
     )
     .await
     .expect("failed to set first run state");
 
-    db.set_run_state(
-        user_id,
-        run_state_for(session_id, user_id, RunPhase::AwaitingTool),
-    )
-    .await
-    .expect("failed to overwrite run state");
+    db.set_run_state(user_id, run_state_for(session_id, user_id, awaiting_tool()))
+        .await
+        .expect("failed to overwrite run state");
 
     let loaded = db
         .get_run_state(user_id, session_id)
         .await
         .expect("failed to get run state")
         .expect("run state missing");
-    assert_eq!(loaded.phase, RunPhase::AwaitingTool);
+    assert_eq!(loaded.phase, awaiting_tool());
     assert_eq!(
         count::<RunState>(&db).await,
         1,
@@ -1972,12 +1984,9 @@ async fn should_get_no_run_state_when_idle() {
 async fn should_not_get_run_state_of_other_user() {
     let db = memory_db().await;
     let (user_id, session_id) = user_with_session(&db).await;
-    db.set_run_state(
-        user_id,
-        run_state_for(session_id, user_id, RunPhase::AwaitingTool),
-    )
-    .await
-    .expect("failed to set run state");
+    db.set_run_state(user_id, run_state_for(session_id, user_id, awaiting_tool()))
+        .await
+        .expect("failed to set run state");
 
     let other = Uuid::now_v7();
     let loaded = db
@@ -1997,7 +2006,7 @@ async fn should_reject_set_run_state_for_unowned_session() {
         .await
         .expect("failed to create intruder");
 
-    let state = run_state_for(session_id, intruder, RunPhase::AwaitingTool);
+    let state = run_state_for(session_id, intruder, awaiting_tool());
     let result = db.set_run_state(intruder, state).await;
     assert!(
         matches!(result, Err(StorageError::NotFound)),
@@ -2009,12 +2018,9 @@ async fn should_reject_set_run_state_for_unowned_session() {
 async fn should_delete_run_state_on_session_delete() {
     let db = memory_db().await;
     let (user_id, session_id) = user_with_session(&db).await;
-    db.set_run_state(
-        user_id,
-        run_state_for(session_id, user_id, RunPhase::AwaitingTool),
-    )
-    .await
-    .expect("failed to set run state");
+    db.set_run_state(user_id, run_state_for(session_id, user_id, awaiting_tool()))
+        .await
+        .expect("failed to set run state");
 
     db.delete_session(user_id, session_id)
         .await
@@ -2044,12 +2050,9 @@ async fn should_purge_run_state_with_old_session() {
     ))
     .await
     .expect("failed to create old session");
-    db.set_run_state(
-        user_id,
-        run_state_for(old_id, user_id, RunPhase::AwaitingTool),
-    )
-    .await
-    .expect("failed to set run state");
+    db.set_run_state(user_id, run_state_for(old_id, user_id, awaiting_tool()))
+        .await
+        .expect("failed to set run state");
 
     db.purge_old_sessions(30)
         .await

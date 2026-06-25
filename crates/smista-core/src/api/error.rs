@@ -335,6 +335,7 @@ fn map_capability(error: &CapabilityError) -> ApiErrorResponse {
 fn map_parse(error: &ParseError) -> ApiErrorResponse {
     let message = error.to_string();
     let code = match error {
+        ParseError::InvalidContentRef(_) => ApiErrorCode::InvalidRequest,
         ParseError::InvalidModelReference(_) => ApiErrorCode::InvalidModelReference,
         ParseError::InvalidProviderName(_) => ApiErrorCode::InvalidProviderName,
         ParseError::UnknownEffort(_) => ApiErrorCode::UnknownEffort,

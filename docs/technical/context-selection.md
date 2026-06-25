@@ -117,7 +117,7 @@ larger window.
 
 ## Opening sealed history
 
-In an [encrypted session](./e2e.md) the recalled history is ciphertext: the
+In an [encrypted session](./e2e_encryption.md) the recalled history is ciphertext: the
 router is blind at rest and holds no key. Selection still works, because it runs
 on the cleartext metadata (role, provider, paths, timestamps) while only the
 content is sealed. Once the router knows which past rows it needs, it emits an

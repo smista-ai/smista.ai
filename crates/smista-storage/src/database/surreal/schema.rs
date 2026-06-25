@@ -134,11 +134,16 @@ DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_approval TYPE datetime;
 
 -- session_run_state. Metadata-only: `phase` is the `RunPhase` enum, which the
 -- SurrealValue derive encodes as an externally-tagged object (every variant,
--- including the payload-free ones), so it is typed `object FLEXIBLE`.
+-- including the payload-free ones), so it is typed `object FLEXIBLE`. `phase` is
+-- the durable checkpoint; `active` is the orthogonal processing lock, present
+-- (as an `ActiveTurn` object) only while a turn is being served and cleared on
+-- startup, so a crashed lock never wedges the run.
 DEFINE FIELD IF NOT EXISTS session ON TABLE session_run_state TYPE record<session> ASSERT record::exists($value);
 DEFINE FIELD IF NOT EXISTS user ON TABLE session_run_state TYPE record<user> ASSERT record::exists($value);
 DEFINE FIELD IF NOT EXISTS run_id ON TABLE session_run_state TYPE string;
+DEFINE FIELD IF NOT EXISTS turn ON TABLE session_run_state TYPE int;
 DEFINE FIELD IF NOT EXISTS phase ON TABLE session_run_state TYPE object FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS active ON TABLE session_run_state TYPE option<object> FLEXIBLE;
 DEFINE FIELD IF NOT EXISTS updated_at ON TABLE session_run_state TYPE datetime;
 
 -- session_plan

@@ -81,6 +81,10 @@ pub enum AuthError {
 /// implementations of the core domain types when given an unrecognized value.
 #[derive(Debug, thiserror::Error, PartialEq, Eq, Clone)]
 pub enum ParseError {
+    /// A content reference was not in the expected `kind:id` form, or named an
+    /// unknown content kind.
+    #[error("invalid content reference: {0}")]
+    InvalidContentRef(String),
     /// A model reference was not in the expected `provider/model` form.
     #[error("invalid model reference: {0}")]
     InvalidModelReference(String),

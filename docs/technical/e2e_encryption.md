@@ -85,15 +85,23 @@ a task runs:
 
 - New content you send (your prompt) travels in clear so the model can be
   called, together with its sealed form for storage. The router keeps only the
-  sealed form.
+  sealed form. Tool results work the same way: your client seals them itself and
+  sends both forms together.
 - To build context from earlier messages, the router picks which past rows it
-  needs and asks your client to decrypt just those. The router decides what to
-  include; your client supplies the readable text.
-- Content the router produces during the task (the model's reply, tool results,
-  trace events) is handed back to your client to seal before it is stored.
+  needs and asks your client to decrypt just those. This is a standalone step:
+  the router sends a map of sealed records and your client returns the readable
+  text before the model is called.
+- Content the router produces during the task (the model's reply, tool-call
+  arguments, plans, trace events, an interrupted partial) is handed back to your
+  client to seal before it is stored. This rides the same response that delivers
+  the result, so you see the output immediately and only its stored copy waits to
+  be sealed.
 
-This keeps routing and context selection on the router while the key stays on
-your machine.
+Each record in these maps is named by a reference of the form `kind:id`, so the
+router dispatches every payload to the right content store. This keeps routing
+and context selection on the router while the key stays on your machine. See the
+[run state machine](./run-state-machine.md) for exactly where each step fits in a
+turn.
 
 ## Status
 
