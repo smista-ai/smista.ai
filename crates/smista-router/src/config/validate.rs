@@ -4,6 +4,7 @@ mod auth;
 mod binding;
 mod cors;
 mod limits;
+mod opentelemetry;
 mod providers;
 mod rate_limit;
 mod report;
@@ -27,6 +28,7 @@ pub fn validate(config: &RouterConfig) -> ValidationReport {
     limits::check_limits(config, &mut report);
     rate_limit::check_rate_limit(config, &mut report);
     cors::check_cors(config, &mut report);
+    opentelemetry::check_opentelemetry(config, &mut report);
     providers::check_providers(config, &mut report);
 
     tracing::debug!(

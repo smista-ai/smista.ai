@@ -50,6 +50,14 @@ const DEFAULT_LOG_LEVEL: &str = "info";
 /// The default [`LoggingConfig::format`] value.
 const DEFAULT_LOG_FORMAT: &str = "compact";
 
+/// The default [`OpenTelemetryConfig::endpoint`] value: the local OTLP/gRPC
+/// collector endpoint exposed by the OpenTelemetry Collector.
+const DEFAULT_OTEL_ENDPOINT: &str = "http://localhost:4317";
+/// The default [`OpenTelemetryConfig::service_name`] value.
+const DEFAULT_OTEL_SERVICE_NAME: &str = "smista-router";
+/// The default [`OpenTelemetryConfig::sample_ratio`] value: export every trace.
+const DEFAULT_OTEL_SAMPLE_RATIO: f64 = 1.0;
+
 /// The default [`RetentionConfig::trace_retention_days`] value: 90 days.
 const DEFAULT_TRACE_RETENTION_DAYS: u32 = 90;
 /// The default [`RetentionConfig::session_retention_days`] value: 1 year.
@@ -63,7 +71,10 @@ const DEFAULT_CLEANUP_INTERVAL_SECONDS: u64 = 3_600;
 const DEFAULT_OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434";
 
 /// Top-level router runtime configuration.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Eq` is not derived because [`OpenTelemetryConfig::sample_ratio`] is an
+/// `f64`, which only implements `PartialEq`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RouterConfig {
     /// Bind host.
@@ -80,6 +91,8 @@ pub struct RouterConfig {
     pub rate_limit: RateLimitConfig,
     /// Logging configuration.
     pub logging: LoggingConfig,
+    /// OpenTelemetry trace-export configuration. Disabled by default.
+    pub opentelemetry: OpenTelemetryConfig,
     /// CORS configuration.
     pub cors: CorsConfig,
     /// Data-retention configuration.
@@ -100,6 +113,7 @@ impl Default for RouterConfig {
             limits: RouterLimits::default(),
             rate_limit: RateLimitConfig::default(),
             logging: LoggingConfig::default(),
+            opentelemetry: OpenTelemetryConfig::default(),
             cors: CorsConfig::default(),
             retention: RetentionConfig::default(),
             ollama: OllamaConfig::default(),
@@ -415,6 +429,92 @@ impl Default for LoggingConfig {
     }
 }
 
+/// OpenTelemetry trace-export configuration.
+///
+/// Layered on top of the existing logging without changing it: when
+/// [`enabled`](Self::enabled) is `false` (the default) the router exports
+/// nothing and pays no runtime cost. When enabled, the router's `tracing` spans
+/// are exported to the configured OTLP collector. Only span and trace metadata
+/// is sent; secrets are never recorded on spans and so are never exported.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OpenTelemetryConfig {
+    /// Whether OpenTelemetry trace export is enabled.
+    pub enabled: bool,
+    /// OTLP collector endpoint traces are exported to, e.g.
+    /// `http://localhost:4317` for OTLP/gRPC or `http://localhost:4318` for
+    /// OTLP/HTTP.
+    pub endpoint: String,
+    /// Wire protocol used to reach the collector.
+    pub protocol: OtlpProtocol,
+    /// Service name reported on every exported trace.
+    pub service_name: String,
+    /// Fraction of traces to sample, from `0.0` (none) to `1.0` (all).
+    pub sample_ratio: f64,
+}
+
+impl Default for OpenTelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: DEFAULT_OTEL_ENDPOINT.to_string(),
+            protocol: OtlpProtocol::default(),
+            service_name: DEFAULT_OTEL_SERVICE_NAME.to_string(),
+            sample_ratio: DEFAULT_OTEL_SAMPLE_RATIO,
+        }
+    }
+}
+
+/// Wire protocol used to export OTLP traces to the collector.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OtlpProtocol {
+    /// OTLP over gRPC, the collector's default `4317` port.
+    #[default]
+    Grpc,
+    /// OTLP over HTTP with a binary protobuf payload, the collector's default
+    /// `4318` port.
+    HttpBinary,
+}
+
+impl std::fmt::Display for OtlpProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::Grpc => "grpc",
+            Self::HttpBinary => "http-binary",
+        };
+        f.write_str(name)
+    }
+}
+
+impl std::str::FromStr for OtlpProtocol {
+    type Err = ParseOtlpProtocolError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "grpc" => Ok(Self::Grpc),
+            "http" | "http-binary" => Ok(Self::HttpBinary),
+            other => Err(ParseOtlpProtocolError(other.to_string())),
+        }
+    }
+}
+
+/// Error returned when an OTLP protocol string cannot be parsed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseOtlpProtocolError(String);
+
+impl std::fmt::Display for ParseOtlpProtocolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "unknown OTLP protocol `{}`; expected `grpc` or `http-binary`",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for ParseOtlpProtocolError {}
+
 /// CORS configuration. Disabled by default.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -491,6 +591,56 @@ mod tests {
     #[test]
     fn should_redact_secrets_by_default() {
         assert!(LoggingConfig::default().redact_secrets);
+    }
+
+    #[test]
+    fn should_disable_opentelemetry_by_default() {
+        let otel = OpenTelemetryConfig::default();
+        assert!(!otel.enabled);
+        assert_eq!(otel.protocol, OtlpProtocol::Grpc);
+        assert_eq!(otel.service_name, "smista-router");
+        assert!((otel.sample_ratio - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn should_parse_otlp_protocol_from_str() {
+        use std::str::FromStr as _;
+
+        assert_eq!(OtlpProtocol::from_str("grpc").unwrap(), OtlpProtocol::Grpc);
+        assert_eq!(
+            OtlpProtocol::from_str("  GRPC ").unwrap(),
+            OtlpProtocol::Grpc
+        );
+        assert_eq!(
+            OtlpProtocol::from_str("http").unwrap(),
+            OtlpProtocol::HttpBinary
+        );
+        assert_eq!(
+            OtlpProtocol::from_str("HTTP-Binary").unwrap(),
+            OtlpProtocol::HttpBinary
+        );
+        let err = OtlpProtocol::from_str("carrier-pigeon").unwrap_err();
+        assert!(err.to_string().contains("carrier-pigeon"));
+    }
+
+    #[test]
+    fn should_render_otlp_protocol_display() {
+        assert_eq!(OtlpProtocol::Grpc.to_string(), "grpc");
+        assert_eq!(OtlpProtocol::HttpBinary.to_string(), "http-binary");
+    }
+
+    #[test]
+    fn should_round_trip_opentelemetry_config_through_toml() {
+        let otel = OpenTelemetryConfig {
+            enabled: true,
+            endpoint: "http://collector:4318".to_string(),
+            protocol: OtlpProtocol::HttpBinary,
+            service_name: "router-x".to_string(),
+            sample_ratio: 0.25,
+        };
+        let serialized = toml::to_string(&otel).unwrap();
+        let parsed: OpenTelemetryConfig = toml::from_str(&serialized).unwrap();
+        assert_eq!(parsed, otel);
     }
 
     #[test]

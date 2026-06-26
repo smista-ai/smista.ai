@@ -145,6 +145,12 @@ mod tests {
         assert_eq!(config.limits.provider_timeout_ms, 180_000);
         assert_eq!(config.logging.format, "compact");
         assert!(config.logging.redact_secrets);
+        assert!(!config.opentelemetry.enabled);
+        assert_eq!(config.opentelemetry.endpoint, "http://localhost:4317");
+        assert_eq!(
+            config.opentelemetry.protocol,
+            crate::config::model::OtlpProtocol::Grpc
+        );
         assert!(config.ollama.enabled);
     }
 }

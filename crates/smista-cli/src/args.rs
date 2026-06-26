@@ -32,6 +32,17 @@ pub struct Args {
     pub log_filter: String,
 }
 
+impl Args {
+    /// Whether this invocation runs the router in the current process.
+    ///
+    /// The foreground router owns its telemetry setup, so logging is left for it
+    /// to initialize rather than being set up up front.
+    #[must_use]
+    pub fn is_foreground_start(&self) -> bool {
+        matches!(&self.command, Command::Start(args) if args.foreground)
+    }
+}
+
 /// The action a `smista` invocation performs.
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
@@ -47,8 +58,77 @@ mod tests {
     use std::path::Path;
 
     use clap::Parser as _;
+    use smista_router::config::{OpenTelemetryConfig, OtlpProtocol};
 
     use super::*;
+
+    fn start_args(argv: &[&str]) -> RouterArgs {
+        let Command::Start(start) = Args::parse_from(argv).command else {
+            panic!("expected the start command");
+        };
+        start
+    }
+
+    #[test]
+    fn should_default_opentelemetry_flags_off() {
+        let start = start_args(&["smista", "start"]);
+        assert!(!start.otel);
+        assert!(!start.no_otel);
+        let resolved = start.resolve_opentelemetry(OpenTelemetryConfig::default());
+        assert!(!resolved.enabled);
+    }
+
+    #[test]
+    fn should_let_command_line_override_the_file_for_opentelemetry() {
+        let start = start_args(&[
+            "smista",
+            "start",
+            "--otel",
+            "--otel-endpoint",
+            "http://collector:4317",
+            "--otel-protocol",
+            "http-binary",
+            "--otel-service-name",
+            "router-a",
+            "--otel-sample-ratio",
+            "0.25",
+        ]);
+        // The file disables export; the command line must win.
+        let resolved = start.resolve_opentelemetry(OpenTelemetryConfig::default());
+        assert!(resolved.enabled);
+        assert_eq!(resolved.endpoint, "http://collector:4317");
+        assert_eq!(resolved.protocol, OtlpProtocol::HttpBinary);
+        assert_eq!(resolved.service_name, "router-a");
+        assert!((resolved.sample_ratio - 0.25).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn should_disable_opentelemetry_from_the_command_line() {
+        let start = start_args(&["smista", "start", "--no-otel"]);
+        let from_file = OpenTelemetryConfig {
+            enabled: true,
+            ..OpenTelemetryConfig::default()
+        };
+        let resolved = start.resolve_opentelemetry(from_file);
+        assert!(!resolved.enabled);
+    }
+
+    #[test]
+    fn should_keep_the_file_value_when_no_toggle_is_given() {
+        let start = start_args(&["smista", "start", "--otel-sample-ratio", "0.5"]);
+        let from_file = OpenTelemetryConfig {
+            enabled: true,
+            ..OpenTelemetryConfig::default()
+        };
+        let resolved = start.resolve_opentelemetry(from_file);
+        assert!(resolved.enabled);
+        assert!((resolved.sample_ratio - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn should_reject_enabling_and_disabling_opentelemetry_together() {
+        assert!(Args::try_parse_from(["smista", "start", "--otel", "--no-otel"]).is_err());
+    }
 
     #[test]
     fn should_apply_defaults_for_start() {

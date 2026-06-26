@@ -17,6 +17,7 @@ mod command;
 mod config;
 mod log;
 mod signal;
+mod telemetry;
 
 use clap::Parser as _;
 
@@ -33,8 +34,16 @@ fn main() -> anyhow::Result<()> {
 async fn tokio_main() -> anyhow::Result<()> {
     // parse CLI args and env vars
     let args = args::Args::parse();
-    // init logging
-    log::init(&args.log_filter, args.log_file.as_deref())?;
+
+    // The foreground router configures its own telemetry — it may enable
+    // OpenTelemetry export from the router configuration — so it initializes
+    // logging itself once that configuration is loaded. Every other invocation
+    // uses plain logging, set up here and kept alive for the process lifetime.
+    let _telemetry = if args.is_foreground_start() {
+        None
+    } else {
+        Some(log::init(&args.log_filter, args.log_file.as_deref(), None)?)
+    };
     tracing::info!("smista-cli starting");
 
     // dispatch the selected subcommand. A foreground router runs until it is
