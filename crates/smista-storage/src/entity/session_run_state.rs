@@ -10,12 +10,16 @@
 //! [`active`](RunState::active) is the orthogonal processing lock, present while
 //! a turn is being served. Because the phase is never overwritten by the lock, a
 //! crash mid-turn loses nothing: startup clears `active` and the run resumes from
-//! its checkpoint. The row is metadata-only: every [`RunPhase`] variant carries
-//! only references to rows already in storage, never raw content, so the row
-//! never needs sealing. See `docs/technical/run-state-machine.md` for the run
-//! lifecycle.
+//! its checkpoint. The row never holds raw content: it references rows already in
+//! storage and, for an encrypted run where the router stores nothing until the
+//! client seals, carries the non-secret metadata of the rows it will write once
+//! the ciphertext returns (a [`PendingWrite`] per row). The run state itself is
+//! short-lived and cleared when the run ends, so it is never sealed. See
+//! `docs/technical/run-state-machine.md` for the run lifecycle.
 
 use chrono::{DateTime, Utc};
+use smista_core::message::MessageRole;
+use smista_core::model::Provider;
 use surrealdb::types::{RecordId, SurrealValue};
 use uuid::Uuid;
 
@@ -154,9 +158,10 @@ pub enum RunPhase {
         calls: Vec<ToolWait>,
         /// Where the run resumes once the results arrive.
         resume: ResumeStep,
-        /// Router-authored rows the client must seal alongside the results
-        /// (assistant message, tool arguments). Empty unless encrypted.
-        to_seal: Vec<RecordId>,
+        /// Router-authored rows whose metadata is written, paired with the
+        /// client's ciphertext, when the results arrive (assistant message, tool
+        /// calls). Empty unless encrypted.
+        pending: Vec<PendingWrite>,
     },
     /// Blocked on a yes/no decision with no tool to run.
     AwaitingApproval {
@@ -169,17 +174,55 @@ pub enum RunPhase {
         detail: String,
         /// Where the run resumes once the decision arrives.
         resume: ResumeStep,
-        /// Router-authored rows the client must seal alongside the decision
-        /// (for example a plan snapshot). Empty unless encrypted.
-        to_seal: Vec<RecordId>,
+        /// Router-authored rows whose metadata is written, paired with the
+        /// client's ciphertext, when the decision arrives (for example a plan
+        /// snapshot). Empty unless encrypted.
+        pending: Vec<PendingWrite>,
     },
     /// Blocked on the client sealing router-authored content before it can be
     /// persisted, with no other outstanding work.
     AwaitingEncrypt {
-        /// The records whose content must be sealed (one or more).
-        records: Vec<RecordId>,
+        /// Router-authored rows whose metadata is written, paired with the
+        /// client's ciphertext, when it arrives (one or more).
+        pending: Vec<PendingWrite>,
         /// Where the run resumes once the ciphertext arrives.
         resume: ResumeStep,
+    },
+}
+
+/// A router-authored row whose metadata is carried across an encrypted pause and
+/// written, paired with its client-sealed content, once the ciphertext returns.
+///
+/// Under end-to-end encryption the router stores nothing before the client
+/// seals: it holds the row's non-secret metadata here, in the short-lived,
+/// cleartext run state, and writes the metadata and the sealed content together
+/// when the `encrypted` map arrives. The owning session and user are taken from
+/// the run state, so only the per-row fields are carried; the row's content
+/// reference is `kind:id`, where `id` is the variant's `id`.
+#[derive(Debug, Clone, SurrealValue, PartialEq, Eq)]
+pub enum PendingWrite {
+    /// A session message (the user's input or the assistant's reply).
+    Message {
+        /// The message uuid, as a string; the content reference is `message:id`.
+        id: String,
+        /// Whether the message is the user's or the assistant's.
+        role: MessageRole,
+        /// Provider the turn routed to.
+        provider: Provider,
+        /// Model the turn routed to.
+        model: String,
+    },
+    /// A tool call whose `result` the client seals on the continuation.
+    ToolCall {
+        /// The tool-call uuid, as a string; the content reference is `tool_call:id`.
+        id: String,
+        /// Name of the invoked tool.
+        tool_name: String,
+    },
+    /// A drafted plan snapshot the client seals on the continuation.
+    Plan {
+        /// The plan uuid, as a string; the content reference is `plan:id`.
+        id: String,
     },
 }
 
@@ -224,7 +267,12 @@ mod tests {
                 requires_approval: ToolApproval::Ask,
             }],
             resume: ResumeStep::NextTurn,
-            to_seal: vec![record("session_message")],
+            pending: vec![PendingWrite::Message {
+                id: uuid::Uuid::now_v7().to_string(),
+                role: MessageRole::Assistant,
+                provider: Provider::Anthropic,
+                model: "claude".to_string(),
+            }],
         })
         .await;
     }
@@ -236,7 +284,9 @@ mod tests {
             kind: ApprovalKind::Plan,
             detail: r#"{"plan":"p1"}"#.to_string(),
             resume: ResumeStep::NextTurn,
-            to_seal: vec![record("session_plan")],
+            pending: vec![PendingWrite::Plan {
+                id: uuid::Uuid::now_v7().to_string(),
+            }],
         })
         .await;
     }
@@ -244,7 +294,12 @@ mod tests {
     #[tokio::test]
     async fn should_roundtrip_awaiting_encrypt_phase() {
         crate::tests::value_roundtrip(RunPhase::AwaitingEncrypt {
-            records: vec![record("session_message")],
+            pending: vec![PendingWrite::Message {
+                id: uuid::Uuid::now_v7().to_string(),
+                role: MessageRole::User,
+                provider: Provider::Anthropic,
+                model: "claude".to_string(),
+            }],
             resume: ResumeStep::Finalize,
         })
         .await;
@@ -282,7 +337,7 @@ mod tests {
             RunPhase::AwaitingTool {
                 calls: Vec::new(),
                 resume: ResumeStep::NextTurn,
-                to_seal: Vec::new(),
+                pending: Vec::new(),
             },
         );
         state.active = Some(ActiveTurn {

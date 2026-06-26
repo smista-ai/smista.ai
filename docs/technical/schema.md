@@ -16,6 +16,8 @@
     - [session\_tool\_call\_content](#session_tool_call_content)
     - [session\_approval](#session_approval)
     - [session\_run\_state](#session_run_state)
+    - [session\_run\_input](#session_run_input)
+    - [session\_run\_input\_content](#session_run_input_content)
     - [session\_plan](#session_plan)
     - [session\_plan\_content](#session_plan_content)
     - [session\_diff](#session_diff)
@@ -200,6 +202,7 @@ erDiagram
     trace_event          ||--|| trace_event_content          : "same id"
     user_memory          ||--|| user_memory_content          : "same id"
     context_memory       ||--|| context_memory_content       : "same id"
+    session_run_input    ||--|| session_run_input_content    : "same id"
 ```
 
 Metadata-only entities (`user`, `auth_token`, `session`,
@@ -423,6 +426,40 @@ phase: an in-flight turn is the presence of `active`, not a checkpoint. The enum
 serializes to an object, so `phase` is stored as a flexible object, and `active`
 as an optional flexible object.
 
+### session_run_input
+
+Persists a run's request context — the policy, local preferences and workspace
+snapshot — so every turn of a multi-turn run can re-run the deterministic
+resolver without the client re-sending it. A `continue` carries only the pause
+answer, so this row is the cross-turn carrier of the original request. A session
+has at most one in-flight run, so the row is keyed by the session id and there is
+at most one per session; a write replaces it in place. The non-secret metadata
+below is stored in clear; the secret half (input text, attachments, instructions,
+skills and git diff) lives in `session_run_input_content`.
+
+| Field               | Type              | Description                                           |
+| ------------------- | ----------------- | ----------------------------------------------------- |
+| `id`                | UUIDv7            | Record id; the owning session's id.                   |
+| `session`           | session reference | Session the run belongs to.                           |
+| `user`              | user reference    | Owner, enforced on every query.                       |
+| `run_id`            | string            | Id of the run this context belongs to.                |
+| `policy`            | string            | The deterministic policy snapshot, as JSON.           |
+| `local_preferences` | string            | The client's local execution preferences, as JSON.    |
+| `workspace`         | string            | The workspace paths and flags (no git diff), as JSON. |
+| `plan_active`       | bool              | Whether the run is in plan mode, across turns.        |
+| `created_at`        | datetime          | When the context was recorded.                        |
+
+### session_run_input_content
+
+Paired 1:1 with `session_run_input` (same record id). Holds the secret half of
+the run context (the input text, attachments, instructions, skills and git diff),
+serialized as JSON and stored in clear or sealed for an encrypted session.
+
+| Field     | Type            | Description                               |
+| --------- | --------------- | ----------------------------------------- |
+| `id`      | UUIDv7          | Record id, identical to the base row.     |
+| `content` | `SecretContent` | The run-input bundle, in clear or sealed. |
+
 ### session_plan
 
 Records a generated or approved execution plan. The plan snapshot lives in
@@ -444,10 +481,10 @@ Records a generated or approved execution plan. The plan snapshot lives in
 
 Paired 1:1 with `session_plan` (same record id).
 
-| Field              | Type                    | Description                      |
-| ------------------ | ----------------------- | -------------------------------- |
-| `id`               | UUIDv7                  | Record id, same as the metadata. |
-| `content_snapshot` | `SecretContent`, option | Snapshot of the plan body.       |
+| Field     | Type                    | Description                      |
+| --------- | ----------------------- | -------------------------------- |
+| `id`      | UUIDv7                  | Record id, same as the metadata. |
+| `content` | `SecretContent`, option | Snapshot of the plan body.       |
 
 ### session_diff
 
@@ -469,10 +506,10 @@ privacy policy.
 
 Paired 1:1 with `session_diff` (same record id).
 
-| Field  | Type            | Description                      |
-| ------ | --------------- | -------------------------------- |
-| `id`   | UUIDv7          | Record id, same as the metadata. |
-| `diff` | `SecretContent` | The diff body (secret-filtered). |
+| Field     | Type            | Description                      |
+| --------- | --------------- | -------------------------------- |
+| `id`      | UUIDv7          | Record id, same as the metadata. |
+| `content` | `SecretContent` | The diff body (secret-filtered). |
 
 ### trace_event
 
@@ -502,7 +539,7 @@ Paired 1:1 with `trace_event` (same record id).
 | Field     | Type            | Description                      |
 | --------- | --------------- | -------------------------------- |
 | `id`      | UUIDv7          | Record id, same as the metadata. |
-| `payload` | `SecretContent` | Structured event payload.        |
+| `content` | `SecretContent` | Structured event payload.        |
 
 The payload is a JSON object serialized to a string, then wrapped as a
 `SecretContent`. The shapes below describe that plaintext string; in an encrypted

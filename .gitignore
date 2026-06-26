@@ -18,3 +18,4 @@ node_modules/
 sdk/dist/
 *.tsbuildinfo
 docs/superpowers/
+.superpowers/

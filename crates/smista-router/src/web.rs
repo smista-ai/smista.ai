@@ -20,7 +20,7 @@
 //! [`ApiErrorResponse`](smista_core::api::ApiErrorResponse) in `smista-core` and
 //! rendered as JSON by [`error::WebError`].
 
-mod error;
+pub(crate) mod error;
 mod middleware;
 #[cfg(feature = "openapi")]
 mod openapi;

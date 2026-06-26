@@ -35,8 +35,10 @@ use smista_storage::entity::{
     ContextMemory, ContextMemoryContent, DiffStatus, PlanStatus, RunState, Session,
     SessionApproval, SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
     SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
-    SessionToolCall, SessionToolCallContent,
+    SessionRunInput, SessionRunInputContent, SessionToolCall, SessionToolCallContent,
+    ToolCallStatus, UserMemory, UserMemoryContent,
 };
+use smista_storage::types::SecretContent;
 use uuid::Uuid;
 
 /// Error type for [`Sessions`] and [`UserSession`].
@@ -66,13 +68,6 @@ pub struct Sessions {
 
 impl Sessions {
     /// Creates a new [`Sessions`] handle for `user_id` over `database`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub fn new(database: SurrealDatabase, user_id: Uuid) -> Self {
         Self { database, user_id }
     }
@@ -151,13 +146,6 @@ impl Sessions {
     ///
     /// Returns [`SessionError::NotFound`] if the session is absent or owned by
     /// another user, or [`SessionError`] if it cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn open(&self, session_id: Uuid) -> SessionResult<UserSession> {
         if self.get(session_id).await?.is_none() {
             return Err(SessionError::NotFound);
@@ -194,18 +182,21 @@ pub struct UserSession {
 }
 
 impl UserSession {
+    /// The owning user's id.
+    pub(crate) fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    /// The bound session's id.
+    pub(crate) fn session_id(&self) -> Uuid {
+        self.session_id
+    }
+
     /// Loads the session metadata, or `None` if absent.
     ///
     /// # Errors
     ///
     /// Returns [`SessionError`] if the session cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn session(&self) -> SessionResult<Option<Session>> {
         self.database
             .get_session(self.user_id, self.session_id)
@@ -240,13 +231,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the messages cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn messages(&self) -> SessionResult<Vec<(SessionMessage, SessionMessageContent)>> {
         self.database
             .list_session_messages_with_content(self.user_id, self.session_id)
@@ -281,13 +265,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the run state cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn run_state(&self) -> SessionResult<Option<RunState>> {
         self.database
             .get_run_state(self.user_id, self.session_id)
@@ -352,21 +329,63 @@ impl UserSession {
             .map_err(SessionError::Database)
     }
 
+    /// Loads the run's request-context snapshot with its content, or `None`.
+    ///
+    /// Re-read every turn of a multi-turn run so the deterministic resolver can
+    /// be replayed without the client re-sending the original request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionError`] if the run input cannot be read.
+    pub async fn run_input(
+        &self,
+    ) -> SessionResult<Option<(SessionRunInput, SessionRunInputContent)>> {
+        self.database
+            .get_run_input(self.user_id, self.session_id)
+            .await
+            .map_err(SessionError::Database)
+    }
+
+    /// Writes the run's request-context snapshot, overwriting any existing row.
+    ///
+    /// Used to update the persisted plan-mode flag without re-sending the
+    /// original request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionError`] if the run input cannot be written.
+    pub async fn set_run_input(
+        &self,
+        input: SessionRunInput,
+        content: SessionRunInputContent,
+    ) -> SessionResult<SessionRunInput> {
+        self.database
+            .set_run_input(self.user_id, input, content)
+            .await
+            .map_err(SessionError::Database)
+    }
+
     /// Sets the in-flight run state, overwriting any existing row.
     ///
     /// # Errors
     ///
     /// Returns [`SessionError`] if the run state cannot be written.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn set_run_state(&self, state: RunState) -> SessionResult<RunState> {
         self.database
             .set_run_state(self.user_id, state)
+            .await
+            .map_err(SessionError::Database)
+    }
+
+    /// Atomically acquires the run lock, returning the stored state when granted
+    /// or `None` when a turn already holds it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionError`] if the lock cannot be written.
+    pub async fn acquire_run_lock(&self, state: RunState) -> SessionResult<Option<RunState>> {
+        self.database
+            .acquire_run_lock(self.user_id, state)
             .await
             .map_err(SessionError::Database)
     }
@@ -376,13 +395,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the message cannot be appended.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn append_message(
         &self,
         message: SessionMessage,
@@ -399,13 +411,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the decision cannot be appended.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn append_routing_decision(
         &self,
         decision: SessionRoutingDecision,
@@ -421,13 +426,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the reference cannot be appended.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn append_context_reference(
         &self,
         reference: SessionContextReference,
@@ -443,13 +441,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the tool call cannot be appended.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn append_tool_call(
         &self,
         tool_call: SessionToolCall,
@@ -466,13 +457,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the plan cannot be appended.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn append_plan(
         &self,
         plan: SessionPlan,
@@ -512,13 +496,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the approval cannot be appended.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn append_approval(
         &self,
         approval: SessionApproval,
@@ -534,13 +511,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the plan cannot be updated.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn set_plan_status(
         &self,
         plan_id: Uuid,
@@ -571,6 +541,27 @@ impl UserSession {
     ) -> SessionResult<SessionDiff> {
         self.database
             .set_diff_status(self.user_id, diff_id, status)
+            .await
+            .map_err(SessionError::Database)
+    }
+
+    /// Records the outcome of a tool call, returning the updated row.
+    ///
+    /// Moves the call into `status`, stamping completion for a terminal status,
+    /// and writes its sanitised result and error while preserving its arguments.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionError`] if the tool call cannot be updated.
+    pub async fn set_tool_call_outcome(
+        &self,
+        call_id: Uuid,
+        status: ToolCallStatus,
+        result: Option<SecretContent>,
+        error: Option<SecretContent>,
+    ) -> SessionResult<SessionToolCall> {
+        self.database
+            .set_tool_call_outcome(self.user_id, call_id, status, result, error)
             .await
             .map_err(SessionError::Database)
     }
@@ -667,18 +658,29 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the memories cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn list_context_memory_with_content(
         &self,
     ) -> SessionResult<Vec<(ContextMemory, ContextMemoryContent)>> {
         self.database
             .list_context_memory_with_content(self.user_id, self.session_id)
+            .await
+            .map_err(SessionError::Database)
+    }
+
+    /// Lists the owning user's memories, each paired with its content.
+    ///
+    /// User memory is user-scoped rather than session-scoped, so it spans the
+    /// user's sessions; the orchestrator recalls it alongside the session
+    /// history when building a prompt.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionError`] if the memories cannot be read.
+    pub async fn list_user_memory_with_content(
+        &self,
+    ) -> SessionResult<Vec<(UserMemory, UserMemoryContent)>> {
+        self.database
+            .list_user_memory_with_content(self.user_id)
             .await
             .map_err(SessionError::Database)
     }
@@ -698,6 +700,40 @@ impl UserSession {
     pub async fn forget_context_memory(&self, id: Uuid) -> SessionResult<()> {
         self.database
             .forget_context_memory(self.user_id, self.session_id, id)
+            .await
+            .map_err(SessionError::Database)
+    }
+
+    /// Seals (or overwrites) the content payload of a router-authored row.
+    ///
+    /// `table` is the base content table the row lives under; the orchestrator
+    /// uses this to write a deferred row's content once the client returns its
+    /// ciphertext.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionError`] if the content cannot be written or the row is
+    /// not owned by this session's user.
+    pub async fn set_content(
+        &self,
+        table: &str,
+        id: Uuid,
+        content: SecretContent,
+    ) -> SessionResult<()> {
+        self.database
+            .set_content(self.user_id, table, id, content)
+            .await
+            .map_err(SessionError::Database)
+    }
+
+    /// Reads the content payload of a row, or `None` when absent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionError`] if the content cannot be read.
+    pub async fn get_content(&self, table: &str, id: Uuid) -> SessionResult<Option<SecretContent>> {
+        self.database
+            .get_content(self.user_id, table, id)
             .await
             .map_err(SessionError::Database)
     }
@@ -942,7 +978,7 @@ mod tests {
                 },
                 SessionPlanContent {
                     id: RecordId::new(SessionPlanContent::name(), plan_id.to_string()),
-                    content_snapshot: Some(SecretContent::plaintext("the plan".to_string())),
+                    content: Some(SecretContent::plaintext("the plan".to_string())),
                 },
             )
             .await
@@ -962,7 +998,7 @@ mod tests {
                 },
                 SessionDiffContent {
                     id: RecordId::new(SessionDiffContent::name(), diff_id.to_string()),
-                    diff: SecretContent::plaintext("@@ -1 +1 @@".to_string()),
+                    content: SecretContent::plaintext("@@ -1 +1 @@".to_string()),
                 },
             )
             .await

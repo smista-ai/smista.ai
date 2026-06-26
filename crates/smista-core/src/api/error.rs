@@ -106,6 +106,8 @@ pub enum ApiErrorCode {
     RequestTimeout,
     /// Routing rejected the selected model because it lacks a capability.
     RoutingUnsupportedCapability,
+    /// A turn is already in flight for the session; the run is busy.
+    RunInFlight,
     /// An error occurred while reading or writing from memory storage.
     StorageError,
     /// The session token is past its expiry timestamp.
@@ -155,6 +157,7 @@ impl ApiErrorCode {
             Self::RateLimited => "rate_limited",
             Self::RequestTimeout => "request_timeout",
             Self::RoutingUnsupportedCapability => "routing_unsupported_capability",
+            Self::RunInFlight => "run_in_flight",
             Self::StorageError => "storage_error",
             Self::TokenExpired => "token_expired",
             Self::TokenRevoked => "token_revoked",
@@ -184,6 +187,7 @@ impl ApiErrorCode {
             | Self::UnknownModel
             | Self::UnknownProvider => StatusCode::UNPROCESSABLE_ENTITY,
             Self::CredentialsInQuery => StatusCode::BAD_REQUEST,
+            Self::RunInFlight => StatusCode::CONFLICT,
             Self::NotImplemented => StatusCode::NOT_IMPLEMENTED,
             Self::FallbackExhausted
             | Self::InvalidProviderCredentials
@@ -604,6 +608,9 @@ mod tests {
         let exhausted = ApiErrorResponse::from(CoreError::from(RoutingError::FallbackExhausted));
         assert_eq!(exhausted.status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(exhausted.body.error.code, "fallback_exhausted");
+
+        assert_eq!(ApiErrorCode::RunInFlight.status(), StatusCode::CONFLICT);
+        assert_eq!(ApiErrorCode::RunInFlight.as_str(), "run_in_flight");
 
         let unsupported = ApiErrorResponse::from(CoreError::from(
             RoutingError::UnsupportedCapability(Capability::Images),

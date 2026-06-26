@@ -21,14 +21,6 @@
 //! - [`ContextSelector::finalize`] runs *after*, trimming the set to the chosen
 //!   model's window without ever dropping a required candidate.
 
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by the execution orchestrator that drives the resolver"
-    )
-)]
-
 mod estimator;
 
 use std::path::{Path, PathBuf};

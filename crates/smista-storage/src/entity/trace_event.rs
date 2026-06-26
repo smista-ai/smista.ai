@@ -63,14 +63,14 @@ pub struct TraceEventContent {
     /// Record id, identical to the owning [`TraceEvent`].
     pub id: RecordId,
     /// Structured event payload, in clear or sealed for an encrypted session.
-    pub payload: SecretContent,
+    pub content: SecretContent,
 }
 
 impl TraceEventContent {
-    pub fn new(id: Uuid, payload: SecretContent) -> Self {
+    pub fn new(id: Uuid, content: SecretContent) -> Self {
         Self {
             id: RecordId::new(Self::table(), id.to_string()),
-            payload,
+            content,
         }
     }
 }
@@ -117,7 +117,7 @@ mod tests {
         let id = RecordId::new(TraceEventContent::name(), uuid::Uuid::now_v7().to_string());
         let content = TraceEventContent {
             id,
-            payload: SecretContent::plaintext("{\"model\":\"claude\"}"),
+            content: SecretContent::plaintext("{\"model\":\"claude\"}"),
         };
 
         crate::tests::roundtrip(content).await;

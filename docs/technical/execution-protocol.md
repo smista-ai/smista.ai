@@ -335,7 +335,11 @@ on the client for crypto. The two directions differ (see
 
 - **Decrypt is a standalone step.** To build the prompt the router needs sealed
   history opened, and cannot proceed without it. `awaiting_decrypt` sends a
-  `to_decrypt` map; the client opens it and advances with the plaintext.
+  `to_decrypt` map; the client opens it and advances with the plaintext. When the
+  same pause also has router-authored content to seal — most often the run-input
+  bundle and the user message sealed at run start — it folds a `to_encrypt` map
+  alongside `to_decrypt`, and the `decrypted` continuation returns the opened
+  plaintext together with the sealed ciphertext.
 - **Encrypt rides the data response.** Content the router authors (the assistant
   reply, tool-call arguments, a plan snapshot, trace payloads, an interrupted
   partial) travels out as a `to_encrypt` map **on the data-bearing response**;
@@ -346,8 +350,8 @@ on the client for crypto. The two directions differ (see
   partial).
 
 Both maps are keyed by a content reference of the form `kind:id`, where `kind` is
-one of `message`, `tool_call`, `diff`, `plan`, `memory` or `trace`, so the router
-dispatches each payload to the right content store:
+one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace` or `run_input`,
+so the router dispatches each payload to the right content store:
 
 ```json
 {
@@ -381,7 +385,7 @@ response advertised in `allowed_continuations`; `break` is always valid.
 | -------------------- | ------------------- | -------------------------------------------------------------------- |
 | `tool_results`       | `awaiting_tool`     | `{ results: [{ call_id, content, is_error, decision }], encrypted }` |
 | `approval_decisions` | `awaiting_approval` | `{ decisions: [{ approval_id, decision, reason }], encrypted }`      |
-| `decrypted`          | `awaiting_decrypt`  | `{ plaintext }` — a content-ref → plaintext map                      |
+| `decrypted`          | `awaiting_decrypt`  | `{ plaintext, encrypted }` — opened plaintext plus any sealed rows   |
 | `sealed`             | a folded encrypt    | `{ encrypted }` — a content-ref → envelope map                       |
 | `inject`             | any live state      | `{ messages: [{ text, ciphertext }] }` — mid-run input; supersedes   |
 | `break`              | any live state      | none — aborts the in-flight turn (the Esc path)                      |

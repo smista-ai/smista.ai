@@ -63,7 +63,7 @@ pub struct SessionPlanContent {
     /// Record id, identical to the owning [`SessionPlan`].
     pub id: RecordId,
     /// Snapshot of the plan body, in clear or sealed for an encrypted session.
-    pub content_snapshot: Option<SecretContent>,
+    pub content: Option<SecretContent>,
 }
 
 impl Table for SessionPlanContent {
@@ -108,7 +108,7 @@ mod tests {
         let id = RecordId::new(SessionPlanContent::name(), uuid::Uuid::now_v7().to_string());
         let content = SessionPlanContent {
             id,
-            content_snapshot: Some(SecretContent::plaintext("1. do the thing")),
+            content: Some(SecretContent::plaintext("1. do the thing")),
         };
 
         crate::tests::roundtrip(content).await;

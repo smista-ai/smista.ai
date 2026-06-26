@@ -81,13 +81,6 @@ impl SerializedPayload {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the payload cannot be serialized.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub fn message(payload: MessagePayload) -> TracerResult<Self> {
         Self::encode(Payload::Message(payload))
     }
@@ -97,13 +90,6 @@ impl SerializedPayload {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the payload cannot be serialized.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub fn classification(classification: Classification) -> TracerResult<Self> {
         Self::encode(Payload::Classification(classification))
     }
@@ -113,13 +99,6 @@ impl SerializedPayload {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the payload cannot be serialized.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub fn routing_decision(payload: RoutingDecisionPayload) -> TracerResult<Self> {
         Self::encode(Payload::RoutingDecision(payload))
     }
@@ -129,13 +108,6 @@ impl SerializedPayload {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the payload cannot be serialized.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub fn context_selection(payload: ContextSelectionPayload) -> TracerResult<Self> {
         Self::encode(Payload::ContextSelection(payload))
     }
@@ -145,13 +117,6 @@ impl SerializedPayload {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the payload cannot be serialized.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub fn tool_call(payload: ToolCallPayload) -> TracerResult<Self> {
         Self::encode(Payload::ToolCall(payload))
     }
@@ -161,13 +126,6 @@ impl SerializedPayload {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the payload cannot be serialized.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub fn approval(payload: ApprovalPayload) -> TracerResult<Self> {
         Self::encode(Payload::Approval(payload))
     }
@@ -177,13 +135,6 @@ impl SerializedPayload {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the payload cannot be serialized.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub fn cost(payload: CostPayload) -> TracerResult<Self> {
         Self::encode(Payload::Cost(payload))
     }
@@ -203,13 +154,6 @@ impl SerializedPayload {
 
     /// Consumes the payload, returning the serialized JSON, the form
     /// [`SecretContent::plaintext`] wraps for a normal session.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub fn into_string(self) -> String {
         self.0
     }
@@ -273,13 +217,6 @@ impl Tracer {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the event cannot be persisted.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub async fn record_message(
         &self,
         context: TraceContext,
@@ -296,13 +233,6 @@ impl Tracer {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the event cannot be persisted.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub async fn record_classification(
         &self,
         context: TraceContext,
@@ -320,13 +250,6 @@ impl Tracer {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the event cannot be persisted.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub async fn record_routing_decision(
         &self,
         context: TraceContext,
@@ -344,13 +267,6 @@ impl Tracer {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the event cannot be persisted.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub async fn record_context_selection(
         &self,
         context: TraceContext,
@@ -368,13 +284,6 @@ impl Tracer {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the event cannot be persisted.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub async fn record_tool_call(
         &self,
         context: TraceContext,
@@ -392,13 +301,6 @@ impl Tracer {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the event cannot be persisted.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub async fn record_approval(
         &self,
         context: TraceContext,
@@ -416,13 +318,6 @@ impl Tracer {
     /// # Errors
     ///
     /// Returns [`TracerError`] if the event cannot be persisted.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub async fn record_cost(
         &self,
         context: TraceContext,
@@ -504,7 +399,7 @@ impl Tracer {
         };
         let content = TraceEventContent {
             id: RecordId::new(TraceEventContent::name(), id.to_string()),
-            payload: content,
+            content,
         };
 
         self.database

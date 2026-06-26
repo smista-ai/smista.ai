@@ -126,17 +126,28 @@ all the crypto. The two directions are handled differently because they depend o
 the client differently. A plaintext session skips both entirely.
 
 **Encrypt rides the data response.** Content the router authors — the assistant
-message, tool-call arguments, a plan snapshot, trace payloads, an interrupted
-partial turn — cannot be stored as plaintext, and the stateless router cannot
-hold it. So the data-bearing response carries the data **and** a `to_encrypt`
-map. The router writes only the metadata rows up front; the sealed content row is
-written when the ciphertext comes back on the next continuation. The user sees
-the output immediately; only its stored copy waits to be sealed.
+message, a plan snapshot, an interrupted partial turn — cannot be stored as
+plaintext, and the stateless router cannot hold it. So the data-bearing response
+carries the data **and** a `to_encrypt` map. The router stores nothing for the
+row up front: it keeps the row's non-secret metadata in the run state (which is
+short-lived and cleared when the run ends, so it is never sealed) and writes the
+metadata and the sealed content together when the ciphertext comes back on the
+next continuation. The user sees the output immediately; only its stored copy
+waits to be sealed. A tool call carries its sealed `result` the same way; the
+client also seals it on the continuation, so the tool-call row's arguments are
+left empty and the model's request rides the sealed assistant message. Session
+memory the model writes during the run is stored in clear by the memory tool, so
+a finishing encrypted run folds those rows into the final `to_encrypt` and seals
+them in place.
 
 **Decrypt is its own step.** To build a prompt the router must read stored
-ciphertext, and it cannot proceed without the plaintext, so this is a real pause
-with no data attached: the response carries a `to_decrypt` map, and the client
-returns the opened plaintext.
+ciphertext, and it cannot proceed without the plaintext, so this is a real pause:
+the response carries a `to_decrypt` map, and the client returns the opened
+plaintext. The request context the resolver replays every turn — the run-input
+bundle — is short-lived and stored in clear, so it never needs opening; only
+sealed history does. When a pause also has router-authored content to seal, the
+response may fold a `to_encrypt` map alongside `to_decrypt`, and the `decrypted`
+continuation returns both the opened plaintext and the sealed ciphertext.
 
 Content the client itself authors — the prompt, tool results — is sealed by the
 client and travels as plaintext plus ciphertext together in one message, so it
@@ -164,7 +175,7 @@ including `break` while the run is live, empty for a terminal outcome):
 | `completed`         | The model finished; an assistant message is included.         | Render; if `to_encrypt` is set, seal it.  |
 | `awaiting_tool`     | The model requested one or more client-run tools.             | Run them; continue with the results.      |
 | `awaiting_approval` | A yes/no decision with no tool to run.                        | Ask the user; continue with the decision. |
-| `awaiting_decrypt`  | Sealed history must be opened to build the prompt.            | Decrypt; continue with the plaintext.     |
+| `awaiting_decrypt`  | Sealed history must be opened to build the prompt.            | Decrypt; seal any `to_encrypt`; continue. |
 | `awaiting_encrypt`  | Router-authored output must be sealed before it is persisted. | Seal; continue with the ciphertext.       |
 | `idle`              | The run finished and its content was persisted.               | Nothing to render; the run is over.       |
 | `error`             | A terminal error ended the turn.                              | Surface it; the run is over.              |
@@ -197,7 +208,7 @@ A continuation is a single `{ type, data }` message answering the current pause.
 | -------------------- | ------------------- | --------------------------------------------------------------- |
 | `tool_results`       | `awaiting_tool`     | the results (approval folded in) plus any sealed router content |
 | `approval_decisions` | `awaiting_approval` | the decisions plus any sealed router content                    |
-| `decrypted`          | `awaiting_decrypt`  | a `content-ref → plaintext` map                                 |
+| `decrypted`          | `awaiting_decrypt`  | a `content-ref → plaintext` map plus any sealed router content  |
 | `sealed`             | a folded encrypt    | a `content-ref → ciphertext` map                                |
 | `inject`             | any live state      | mid-run user input; supersedes the in-flight turn               |
 | `break`              | any live state      | nothing; aborts the in-flight turn                              |

@@ -55,6 +55,8 @@ pub enum ContentRef {
     Memory(String),
     /// A trace event payload (`trace_event_content`).
     Trace(String),
+    /// The run's request-context bundle (`session_run_input_content`).
+    RunInput(String),
 }
 
 /// Separator between the kind tag and the record id in the textual form.
@@ -71,6 +73,7 @@ impl ContentRef {
             Self::Plan(_) => "plan",
             Self::Memory(_) => "memory",
             Self::Trace(_) => "trace",
+            Self::RunInput(_) => "run_input",
         }
     }
 
@@ -83,7 +86,8 @@ impl ContentRef {
             | Self::Diff(id)
             | Self::Plan(id)
             | Self::Memory(id)
-            | Self::Trace(id) => id,
+            | Self::Trace(id)
+            | Self::RunInput(id) => id,
         }
     }
 }
@@ -118,6 +122,7 @@ impl FromStr for ContentRef {
             "plan" => Ok(Self::Plan(id)),
             "memory" => Ok(Self::Memory(id)),
             "trace" => Ok(Self::Trace(id)),
+            "run_input" => Ok(Self::RunInput(id)),
             _ => Err(ParseError::InvalidContentRef(s.to_string()).into()),
         }
     }
@@ -167,7 +172,8 @@ impl utoipa::PartialSchema for ContentRef {
             ))
             .description(Some(
                 "A content reference in the form `kind:id`, where `kind` is one of \
-                 `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`.",
+                 `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, \
+                 `run_input`.",
             ))
             .into()
     }
@@ -201,6 +207,7 @@ mod tests {
             ContentRef::Plan("p".to_string()),
             ContentRef::Memory("mem".to_string()),
             ContentRef::Trace("tr".to_string()),
+            ContentRef::RunInput("ri".to_string()),
         ];
         for reference in refs {
             assert_eq!(ContentRef::from_str(&reference.to_string()), Ok(reference));
@@ -233,6 +240,18 @@ mod tests {
             serde_json::from_value::<std::collections::BTreeMap<ContentRef, String>>(value)
                 .unwrap(),
             map
+        );
+    }
+
+    #[test]
+    fn should_render_and_parse_run_input_ref() {
+        let reference = ContentRef::RunInput("0194".to_string());
+        assert_eq!(reference.kind_tag(), "run_input");
+        let serialized = serde_json::to_string(&reference).unwrap();
+        assert_eq!(serialized, "\"run_input:0194\"");
+        assert_eq!(
+            serde_json::from_str::<ContentRef>(&serialized).unwrap(),
+            reference
         );
     }
 

@@ -41,9 +41,10 @@ use crate::entity::{
     AuthToken, ContextMemory, ContextMemoryContent, DiffStatus, PlanStatus, RunState, Session,
     SessionApproval, SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
     SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
-    SessionToolCall, SessionToolCallContent, TraceEvent, TraceEventContent, User, UserMemory,
-    UserMemoryContent,
+    SessionRunInput, SessionRunInputContent, SessionToolCall, SessionToolCallContent,
+    ToolCallStatus, TraceEvent, TraceEventContent, User, UserMemory, UserMemoryContent,
 };
+use crate::types::SecretContent;
 
 /// The storage interface for smista.ai.
 ///
@@ -165,6 +166,21 @@ pub trait Database: Send + Sync {
         state: RunState,
     ) -> impl Future<Output = StorageResult<RunState>> + Send;
 
+    /// Atomically acquires the run lock for a session.
+    ///
+    /// Writes `state` — which must carry an `active` lock — only if no lock is
+    /// currently held: the session has no run-state row, or the row's `active`
+    /// is `None`. Returns the stored state when the lock is granted, or `None`
+    /// when a turn already holds it. The check and the write commit as one
+    /// transaction, so two concurrent requests can never both acquire. Fails
+    /// with [`StorageError::NotFound`](crate::StorageError::NotFound) when the
+    /// session is not owned by `user_id`.
+    fn acquire_run_lock(
+        &self,
+        user_id: Uuid,
+        state: RunState,
+    ) -> impl Future<Output = StorageResult<Option<RunState>>> + Send;
+
     /// Loads the in-flight run state for a session owned by `user_id`.
     ///
     /// Returns `None` when the session has no in-flight run, which is the idle
@@ -174,6 +190,31 @@ pub trait Database: Send + Sync {
         user_id: Uuid,
         session_id: Uuid,
     ) -> impl Future<Output = StorageResult<Option<RunState>>> + Send;
+
+    /// Persists a run's request context, overwriting any existing row.
+    ///
+    /// The metadata row and its paired content row are written in one
+    /// transaction, both keyed by the session id, so each call replaces the
+    /// session's single run-input row in place; the stored metadata row is
+    /// returned. Fails with
+    /// [`StorageError::NotFound`](crate::StorageError::NotFound) when the session
+    /// is not owned by `user_id`.
+    fn set_run_input(
+        &self,
+        user_id: Uuid,
+        input: SessionRunInput,
+        content: SessionRunInputContent,
+    ) -> impl Future<Output = StorageResult<SessionRunInput>> + Send;
+
+    /// Loads a run's request context together with its content, or `None`.
+    ///
+    /// A row owned by a different user is treated as absent. Used to re-run the
+    /// deterministic resolver on every turn of a multi-turn run.
+    fn get_run_input(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<(SessionRunInput, SessionRunInputContent)>>> + Send;
 
     // -- Append --------------------------------------------------------------
 
@@ -280,6 +321,56 @@ pub trait Database: Send + Sync {
         status: DiffStatus,
     ) -> impl Future<Output = StorageResult<SessionDiff>> + Send;
 
+    /// Records the outcome of a tool call owned by `user_id`, returning the row.
+    ///
+    /// Moves the call into `status` and stamps `completed_at` for a terminal
+    /// status ([`ToolCallStatus::Completed`] or [`ToolCallStatus::Failed`]),
+    /// while writing the sanitised `result` and `error` onto the paired content
+    /// row and preserving its arguments. An append leaves a call at
+    /// [`ToolCallStatus::Pending`]; this is how the orchestrator records the
+    /// result the client returned. Fails with
+    /// [`StorageError::NotFound`](crate::StorageError::NotFound) when the call is
+    /// absent or owned by another user.
+    fn set_tool_call_outcome(
+        &self,
+        user_id: Uuid,
+        call_id: Uuid,
+        status: ToolCallStatus,
+        result: Option<SecretContent>,
+        error: Option<SecretContent>,
+    ) -> impl Future<Output = StorageResult<SessionToolCall>> + Send;
+
+    /// Overwrites the `<table>_content` payload for the row keyed by `id`.
+    ///
+    /// The base `<table>` row must be owned by `user_id`; ownership is verified
+    /// against its `user` column before the write. This is how a router-authored
+    /// row whose metadata was written up front is sealed once its ciphertext
+    /// returns on a later continuation. `table` must name one of the content
+    /// tables; any other value fails with
+    /// [`StorageError::NotFound`](crate::StorageError::NotFound), as does a base
+    /// row that is absent or owned by another user.
+    fn set_content(
+        &self,
+        user_id: Uuid,
+        table: &str,
+        id: Uuid,
+        content: SecretContent,
+    ) -> impl Future<Output = StorageResult<()>> + Send;
+
+    /// Reads the `<table>_content` payload for the row keyed by `id`, or `None`.
+    ///
+    /// Used to build the `to_decrypt` map. The base `<table>` row must be owned
+    /// by `user_id`; a row that is absent or owned by another user reads as
+    /// `None`, so the read never reveals it exists. `table` must name one of the
+    /// content tables; any other value fails with
+    /// [`StorageError::NotFound`](crate::StorageError::NotFound).
+    fn get_content(
+        &self,
+        user_id: Uuid,
+        table: &str,
+        id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<SecretContent>>> + Send;
+
     // -- Reads ---------------------------------------------------------------
 
     /// Loads the full state of a session owned by `user_id`, or `None`.
@@ -299,7 +390,7 @@ pub trait Database: Send + Sync {
     /// the router's context selection recalls. Like
     /// [`Self::list_context_memory_with_content`], the content of an encrypted
     /// session is returned sealed as a
-    /// [`SecretContent::Encrypted`](crate::types::SecretContent::Encrypted)
+    /// [`SecretContent::Encrypted`]
     /// envelope; storage holds no key and never decrypts it. A session owned by
     /// a different user, or one with no messages, yields an empty list.
     fn list_session_messages_with_content(
@@ -420,7 +511,7 @@ pub trait Database: Send + Sync {
     /// paired with its stored content, most recently updated first.
     ///
     /// The content of an encrypted session is returned sealed as a
-    /// [`SecretContent::Encrypted`](crate::types::SecretContent::Encrypted)
+    /// [`SecretContent::Encrypted`]
     /// envelope; storage holds no key and never decrypts it.
     fn list_context_memory_with_content(
         &self,
