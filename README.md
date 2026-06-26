@@ -11,6 +11,7 @@
 [![conventional-commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 
 [![ci](https://github.com/smista-ai/smista.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/smista-ai/smista.ai/actions)
+[![coverage](https://coveralls.io/repos/github/smista-ai/smista.ai/badge.svg?branch=main)](https://coveralls.io/github/smista-ai/smista.ai?branch=main)
 [![docs](https://github.com/smista-ai/smista.ai/actions/workflows/pages.yml/badge.svg)](https://docs.smista.ai)
 
 A local-first agent and CLI that routes each phase of an AI workflow to the most

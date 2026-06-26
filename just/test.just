@@ -25,3 +25,8 @@ test_sdk: sdk_test
 [group('test')]
 test_crate crate test_name="":
   cargo test -p {{ crate }} {{ test_name }}
+
+# Generate an LCOV code coverage report for the Rust workspace (requires cargo-llvm-cov)
+[group('test')]
+coverage output="lcov.info":
+  cargo llvm-cov --workspace --exclude storage-integration-tests --exclude provider-integration-tests --lcov --output-path {{ output }}
