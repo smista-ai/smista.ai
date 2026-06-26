@@ -26,7 +26,7 @@ use tokio_util::sync::CancellationToken;
 use self::pidfile::Pidfile;
 use crate::args::{RouterArgs, StopArgs};
 use crate::config::paths;
-use crate::signal;
+use crate::{log, signal};
 
 /// Starts a local router, daemonizing unless `--foreground` was given.
 ///
@@ -54,7 +54,7 @@ pub async fn start(
     }
 
     if args.foreground {
-        run_foreground(&args, pidfile_path).await
+        run_foreground(&args, log_file, log_filter, pidfile_path).await
     } else {
         daemonize(&args, log_file, log_filter)
     }
@@ -87,21 +87,53 @@ pub fn stop(args: StopArgs) -> anyhow::Result<()> {
 /// Runs the router in the current process until a shutdown signal arrives.
 ///
 /// Acquires the pidfile first, so a clean or panicking exit drops the guard and
-/// leaves no stale pidfile behind. Runs on the ambient runtime built by `main`.
-async fn run_foreground(args: &RouterArgs, pidfile_path: PathBuf) -> anyhow::Result<()> {
+/// leaves no stale pidfile behind. The CLI owns the configuration lifecycle:
+/// it resolves, loads and validates `router.toml`, folds the `--otel*` overrides
+/// in (command line wins), installs logging — with OpenTelemetry export when
+/// enabled — and only then hands the validated configuration to the router.
+/// Runs on the ambient runtime built by `main`.
+async fn run_foreground(
+    args: &RouterArgs,
+    log_file: Option<&Path>,
+    log_filter: &str,
+    pidfile_path: PathBuf,
+) -> anyhow::Result<()> {
     let _pidfile = Pidfile::acquire(pidfile_path)?;
+
+    let config_path = args
+        .config
+        .clone()
+        .or_else(smista_router::config::paths::router_toml)
+        .context("no router configuration file could be resolved; specify one with --config")?;
+    let mut config = smista_router::config::load(&config_path)
+        .with_context(|| format!("failed to load router config {}", config_path.display()))?;
+
+    // Fold the command-line OpenTelemetry overrides over the file settings, then
+    // validate the merged result so command-line values are checked too.
+    config.opentelemetry = args.resolve_opentelemetry(config.opentelemetry.clone());
+    let report = smista_router::config::validate::validate(&config);
+    if !report.is_ok() {
+        bail!(
+            "router configuration is invalid:\n{report}",
+            report = report.to_human()
+        );
+    }
+
+    // Install logging (and OpenTelemetry export when enabled) before starting the
+    // router, then surface any validation warnings now that a subscriber is set.
+    let _telemetry = log::init(log_filter, log_file, Some(&config.opentelemetry))?;
+    for warning in report.warnings() {
+        tracing::warn!("configuration warning: {}", warning.to_human());
+    }
 
     let exit = CancellationToken::new();
     // Cancel the token on SIGINT/SIGTERM — including the SIGTERM that
     // `smista stop` sends — so the router winds its services down.
     let shutdown = tokio::spawn(signal::wait_for_shutdown(exit.clone()));
 
-    let handle = smista_router::run(smista_router::RouterArgs {
-        config: args.config.clone(),
-        exit,
-    })
-    .await
-    .context("failed to start the router")?;
+    let handle = smista_router::run(smista_router::RouterArgs { config, exit })
+        .await
+        .context("failed to start the router")?;
 
     handle
         .await
@@ -132,6 +164,29 @@ fn daemonize(args: &RouterArgs, log_file: Option<&Path>, log_filter: &str) -> an
     }
     if let Some(pidfile) = &args.pidfile {
         command.arg("--pidfile").arg(pidfile);
+    }
+
+    // Forward the OpenTelemetry overrides so the detached child resolves the
+    // same effective configuration the foreground path would.
+    if args.otel {
+        command.arg("--otel");
+    }
+    if args.no_otel {
+        command.arg("--no-otel");
+    }
+    if let Some(endpoint) = &args.otel_endpoint {
+        command.arg("--otel-endpoint").arg(endpoint);
+    }
+    if let Some(protocol) = args.otel_protocol {
+        command.arg("--otel-protocol").arg(protocol.to_string());
+    }
+    if let Some(service_name) = &args.otel_service_name {
+        command.arg("--otel-service-name").arg(service_name);
+    }
+    if let Some(sample_ratio) = args.otel_sample_ratio {
+        command
+            .arg("--otel-sample-ratio")
+            .arg(sample_ratio.to_string());
     }
 
     // Detach from the controlling terminal: no inherited stdio and an

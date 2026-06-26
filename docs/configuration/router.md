@@ -10,6 +10,7 @@
   - [Runtime limits](#runtime-limits)
   - [Rate limiting](#rate-limiting)
   - [Logging](#logging)
+  - [OpenTelemetry](#opentelemetry)
   - [CORS](#cors)
   - [Retention](#retention)
   - [Providers](#providers)
@@ -71,6 +72,13 @@ trust_proxy_headers = false
 level = "info"
 format = "compact"
 redact_secrets = true
+
+[router.opentelemetry]
+enabled = false
+endpoint = "http://localhost:4317"
+protocol = "grpc"
+service_name = "smista-router"
+sample_ratio = 1.0
 
 [router.cors]
 enabled = false
@@ -278,6 +286,54 @@ The `[router.logging]` table accepts:
 | `level`          | string | `info`    | Log level filter (e.g. `info`, `debug`). |
 | `format`         | string | `compact` | Log output format.                       |
 | `redact_secrets` | bool   | `true`    | Redact secrets from logs; keep enabled.  |
+
+## OpenTelemetry
+
+The router can export its traces to an OpenTelemetry collector you already run,
+so you can watch timings and errors in your own dashboards. This is layered on
+top of the existing logging and changes nothing about how the router behaves or
+what it decides. It is disabled by default, and when disabled the router exports
+nothing and does no extra work.
+
+Only span and trace metadata is exported. Secrets are never recorded on traces,
+so API keys, provider credentials and auth tokens are never sent to the
+collector.
+
+Turn it on and point it at your collector:
+
+```toml
+[router.opentelemetry]
+enabled = true
+endpoint = "http://localhost:4317"
+protocol = "grpc"
+service_name = "smista-router"
+sample_ratio = 1.0
+```
+
+The `[router.opentelemetry]` table accepts:
+
+| Key            | Type   | Default                 | Purpose                                                             |
+| -------------- | ------ | ----------------------- | ------------------------------------------------------------------- |
+| `enabled`      | bool   | `false`                 | Whether trace export is enabled.                                    |
+| `endpoint`     | string | `http://localhost:4317` | Collector endpoint to export to.                                    |
+| `protocol`     | string | `grpc`                  | Wire protocol: `grpc` (port `4317`) or `http-binary` (port `4318`). |
+| `service_name` | string | `smista-router`         | Service name reported on every trace.                               |
+| `sample_ratio` | float  | `1.0`                   | Fraction of traces to sample, from `0.0` (none) to `1.0` (all).     |
+
+You can also set the most common options when starting the router, without
+editing the file. A value given on the command line wins over the file:
+
+```sh
+smista start \
+  --otel \
+  --otel-endpoint http://localhost:4317 \
+  --otel-protocol grpc \
+  --otel-service-name smista-router \
+  --otel-sample-ratio 1.0
+```
+
+`--otel` turns export on and `--no-otel` turns it off, each overriding the
+file. The remaining flags map one to one to the table above.
 
 ## CORS
 

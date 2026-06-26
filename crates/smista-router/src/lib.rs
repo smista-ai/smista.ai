@@ -10,13 +10,14 @@
 //!
 //! ## Running the router
 //!
-//! [`run`] takes a [`RouterArgs`] carrying the configuration file to load and a
-//! [`CancellationToken`] the caller cancels to request a graceful shutdown. It
-//! validates the configuration, initializes storage, and spawns the retention
-//! task and the HTTP server, returning a [`RouterHandle`] that resolves once
-//! every service has wound down. If the HTTP server fails to start, the router
-//! cancels the token so the remaining services also stop, and the handle
-//! resolves with the error.
+//! [`run`] takes a [`RouterArgs`] carrying an already validated
+//! [`RouterConfig`] and a [`CancellationToken`] the caller
+//! cancels to request a graceful shutdown. The caller owns loading and
+//! validating the configuration (see [`config`]); the router initializes
+//! storage and spawns the retention task and the HTTP server, returning a
+//! [`RouterHandle`] that resolves once every service has wound down. If the HTTP
+//! server fails to start, the router cancels the token so the remaining services
+//! also stop, and the handle resolves with the error.
 //!
 //! ## Feature flags
 //!
@@ -25,7 +26,7 @@
 //! | `openapi` | Derive the OpenAPI schema for the HTTP API via utoipa. |         |
 
 mod auth;
-mod config;
+pub mod config;
 mod orchestrator;
 mod retention;
 mod router;
@@ -34,24 +35,26 @@ mod storage;
 mod trace;
 mod web;
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use smista_storage::database::surreal::SurrealDatabase;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+use crate::config::RouterConfig;
 use crate::storage::StorageError;
 
 /// Arguments for [`run`].
 ///
-/// The router is configuration-driven: the only knobs the caller provides are
-/// where to read that configuration from and how to ask the service to stop.
+/// The router is configuration-driven: the caller provides an already validated
+/// configuration and a way to ask the service to stop. Loading and validating
+/// the configuration is the caller's responsibility (see [`config`]), which lets
+/// the host process layer its own observability — such as OpenTelemetry export —
+/// on top of the same settings before the router starts.
 #[derive(Debug)]
 pub struct RouterArgs {
-    /// Path to the router configuration file. When `None`, the router falls
-    /// back to the per-user `router.toml` in the global configuration directory.
-    pub config: Option<PathBuf>,
+    /// Validated router runtime configuration.
+    pub config: RouterConfig,
     /// Token the caller cancels to request a graceful shutdown. The router also
     /// cancels it itself if a service fails to start.
     pub exit: CancellationToken,
@@ -60,12 +63,6 @@ pub struct RouterArgs {
 /// Errors returned while starting or running the router.
 #[derive(Debug, thiserror::Error)]
 pub enum RouterError {
-    /// The configuration file could not be parsed or failed validation.
-    #[error("configuration file is invalid: {0}")]
-    ConfigInvalid(String),
-    /// No configuration file was given and none could be resolved.
-    #[error("no available configuration file found. You must specify a configuration file")]
-    ConfigNotFound,
     /// A storage backend could not be initialized or accessed.
     #[error("storage error: {0}")]
     Storage(#[from] StorageError),
@@ -85,41 +82,17 @@ pub type RouterHandle = JoinHandle<RouterResult<()>>;
 
 /// Starts the router, returning a [`RouterHandle`] for the running service.
 ///
-/// Loads and validates the configuration, initializes storage, and spawns the
+/// Initializes storage from the supplied validated configuration and spawns the
 /// retention task and the HTTP server. The returned handle resolves once both
 /// services have wound down after the [`CancellationToken`] in `args` is
 /// cancelled.
 ///
 /// # Errors
 ///
-/// Returns [`RouterError::ConfigNotFound`] when no configuration file can be
-/// resolved, [`RouterError::ConfigInvalid`] when it cannot be parsed or fails
-/// validation, and [`RouterError::Storage`] when storage cannot be initialized.
-/// A failure to start the HTTP server is reported through the handle, not here.
+/// Returns [`RouterError::Storage`] when storage cannot be initialized. A
+/// failure to start the HTTP server is reported through the handle, not here.
 pub async fn run(RouterArgs { config, exit }: RouterArgs) -> RouterResult<RouterHandle> {
     tracing::info!("smista-router starting");
-
-    // resolve and parse the configuration file
-    let config_path = config
-        .or_else(config::paths::router_toml)
-        .ok_or(RouterError::ConfigNotFound)?;
-    tracing::debug!("using configuration file: {}", config_path.display());
-    let config =
-        config::load(&config_path).map_err(|e| RouterError::ConfigInvalid(e.to_string()))?;
-    tracing::debug!("configuration loaded successfully");
-
-    // validate configuration
-    let validate_report = config::validate::validate(&config);
-    if !validate_report.is_ok() {
-        return Err(RouterError::ConfigInvalid(format!(
-            "configuration is invalid:\n{}",
-            validate_report.to_human()
-        )));
-    }
-    for warning in validate_report.warnings() {
-        tracing::warn!("configuration warning: {}", warning.to_human());
-    }
-    tracing::info!("configuration loaded and validated successfully");
 
     // initialize storage
     tracing::debug!("initializing storage");

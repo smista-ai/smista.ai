@@ -40,6 +40,13 @@ level = "info"
 format = "compact"
 redact_secrets = true
 
+[router.opentelemetry]
+enabled = false
+endpoint = "http://localhost:4317"
+protocol = "grpc"
+service_name = "smista-router"
+sample_ratio = 1.0
+
 [router.cors]
 enabled = false
 allowed_origins = ["https://app.smista.ai"]

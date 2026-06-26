@@ -19,6 +19,9 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 globset = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true, features = ["grpc-tonic", "http-proto", "reqwest-client"] }
+opentelemetry_sdk = { workspace = true }
 secrecy = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 smista-router = { workspace = true }
@@ -29,7 +32,8 @@ tokio = { workspace = true, features = ["fs", "macros", "net", "process", "rt", 
 tokio-util = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
 yaml_serde = { workspace = true }
 
 [dev-dependencies]

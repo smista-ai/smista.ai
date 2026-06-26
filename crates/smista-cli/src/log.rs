@@ -1,56 +1,97 @@
-//! Logging setup for smista-router.
+//! Logging and tracing setup for the `smista` CLI.
+//!
+//! The CLI owns the global `tracing` subscriber. It always installs a formatting
+//! layer (to a file or to stderr) and, for the locally started router, may also
+//! install an OpenTelemetry export layer on top — see [`crate::telemetry`]. Both
+//! layers share the same [`EnvFilter`] directive, so traces and logs are
+//! filtered identically.
 
 use std::fs::OpenOptions;
 use std::path::Path;
 
-use tracing_subscriber::EnvFilter;
+use anyhow::Context as _;
+use smista_router::config::OpenTelemetryConfig;
 use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::registry::Registry;
+use tracing_subscriber::util::SubscriberInitExt as _;
+use tracing_subscriber::{EnvFilter, Layer, fmt};
 
-/// Initialize the global tracing subscriber.
+use crate::telemetry::{self, TelemetryGuard};
+
+/// Initializes the global tracing subscriber.
 ///
-/// `filter` is an `EnvFilter` directive (e.g. `"info,firma=debug"`).
-/// `file` writes logs to the given path (truncated on open) instead of stderr.
+/// `filter` is an `EnvFilter` directive (e.g. `"info,smista=debug"`). `file`
+/// writes logs to the given path (truncated on open) instead of stderr. When
+/// `otel` is `Some` and enabled, an OpenTelemetry export layer is installed
+/// alongside the formatting layer; the returned [`TelemetryGuard`] must be kept
+/// alive for the process lifetime and dropped on shutdown to flush traces.
 ///
 /// # Errors
 ///
-/// Returns an error if `filter` is not a valid `EnvFilter` directive,
-/// the log file cannot be opened, or a global subscriber is already set.
-pub fn init(filter: &str, file: Option<&Path>) -> anyhow::Result<()> {
-    let env_filter = EnvFilter::try_new(filter)
-        .map_err(|e| anyhow::anyhow!("invalid log filter `{filter}`: {e}"))?;
+/// Returns an error if `filter` is not a valid `EnvFilter` directive, the log
+/// file cannot be opened, the OpenTelemetry exporter cannot be built, or a
+/// global subscriber is already set.
+pub fn init(
+    filter: &str,
+    file: Option<&Path>,
+    otel: Option<&OpenTelemetryConfig>,
+) -> anyhow::Result<TelemetryGuard> {
+    let mut layers: Vec<Box<dyn Layer<Registry> + Send + Sync>> = vec![fmt_layer(filter, file)?];
 
-    if let Some(path) = file {
-        let f = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(path)
-            .map_err(|e| anyhow::anyhow!("failed to open log file {}: {e}", path.display()))?;
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter)
+    let guard = match otel {
+        Some(config) if config.enabled => {
+            let (layer, guard) = telemetry::layer::<Registry>(config)?;
+            layers.push(layer.with_filter(env_filter(filter)?).boxed());
+            guard
+        }
+        _ => TelemetryGuard::disabled(),
+    };
+
+    tracing_subscriber::registry()
+        .with(layers)
+        .try_init()
+        .context("failed to set the global tracing subscriber")?;
+
+    Ok(guard)
+}
+
+/// Parses an `EnvFilter` directive, mapping failures to a clear error.
+fn env_filter(filter: &str) -> anyhow::Result<EnvFilter> {
+    EnvFilter::try_new(filter).with_context(|| format!("invalid log filter `{filter}`"))
+}
+
+/// Builds the formatting layer, writing to `file` when given or stderr otherwise.
+fn fmt_layer(
+    filter: &str,
+    file: Option<&Path>,
+) -> anyhow::Result<Box<dyn Layer<Registry> + Send + Sync>> {
+    let Some(path) = file else {
+        // Compact CLI format on stderr, with ANSI colours for interactive use.
+        return Ok(fmt::layer()
             .with_span_events(FmtSpan::CLOSE)
             .with_target(true)
             .with_line_number(true)
-            .with_ansi(false)
-            .with_writer(std::sync::Mutex::new(f))
-            .try_init()
-            .map_err(|e| anyhow::anyhow!("failed to set tracing subscriber: {e}"))?;
-    } else {
-        // Compact CLI format on stderr. Drops `FmtSpan::CLOSE` because span
-        // open/close pairs are diagnostic noise in interactive use.
-        // `CompactFormatter` renders fields itself (without ANSI) so the
-        // default field formatter cannot leak italic codes into piped output.
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter)
             .with_ansi(true)
-            .with_span_events(FmtSpan::CLOSE)
-            .with_target(true)
-            .with_line_number(true)
             .with_writer(std::io::stderr)
-            .try_init()
-            .map_err(|e| anyhow::anyhow!("failed to set tracing subscriber: {e}"))?;
-    }
-    Ok(())
+            .with_filter(env_filter(filter)?)
+            .boxed());
+    };
+
+    let log_file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+        .with_context(|| format!("failed to open log file {}", path.display()))?;
+    Ok(fmt::layer()
+        .with_span_events(FmtSpan::CLOSE)
+        .with_target(true)
+        .with_line_number(true)
+        .with_ansi(false)
+        .with_writer(std::sync::Mutex::new(log_file))
+        .with_filter(env_filter(filter)?)
+        .boxed())
 }
 
 #[cfg(test)]
@@ -61,12 +102,46 @@ mod tests {
     fn should_reject_invalid_filter() {
         // An unparseable level rejects before any global subscriber is touched,
         // so this stays isolated from other tests in the binary.
-        let err =
-            init("warn,smista=notalevel", None).expect_err("an invalid log filter was accepted");
+        let err = init("warn,smista=notalevel", None, None)
+            .expect_err("an invalid log filter was accepted");
 
         assert!(
             err.to_string().contains("invalid log filter"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn should_accept_a_valid_filter() {
+        assert!(env_filter("info,smista=debug").is_ok());
+    }
+
+    #[test]
+    fn should_reject_an_invalid_filter_directive() {
+        let err = env_filter("smista=notalevel").expect_err("invalid directive was accepted");
+        assert!(err.to_string().contains("invalid log filter"));
+    }
+
+    #[test]
+    fn should_build_the_stderr_formatting_layer() {
+        assert!(fmt_layer("info", None).is_ok());
+    }
+
+    #[test]
+    fn should_build_the_file_formatting_layer_and_create_the_file() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let path = dir.path().join("smista.log");
+        assert!(fmt_layer("info", Some(&path)).is_ok());
+        assert!(path.exists(), "the log file should have been created");
+    }
+
+    #[test]
+    fn should_fail_to_open_an_unwritable_log_file() {
+        // A directory cannot be opened for writing as a file.
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let err = fmt_layer("info", Some(dir.path()))
+            .err()
+            .expect("a directory was opened as a file");
+        assert!(err.to_string().contains("failed to open log file"));
     }
 }

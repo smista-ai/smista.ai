@@ -24,6 +24,9 @@ pub enum ValidationCode {
     InvalidHost,
     /// A size limit is zero.
     InvalidLimit,
+    /// OpenTelemetry is enabled with an invalid endpoint, service name, or
+    /// sampling ratio.
+    InvalidOpenTelemetry,
     /// The bind port is zero.
     InvalidPort,
     /// A rate-limit setting is zero while rate limiting is enabled.
