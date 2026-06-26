@@ -11,7 +11,7 @@ use smista_core::message::MessageRole;
 use smista_core::model::Provider;
 use surrealdb::types::{RecordId, SurrealValue};
 
-use super::Table;
+use super::{Table, record_uuid};
 use crate::types::SecretContent;
 
 /// A message exchanged during a session.
@@ -36,6 +36,14 @@ pub struct SessionMessage {
     pub model: String,
     /// When the message was recorded.
     pub created_at: DateTime<Utc>,
+}
+
+impl SessionMessage {
+    /// The message's UUIDv7 key, recovered from its record id.
+    #[must_use]
+    pub fn uuid(&self) -> uuid::Uuid {
+        record_uuid(&self.id)
+    }
 }
 
 impl Table for SessionMessage {

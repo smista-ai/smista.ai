@@ -9,7 +9,7 @@ mod fetch_models;
 mod memory_storage;
 #[cfg(test)]
 mod mock_provider;
-mod resolver;
+pub(crate) mod resolver;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -66,6 +66,20 @@ impl Router {
             .collect()
     }
 
+    /// Returns the provider registered under `id`, local or remote.
+    ///
+    /// The orchestrator uses this to obtain the handle it invokes; routing has
+    /// already chosen the provider deterministically, so this is a pure lookup
+    /// that prefers a local provider over a remote one of the same id.
+    #[must_use]
+    #[allow(
+        dead_code,
+        reason = "consumed by the orchestrator invocation wrapper in a later task"
+    )]
+    pub fn provider(&self, id: &ProviderId) -> Option<Arc<dyn Provider>> {
+        self.local.get(id).or_else(|| self.remote.get(id)).cloned()
+    }
+
     /// Builds a router wired with mock providers for tests.
     ///
     /// Installs two [`MockProvider`](mock_provider::MockProvider)s — one local
@@ -94,5 +108,48 @@ impl Router {
                     "mock-remote",
                 )),
             )
+    }
+
+    /// Builds a mock router whose local model returns `local` in order.
+    ///
+    /// The local Ollama mock replays `local` completion-by-completion across a
+    /// turn's invocations, so a test can drive the orchestrator through tool
+    /// requests and the follow-up turns that answer them; once the script
+    /// drains, the model returns the fixed response. The remote OpenAI mock is
+    /// installed unscripted, as in [`Router::mock`].
+    #[cfg(test)]
+    pub(crate) fn mock_scripted(local: Vec<smista_providers::api::CompletionResponse>) -> Self {
+        use crate::router::mock_provider::MockProvider;
+
+        Self::default()
+            .with_local(
+                ProviderId::Ollama,
+                Box::new(
+                    MockProvider::new(ProviderId::Ollama, "Mock Local", true, "mock-local")
+                        .with_script(local),
+                ),
+            )
+            .with_remote(
+                ProviderId::OpenAI,
+                Box::new(MockProvider::new(
+                    ProviderId::OpenAI,
+                    "Mock Remote",
+                    false,
+                    "mock-remote",
+                )),
+            )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_return_provider_by_id_for_mock() {
+        let router = Router::mock();
+        assert!(router.provider(&ProviderId::Ollama).is_some());
+        assert!(router.provider(&ProviderId::OpenAI).is_some());
+        assert!(router.provider(&ProviderId::Anthropic).is_none());
     }
 }

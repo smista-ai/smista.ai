@@ -59,7 +59,7 @@ pub struct SessionDiffContent {
     /// Record id, identical to the owning [`SessionDiff`].
     pub id: RecordId,
     /// The diff body (secret-filtered), in clear or sealed for an encrypted session.
-    pub diff: SecretContent,
+    pub content: SecretContent,
 }
 
 impl Table for SessionDiffContent {
@@ -102,7 +102,7 @@ mod tests {
         let id = RecordId::new(SessionDiffContent::name(), uuid::Uuid::now_v7().to_string());
         let content = SessionDiffContent {
             id,
-            diff: SecretContent::plaintext("@@ -1 +1 @@\n-old\n+new"),
+            content: SecretContent::plaintext("@@ -1 +1 @@\n-old\n+new"),
         };
 
         crate::tests::roundtrip(content).await;

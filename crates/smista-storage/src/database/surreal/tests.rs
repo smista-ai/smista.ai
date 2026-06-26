@@ -7,7 +7,9 @@ use surrealdb::types::RecordId;
 
 use super::*;
 use crate::api::Pagination;
-use crate::entity::{ApprovalKind, ResumeStep, RunPhase, RunState, ToolCallStatus, TraceEventType};
+use crate::entity::{
+    ActiveTurn, ApprovalKind, ResumeStep, RunPhase, RunState, ToolCallStatus, TraceEventType,
+};
 use crate::types::{ContentEnvelope, SecretContent};
 
 async fn memory_db() -> SurrealDatabase {
@@ -368,7 +370,7 @@ fn trace_event_for(
         },
         TraceEventContent {
             id: record_id::<TraceEventContent, _>(id),
-            payload: SecretContent::plaintext(
+            content: SecretContent::plaintext(
                 serde_json::to_string(&payload).expect("failed to serialize trace payload"),
             ),
         },
@@ -782,6 +784,23 @@ async fn should_delete_session_and_cascade_children() {
         .await
         .expect("failed to record context memory");
 
+    let run_input = SessionRunInput::new(
+        session_id,
+        user_id,
+        Uuid::now_v7(),
+        "{}".to_string(),
+        "{}".to_string(),
+        "{}".to_string(),
+        false,
+    );
+    let run_input_content = SessionRunInputContent {
+        id: RecordId::new(SessionRunInputContent::name(), session_id.to_string()),
+        content: SecretContent::plaintext("{}"),
+    };
+    db.set_run_input(user_id, run_input, run_input_content)
+        .await
+        .expect("failed to set run input");
+
     // A user memory must survive the cascade — it is not session-scoped.
     let (user_mem, user_mem_content) =
         user_memory_for(Uuid::now_v7(), user_id, Some("topic"), "kept");
@@ -837,6 +856,12 @@ async fn should_delete_session_and_cascade_children() {
         count::<UserMemory>(&db).await,
         1,
         "user memory was wrongly cascaded"
+    );
+    assert_eq!(count::<SessionRunInput>(&db).await, 0, "run input remains");
+    assert_eq!(
+        count::<SessionRunInputContent>(&db).await,
+        0,
+        "run input content remains"
     );
 }
 
@@ -1896,7 +1921,7 @@ fn awaiting_tool() -> RunPhase {
     RunPhase::AwaitingTool {
         calls: Vec::new(),
         resume: ResumeStep::NextTurn,
-        to_seal: Vec::new(),
+        pending: Vec::new(),
     }
 }
 
@@ -1913,7 +1938,7 @@ async fn should_set_and_get_run_state() {
             kind: ApprovalKind::RemoteDisclosure,
             detail: r#"{"provider":"anthropic"}"#.to_string(),
             resume: ResumeStep::Invoke,
-            to_seal: Vec::new(),
+            pending: Vec::new(),
         },
     );
     let stored = db
@@ -1944,7 +1969,7 @@ async fn should_overwrite_run_state_in_place() {
                 kind: ApprovalKind::CostLimit,
                 detail: "{}".to_string(),
                 resume: ResumeStep::Invoke,
-                to_seal: Vec::new(),
+                pending: Vec::new(),
             },
         ),
     )
@@ -1966,6 +1991,102 @@ async fn should_overwrite_run_state_in_place() {
         1,
         "run state was not overwritten in place"
     );
+}
+
+/// A run state holding the processing lock (`active = Some`).
+fn locked_state(session_id: Uuid, user_id: Uuid, phase: RunPhase) -> RunState {
+    let mut state = run_state_for(session_id, user_id, phase);
+    state.active = Some(ActiveTurn {
+        started_at: Utc::now(),
+        lease: Uuid::now_v7().to_string(),
+    });
+    state
+}
+
+#[tokio::test]
+async fn should_acquire_run_lock_when_no_row_exists() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let acquired = db
+        .acquire_run_lock(user_id, locked_state(session_id, user_id, RunPhase::Idle))
+        .await
+        .expect("acquire failed")
+        .expect("lock was not granted on a free session");
+    assert!(acquired.active.is_some(), "the stored lock is held");
+
+    let loaded = db
+        .get_run_state(user_id, session_id)
+        .await
+        .expect("get failed")
+        .expect("run state missing after acquire");
+    assert!(loaded.active.is_some());
+}
+
+#[tokio::test]
+async fn should_acquire_run_lock_when_row_is_idle() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    // A prior run left an idle, lock-free checkpoint row in place.
+    db.set_run_state(user_id, run_state_for(session_id, user_id, awaiting_tool()))
+        .await
+        .expect("seed idle row");
+
+    let acquired = db
+        .acquire_run_lock(user_id, locked_state(session_id, user_id, RunPhase::Idle))
+        .await
+        .expect("acquire failed");
+    assert!(acquired.is_some(), "a lock-free row must be acquirable");
+}
+
+#[tokio::test]
+async fn should_reject_acquire_when_lock_is_held() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    let held = locked_state(session_id, user_id, awaiting_tool());
+    db.acquire_run_lock(user_id, held.clone())
+        .await
+        .expect("first acquire failed")
+        .expect("first acquire not granted");
+
+    // A second acquire while the lock is held must be refused, and must not
+    // overwrite the row the holder wrote.
+    let refused = db
+        .acquire_run_lock(user_id, locked_state(session_id, user_id, RunPhase::Idle))
+        .await
+        .expect("acquire failed");
+    assert!(refused.is_none(), "a held lock was handed out twice");
+
+    let loaded = db
+        .get_run_state(user_id, session_id)
+        .await
+        .expect("get failed")
+        .expect("run state missing");
+    assert_eq!(loaded.run_id, held.run_id, "the holder's row was clobbered");
+}
+
+#[tokio::test]
+async fn should_grant_run_lock_to_only_one_concurrent_acquirer() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let mut handles = Vec::new();
+    for _ in 0..16 {
+        let db = db.clone();
+        handles.push(tokio::spawn(async move {
+            db.acquire_run_lock(user_id, locked_state(session_id, user_id, RunPhase::Idle))
+                .await
+                .expect("acquire failed")
+                .is_some()
+        }));
+    }
+    let mut granted = 0;
+    for handle in handles {
+        if handle.await.expect("task panicked") {
+            granted += 1;
+        }
+    }
+    assert_eq!(granted, 1, "exactly one concurrent acquirer wins the lock");
 }
 
 #[tokio::test]
@@ -2097,7 +2218,7 @@ async fn append_draft_plan(db: &SurrealDatabase, user_id: Uuid, session_id: Uuid
     let plan_id = Uuid::now_v7();
     let content = SessionPlanContent {
         id: RecordId::new(SessionPlanContent::name(), plan_id.to_string()),
-        content_snapshot: Some(SecretContent::plaintext("1. do the thing")),
+        content: Some(SecretContent::plaintext("1. do the thing")),
     };
     db.append_plan(user_id, plan_for(plan_id, session_id, user_id), content)
         .await
@@ -2109,7 +2230,7 @@ async fn append_proposed_diff(db: &SurrealDatabase, user_id: Uuid, session_id: U
     let diff_id = Uuid::now_v7();
     let content = SessionDiffContent {
         id: RecordId::new(SessionDiffContent::name(), diff_id.to_string()),
-        diff: SecretContent::plaintext("@@ -1 +1 @@\n-old\n+new"),
+        content: SecretContent::plaintext("@@ -1 +1 @@\n-old\n+new"),
     };
     db.append_diff(user_id, diff_for(diff_id, session_id, user_id), content)
         .await
@@ -2236,6 +2357,76 @@ async fn should_reject_diff_status_for_unowned_diff() {
 }
 
 #[tokio::test]
+async fn should_record_tool_call_outcome_and_keep_arguments() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let call_id = Uuid::now_v7();
+    let pending = SessionToolCall {
+        id: record_id::<SessionToolCall, _>(call_id),
+        session: record_id::<Session, _>(session_id),
+        user: record_id::<User, _>(user_id),
+        tool_name: "read_file".to_string(),
+        status: ToolCallStatus::Pending,
+        created_at: Utc::now(),
+        completed_at: None,
+    };
+    let content = SessionToolCallContent {
+        id: record_id::<SessionToolCallContent, _>(call_id),
+        arguments: SecretContent::plaintext("{\"path\":\"src/lib.rs\"}"),
+        result: None,
+        error: None,
+    };
+    db.append_tool_call(user_id, pending, content)
+        .await
+        .expect("failed to append tool call");
+
+    let completed = db
+        .set_tool_call_outcome(
+            user_id,
+            call_id,
+            ToolCallStatus::Completed,
+            Some(SecretContent::plaintext("file body")),
+            None,
+        )
+        .await
+        .expect("failed to record outcome");
+
+    assert_eq!(completed.status, ToolCallStatus::Completed);
+    assert!(completed.completed_at.is_some());
+
+    let state = db
+        .get_session_state(user_id, session_id)
+        .await
+        .expect("state read")
+        .expect("state present");
+    assert_eq!(state.tool_calls.len(), 1);
+    assert_eq!(state.tool_calls[0].status, ToolCallStatus::Completed);
+}
+
+#[tokio::test]
+async fn should_reject_tool_call_outcome_for_unowned_call() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let call_id = Uuid::now_v7();
+    let (call, content) = tool_call_for(call_id, session_id, user_id);
+    db.append_tool_call(user_id, call, content)
+        .await
+        .expect("failed to append tool call");
+
+    let intruder = Uuid::now_v7();
+    db.create_user(user(intruder))
+        .await
+        .expect("failed to create intruder");
+
+    let result = db
+        .set_tool_call_outcome(intruder, call_id, ToolCallStatus::Failed, None, None)
+        .await;
+    assert!(matches!(result, Err(StorageError::NotFound)));
+}
+
+#[tokio::test]
 async fn should_reject_plan_status_for_absent_plan() {
     let db = memory_db().await;
     let (user_id, _session_id) = user_with_session(&db).await;
@@ -2245,4 +2436,188 @@ async fn should_reject_plan_status_for_absent_plan() {
         .await;
 
     assert!(matches!(result, Err(StorageError::NotFound)));
+}
+
+#[tokio::test]
+async fn should_set_and_get_deferred_message_content() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let id = Uuid::now_v7();
+    let (message, content) = message_for(id, session_id, user_id);
+    db.append_message(user_id, message, content)
+        .await
+        .expect("failed to append message");
+
+    db.set_content(
+        user_id,
+        "session_message",
+        id,
+        SecretContent::plaintext("sealed-later"),
+    )
+    .await
+    .expect("failed to seal content");
+
+    let got = db
+        .get_content(user_id, "session_message", id)
+        .await
+        .expect("failed to read content")
+        .expect("content row missing");
+    assert_eq!(got.as_plaintext(), Some("sealed-later"));
+}
+
+#[tokio::test]
+async fn should_reject_set_content_for_other_user() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let id = Uuid::now_v7();
+    let (message, content) = message_for(id, session_id, user_id);
+    db.append_message(user_id, message, content)
+        .await
+        .expect("failed to append message");
+
+    let stranger = Uuid::now_v7();
+    let result = db
+        .set_content(
+            stranger,
+            "session_message",
+            id,
+            SecretContent::plaintext("x"),
+        )
+        .await;
+    assert!(matches!(result, Err(StorageError::NotFound)));
+}
+
+#[tokio::test]
+async fn should_reject_content_for_unknown_table() {
+    let db = memory_db().await;
+    let (user_id, _session_id) = user_with_session(&db).await;
+
+    let result = db
+        .set_content(
+            user_id,
+            "widget",
+            Uuid::now_v7(),
+            SecretContent::plaintext("x"),
+        )
+        .await;
+    assert!(matches!(result, Err(StorageError::NotFound)));
+}
+
+// -- Run input --------------------------------------------------------------
+
+#[tokio::test]
+async fn should_store_and_read_run_input() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let input = SessionRunInput::new(
+        session_id,
+        user_id,
+        Uuid::now_v7(),
+        r#"{"version":1}"#.to_string(),
+        "{}".to_string(),
+        "{}".to_string(),
+        false,
+    );
+    let content = SessionRunInputContent {
+        id: RecordId::new(SessionRunInputContent::name(), session_id.to_string()),
+        content: SecretContent::plaintext(r#"{"input":"hi"}"#),
+    };
+    db.set_run_input(user_id, input.clone(), content.clone())
+        .await
+        .expect("failed to set run input");
+
+    let (got, got_content) = db
+        .get_run_input(user_id, session_id)
+        .await
+        .expect("failed to get run input")
+        .expect("run input missing");
+    assert_eq!(got.run_id, input.run_id);
+    assert_eq!(
+        got_content.content.as_plaintext(),
+        Some(r#"{"input":"hi"}"#)
+    );
+}
+
+#[tokio::test]
+async fn should_overwrite_run_input_in_place() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+
+    let first = SessionRunInput::new(
+        session_id,
+        user_id,
+        Uuid::now_v7(),
+        "{}".to_string(),
+        "{}".to_string(),
+        "{}".to_string(),
+        false,
+    );
+    let first_content = SessionRunInputContent {
+        id: RecordId::new(SessionRunInputContent::name(), session_id.to_string()),
+        content: SecretContent::plaintext("first"),
+    };
+    db.set_run_input(user_id, first, first_content)
+        .await
+        .expect("failed to set first run input");
+
+    let second = SessionRunInput::new(
+        session_id,
+        user_id,
+        Uuid::now_v7(),
+        "{}".to_string(),
+        "{}".to_string(),
+        "{}".to_string(),
+        false,
+    );
+    let second_content = SessionRunInputContent {
+        id: RecordId::new(SessionRunInputContent::name(), session_id.to_string()),
+        content: SecretContent::plaintext("second"),
+    };
+    db.set_run_input(user_id, second, second_content)
+        .await
+        .expect("failed to overwrite run input");
+
+    assert_eq!(
+        count::<SessionRunInput>(&db).await,
+        1,
+        "run input was not overwritten in place"
+    );
+    let (_, got_content) = db
+        .get_run_input(user_id, session_id)
+        .await
+        .expect("failed to get run input")
+        .expect("run input missing");
+    assert_eq!(got_content.content.as_plaintext(), Some("second"));
+}
+
+#[tokio::test]
+async fn should_not_get_run_input_of_other_user() {
+    let db = memory_db().await;
+    let (user_id, session_id) = user_with_session(&db).await;
+    let input = SessionRunInput::new(
+        session_id,
+        user_id,
+        Uuid::now_v7(),
+        "{}".to_string(),
+        "{}".to_string(),
+        "{}".to_string(),
+        false,
+    );
+    let content = SessionRunInputContent {
+        id: RecordId::new(SessionRunInputContent::name(), session_id.to_string()),
+        content: SecretContent::plaintext("secret"),
+    };
+    db.set_run_input(user_id, input, content)
+        .await
+        .expect("failed to set run input");
+
+    let other = Uuid::now_v7();
+    let loaded = db
+        .get_run_input(other, session_id)
+        .await
+        .expect("failed to get run input");
+    assert!(loaded.is_none(), "run input disclosed to a non-owner");
 }

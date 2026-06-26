@@ -283,6 +283,11 @@ pub enum TurnOutcome {
     AwaitingDecrypt {
         /// Sealed records the client must open, keyed by content reference.
         to_decrypt: BTreeMap<ContentRef, EncryptedPayload>,
+        /// Router-authored rows to seal alongside the decrypt (for example the
+        /// run-input bundle and the user message sealed at run start), keyed by
+        /// content reference. Empty unless end-to-end encrypted.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        to_encrypt: BTreeMap<ContentRef, String>,
         /// Identifier of the recorded trace.
         trace_id: String,
     },
@@ -665,6 +670,7 @@ mod tests {
         let response = TurnResponse {
             outcome: TurnOutcome::AwaitingDecrypt {
                 to_decrypt,
+                to_encrypt: BTreeMap::new(),
                 trace_id: "trace:xyz".to_string(),
             },
             allowed_continuations: vec![ContinueKind::Decrypted, ContinueKind::Break],
@@ -679,6 +685,21 @@ mod tests {
             serde_json::from_value::<TurnResponse>(value).unwrap(),
             response
         );
+    }
+
+    #[test]
+    fn should_carry_to_encrypt_on_awaiting_decrypt() {
+        let mut to_encrypt = BTreeMap::new();
+        to_encrypt.insert(ContentRef::RunInput("a".to_string()), "bundle".to_string());
+        let outcome = TurnOutcome::AwaitingDecrypt {
+            to_decrypt: BTreeMap::new(),
+            to_encrypt,
+            trace_id: "trace:1".to_string(),
+        };
+        let value = serde_json::to_value(&outcome).unwrap();
+        assert_eq!(value["status"], "awaiting_decrypt");
+        assert!(value["data"]["to_encrypt"].is_object());
+        assert_eq!(value["data"]["to_encrypt"]["run_input:a"], "bundle");
     }
 
     #[test]

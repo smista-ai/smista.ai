@@ -34,7 +34,13 @@ encrypted?: { [key in ContentRef]?: EncryptedPayload }, } } | { "type": "decrypt
 /**
  * [`ContentRef`] -> opened plaintext.
  */
-plaintext: { [key in ContentRef]?: string }, } } | { "type": "sealed", "data": { 
+plaintext: { [key in ContentRef]?: string }, 
+/**
+ * Sealed forms of router-authored rows the turn asked to seal alongside
+ * the decrypt (for example the run-input bundle), keyed by
+ * [`ContentRef`]. Empty unless the session is end-to-end encrypted.
+ */
+encrypted?: { [key in ContentRef]?: EncryptedPayload }, } } | { "type": "sealed", "data": { 
 /**
  * [`ContentRef`] -> sealed envelope.
  */

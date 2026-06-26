@@ -921,6 +921,7 @@ alongside for convenience.
 | `rate_limited`                    | 429    | Provider rate-limited the request.                                                                                                                     |
 | `request_timeout`                 | 504    | Call to the provider timed out before a response was returned.                                                                                         |
 | `routing_unsupported_capability`  | 422    | Routing rejected the selected model because it lacks a required capability.                                                                            |
+| `run_in_flight`                   | 409    | A turn is already in flight for the session; the run is busy until it reaches a checkpoint.                                                            |
 | `storage_error`                   | 502    | An error occurred while reading or writing from memory storage.                                                                                        |
 | `token_expired`                   | 401    | Session token is past its expiry timestamp.                                                                                                            |
 | `token_revoked`                   | 401    | Session token was previously valid but has been revoked.                                                                                               |

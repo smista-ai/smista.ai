@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 pub use smista_core::tool::ToolCallStatus;
 use surrealdb::types::{RecordId, SurrealValue};
 
-use super::Table;
+use super::{Table, record_uuid};
 use crate::types::SecretContent;
 
 /// Records a tool request and its execution result.
@@ -33,6 +33,13 @@ pub struct SessionToolCall {
     pub created_at: DateTime<Utc>,
     /// When the tool call completed, if applicable.
     pub completed_at: Option<DateTime<Utc>>,
+}
+
+impl SessionToolCall {
+    /// The tool call's identifier as a [`Uuid`](uuid::Uuid).
+    pub fn uuid(&self) -> uuid::Uuid {
+        record_uuid(&self.id)
+    }
 }
 
 impl Table for SessionToolCall {

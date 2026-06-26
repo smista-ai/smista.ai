@@ -1351,7 +1351,7 @@
             },
             "propertyNames": {
               "type": "string",
-              "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+              "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
             }
           },
           "trace_id": {
@@ -1513,7 +1513,7 @@
                     },
                     "propertyNames": {
                       "type": "string",
-                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
                     }
                   }
                 }
@@ -1556,7 +1556,7 @@
                     },
                     "propertyNames": {
                       "type": "string",
-                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
                     }
                   }
                 }
@@ -1592,7 +1592,18 @@
                     },
                     "propertyNames": {
                       "type": "string",
-                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
+                    }
+                  },
+                  "encrypted": {
+                    "type": "object",
+                    "description": "Sealed forms of router-authored rows the turn asked to seal alongside\nthe decrypt (for example the run-input bundle), keyed by\n[`ContentRef`]. Empty unless the session is end-to-end encrypted.",
+                    "additionalProperties": {
+                      "$ref": "#/components/schemas/EncryptedPayload"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
                     }
                   }
                 }
@@ -1628,7 +1639,7 @@
                     },
                     "propertyNames": {
                       "type": "string",
-                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
                     }
                   }
                 }
@@ -3621,7 +3632,7 @@
                     },
                     "propertyNames": {
                       "type": "string",
-                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
                     }
                   },
                   "trace_id": {
@@ -3666,7 +3677,7 @@
                     },
                     "propertyNames": {
                       "type": "string",
-                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
                     }
                   },
                   "trace_id": {
@@ -3707,7 +3718,18 @@
                     },
                     "propertyNames": {
                       "type": "string",
-                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
+                    }
+                  },
+                  "to_encrypt": {
+                    "type": "object",
+                    "description": "Router-authored rows to seal alongside the decrypt (for example the\nrun-input bundle and the user message sealed at run start), keyed by\ncontent reference. Empty unless end-to-end encrypted.",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "propertyNames": {
+                      "type": "string",
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
                     }
                   },
                   "trace_id": {
@@ -3748,7 +3770,7 @@
                     },
                     "propertyNames": {
                       "type": "string",
-                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`."
+                      "description": "A content reference in the form `kind:id`, where `kind` is one of `message`, `tool_call`, `diff`, `plan`, `memory`, `trace`, `run_input`."
                     }
                   },
                   "trace_id": {

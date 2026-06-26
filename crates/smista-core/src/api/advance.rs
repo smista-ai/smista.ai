@@ -61,6 +61,11 @@ pub enum ContinueRequest {
     Decrypted {
         /// [`ContentRef`] -> opened plaintext.
         plaintext: BTreeMap<ContentRef, String>,
+        /// Sealed forms of router-authored rows the turn asked to seal alongside
+        /// the decrypt (for example the run-input bundle), keyed by
+        /// [`ContentRef`]. Empty unless the session is end-to-end encrypted.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        encrypted: BTreeMap<ContentRef, EncryptedPayload>,
     },
     /// Ciphertext the client sealed for the encrypt request folded onto a
     /// completed or interrupted turn. Keyed by [`ContentRef`].
@@ -222,9 +227,19 @@ mod tests {
             ContentRef::Message("0194".to_string()),
             "the body".to_string(),
         );
-        let msg = ContinueRequest::Decrypted { plaintext };
+        let msg = ContinueRequest::Decrypted {
+            plaintext,
+            encrypted: BTreeMap::new(),
+        };
         let json = serde_json::to_string(&msg).unwrap();
         assert_eq!(serde_json::from_str::<ContinueRequest>(&json).unwrap(), msg);
+    }
+
+    #[test]
+    fn should_carry_encrypted_on_decrypted_continuation() {
+        let json = r#"{"type":"decrypted","data":{"plaintext":{"message:1":"hi"},"encrypted":{}}}"#;
+        let req: ContinueRequest = serde_json::from_str(json).unwrap();
+        assert!(matches!(req, ContinueRequest::Decrypted { .. }));
     }
 
     #[test]

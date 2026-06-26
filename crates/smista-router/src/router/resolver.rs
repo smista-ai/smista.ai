@@ -36,15 +36,7 @@
 //! size) constrain the model choice, and the model's window then bounds the
 //! finalized context.
 
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the resolver stays unwired to the web endpoints until the state machine calls it"
-    )
-)]
-
-mod context;
+pub(crate) mod context;
 mod model;
 mod normalizer;
 mod policy_matcher;

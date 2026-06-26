@@ -26,6 +26,7 @@
 
 mod auth;
 mod config;
+mod orchestrator;
 mod retention;
 mod router;
 mod session;

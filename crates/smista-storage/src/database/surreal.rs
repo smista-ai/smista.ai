@@ -24,8 +24,8 @@ use crate::entity::{
     AuthToken, ContextMemory, ContextMemoryContent, DiffStatus, PlanStatus, RunState, Session,
     SessionApproval, SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
     SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
-    SessionToolCall, SessionToolCallContent, Table, TraceEvent, TraceEventContent, User,
-    UserMemory, UserMemoryContent,
+    SessionRunInput, SessionRunInputContent, SessionToolCall, SessionToolCallContent, Table,
+    ToolCallStatus, TraceEvent, TraceEventContent, User, UserMemory, UserMemoryContent,
 };
 use crate::types::SecretContent;
 use crate::{StorageError, StorageResult};
@@ -70,6 +70,26 @@ impl SurrealDatabase {
 
         Ok(Self(db))
     }
+}
+
+/// The secret field a sealable base table's `_content` row holds, or `None` when
+/// the table is not sealable.
+///
+/// The deferred-seal and decrypt helpers ([`Database::set_content`] and
+/// [`Database::get_content`]) accept a base-table name dynamically and seal a
+/// single secret field per row, so they resolve it through this map before
+/// touching the store. Every single-secret `_content` row names that field
+/// `content`; the tool-call row is the one exception — it holds `arguments`,
+/// `result` and `error` authored at different points, and the sealable secret
+/// is its `result` — so writing the wrong name would wipe the row's real payload
+/// and this mapping is the single source of truth.
+fn sealable_content_field(table: &str) -> Option<&'static str> {
+    Some(match table {
+        "session_message" | "context_memory" | "session_run_input" | "session_plan"
+        | "session_diff" | "trace_event" => "content",
+        "session_tool_call" => "result",
+        _ => return None,
+    })
 }
 
 /// Constructs a SurrealDB [`RecordId`] for the given [`Table`] and an id (must be [`ToString`]).
@@ -133,6 +153,8 @@ DELETE session_routing_decision WHERE session = $sess;
 DELETE session_context_reference WHERE session = $sess;
 DELETE session_approval WHERE session = $sess;
 DELETE session_run_state WHERE session = $sess;
+DELETE session_run_input_content WHERE record::id(id) IN (SELECT VALUE record::id(id) FROM session_run_input WHERE session = $sess);
+DELETE session_run_input WHERE session = $sess;
 DELETE $sess;
 "#;
 
@@ -160,6 +182,8 @@ DELETE session_routing_decision WHERE session IN $targets;
 DELETE session_context_reference WHERE session IN $targets;
 DELETE session_approval WHERE session IN $targets;
 DELETE session_run_state WHERE session IN $targets;
+DELETE session_run_input_content WHERE record::id(id) IN (SELECT VALUE record::id(id) FROM session_run_input WHERE session IN $targets);
+DELETE session_run_input WHERE session IN $targets;
 DELETE session WHERE id IN $targets;
 "#;
 
@@ -209,6 +233,31 @@ impl SurrealDatabase {
             return Err(StorageError::NotFound);
         }
         self.assert_session_owned(user_id, session).await
+    }
+
+    /// Verifies the base `<table>` row keyed by `id` is owned by `user_id`.
+    ///
+    /// Returns [`StorageError::NotFound`] when the row is absent or its `user`
+    /// column names another user, so ownership stays unforgeable through that
+    /// column.
+    async fn assert_content_owned(
+        &self,
+        user_id: Uuid,
+        table: &str,
+        id: Uuid,
+    ) -> StorageResult<()> {
+        let base_id = RecordId::new(table, id.to_string());
+        let owner: Option<RecordId> = self
+            .0
+            .query("SELECT VALUE user FROM $row")
+            .bind(("row", base_id))
+            .await?
+            .take(0)?;
+        if owner == Some(record_id::<User, _>(user_id)) {
+            Ok(())
+        } else {
+            Err(StorageError::NotFound)
+        }
     }
 
     /// Creates a single metadata-only row, returning the stored row.
@@ -571,6 +620,33 @@ impl Database for SurrealDatabase {
         stored.ok_or(StorageError::NotFound)
     }
 
+    async fn acquire_run_lock(
+        &self,
+        user_id: Uuid,
+        state: RunState,
+    ) -> StorageResult<Option<RunState>> {
+        tracing::debug!("acquiring run lock for user {user_id}");
+        self.assert_write_owned(user_id, &state.session, &state.user)
+            .await?;
+
+        let id = state.id.clone();
+        // A single statement, so the existence check and the conditional write
+        // commit as one transaction: a lock taken by a concurrent acquirer is
+        // always observed, and at most one acquirer can win. The write runs only
+        // when no row exists or the existing row's lock is free.
+        let acquired: Option<RunState> = self
+            .0
+            .query(
+                "RETURN IF (SELECT VALUE active FROM $id)[0] != NONE \
+                 { NONE } ELSE { UPSERT ONLY $id CONTENT $state }",
+            )
+            .bind(("id", id))
+            .bind(("state", state))
+            .await?
+            .take(0)?;
+        Ok(acquired)
+    }
+
     async fn get_run_state(
         &self,
         user_id: Uuid,
@@ -580,6 +656,61 @@ impl Database for SurrealDatabase {
 
         let state: Option<RunState> = self.0.select(record_id::<RunState, _>(session_id)).await?;
         Ok(state.filter(|state| state.user == record_id::<User, _>(user_id)))
+    }
+
+    async fn set_run_input(
+        &self,
+        user_id: Uuid,
+        input: SessionRunInput,
+        content: SessionRunInputContent,
+    ) -> StorageResult<SessionRunInput> {
+        tracing::debug!("setting run input for user {user_id}");
+        self.assert_write_owned(user_id, &input.session, &input.user)
+            .await?;
+
+        let input_id = input.id.clone();
+        let content_id = content.id.clone();
+        let tx = self.0.clone().begin().await?;
+
+        let stored: surrealdb::Result<Option<SessionRunInput>> =
+            tx.upsert(input_id).content(input).await;
+        let stored = match stored {
+            Ok(stored) => stored,
+            Err(err) => {
+                let _ = tx.cancel().await;
+                return Err(err.into());
+            }
+        };
+
+        let stored_content: surrealdb::Result<Option<SessionRunInputContent>> =
+            tx.upsert(content_id).content(content).await;
+        if let Err(err) = stored_content {
+            let _ = tx.cancel().await;
+            return Err(err.into());
+        }
+
+        tx.commit().await?;
+        stored.ok_or(StorageError::NotFound)
+    }
+
+    async fn get_run_input(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> StorageResult<Option<(SessionRunInput, SessionRunInputContent)>> {
+        tracing::debug!("getting run input for session {session_id}, user {user_id}");
+
+        let input: Option<SessionRunInput> = self
+            .0
+            .select(record_id::<SessionRunInput, _>(session_id))
+            .await?;
+        let Some(input) = input.filter(|input| input.user == record_id::<User, _>(user_id)) else {
+            return Ok(None);
+        };
+
+        let content_id = RecordId::new(SessionRunInputContent::name(), session_id.to_string());
+        let content: Option<SessionRunInputContent> = self.0.select(content_id).await?;
+        Ok(content.map(|content| (input, content)))
     }
 
     async fn append_message(
@@ -702,6 +833,119 @@ impl Database for SurrealDatabase {
 
         let updated: Option<SessionDiff> = self.0.update(diff.id.clone()).content(diff).await?;
         updated.ok_or(StorageError::NotFound)
+    }
+
+    async fn set_tool_call_outcome(
+        &self,
+        user_id: Uuid,
+        call_id: Uuid,
+        status: ToolCallStatus,
+        result: Option<SecretContent>,
+        error: Option<SecretContent>,
+    ) -> StorageResult<SessionToolCall> {
+        tracing::debug!("setting tool call {call_id} outcome for user {user_id}");
+        let user = record_id::<User, _>(user_id);
+
+        // Ownership: a row owned by another user (or absent) is treated as
+        // absent, so the transition never reveals it exists.
+        let stored: Option<SessionToolCall> = self
+            .0
+            .select(record_id::<SessionToolCall, _>(call_id))
+            .await?;
+        let Some(mut call) = stored.filter(|call| call.user == user) else {
+            tracing::error!("refusing to update tool call {call_id} not owned by user {user_id}");
+            return Err(StorageError::NotFound);
+        };
+
+        call.status = status;
+        call.completed_at = matches!(status, ToolCallStatus::Completed | ToolCallStatus::Failed)
+            .then_some(Utc::now());
+
+        // Preserve the arguments already stored; only the result and error move.
+        let content_id = record_id::<SessionToolCallContent, _>(call_id);
+        let content: Option<SessionToolCallContent> = self.0.select(content_id.clone()).await?;
+        let Some(mut content) = content else {
+            return Err(StorageError::NotFound);
+        };
+        content.result = result;
+        content.error = error;
+
+        let tx = self.0.clone().begin().await?;
+        let updated: surrealdb::Result<Option<SessionToolCall>> =
+            tx.update(call.id.clone()).content(call).await;
+        let updated = match updated {
+            Ok(updated) => updated,
+            Err(err) => {
+                let _ = tx.cancel().await;
+                return Err(err.into());
+            }
+        };
+        if let Err(err) = tx
+            .update::<Option<SessionToolCallContent>>(content_id)
+            .content(content)
+            .await
+        {
+            let _ = tx.cancel().await;
+            return Err(err.into());
+        }
+        tx.commit().await?;
+        updated.ok_or(StorageError::NotFound)
+    }
+
+    async fn set_content(
+        &self,
+        user_id: Uuid,
+        table: &str,
+        id: Uuid,
+        content: SecretContent,
+    ) -> StorageResult<()> {
+        tracing::debug!("sealing content for {table}:{id}, user {user_id}");
+        let Some(field) = sealable_content_field(table) else {
+            tracing::error!("refusing to seal content for unknown table {table}");
+            return Err(StorageError::NotFound);
+        };
+        self.assert_content_owned(user_id, table, id).await?;
+
+        // The paired `_content` row already exists (it is written with a
+        // placeholder when the metadata row is appended), so a field-scoped
+        // `UPDATE` seals exactly the secret field and leaves the row's other
+        // fields — a tool call keeps its `arguments` while its `result` is
+        // sealed — untouched.
+        let content_id = RecordId::new(format!("{table}_content"), id.to_string());
+        self.0
+            .query(format!("UPDATE $content SET {field} = $payload"))
+            .bind(("content", content_id))
+            .bind(("payload", content))
+            .await?
+            .check()?;
+        Ok(())
+    }
+
+    async fn get_content(
+        &self,
+        user_id: Uuid,
+        table: &str,
+        id: Uuid,
+    ) -> StorageResult<Option<SecretContent>> {
+        tracing::debug!("reading sealed content for {table}:{id}, user {user_id}");
+        let Some(field) = sealable_content_field(table) else {
+            tracing::error!("refusing to read content for unknown table {table}");
+            return Err(StorageError::NotFound);
+        };
+        if self.assert_content_owned(user_id, table, id).await.is_err() {
+            // A row owned by another user (or absent) reads as missing, so the
+            // read never reveals it exists.
+            return Ok(None);
+        }
+
+        let content_id = RecordId::new(format!("{table}_content"), id.to_string());
+        let content: Option<SecretContent> = self
+            .0
+            .query(format!("SELECT VALUE {field} FROM $content"))
+            .bind(("content", content_id))
+            .await?
+            .take(0)?;
+        Ok(content)
     }
 
     async fn append_approval(
@@ -854,7 +1098,7 @@ impl Database for SurrealDatabase {
                 // content only happens on an externally tampered store; skip it.
                 continue;
             };
-            let payload = match &content.payload {
+            let payload = match &content.content {
                 SecretContent::Plaintext(json) => {
                     TraceEventPayload::Plaintext(serde_json::from_str::<Payload>(json)?)
                 }

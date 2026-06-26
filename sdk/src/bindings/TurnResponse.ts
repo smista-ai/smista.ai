@@ -55,6 +55,12 @@ trace_id: string, } } | { "status": "awaiting_decrypt", "data": {
  */
 to_decrypt: { [key in ContentRef]?: EncryptedPayload }, 
 /**
+ * Router-authored rows to seal alongside the decrypt (for example the
+ * run-input bundle and the user message sealed at run start), keyed by
+ * content reference. Empty unless end-to-end encrypted.
+ */
+to_encrypt?: { [key in ContentRef]?: string }, 
+/**
  * Identifier of the recorded trace.
  */
 trace_id: string, } } | { "status": "awaiting_encrypt", "data": { 

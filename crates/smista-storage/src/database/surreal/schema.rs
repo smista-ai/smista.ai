@@ -36,6 +36,8 @@ DEFINE TABLE IF NOT EXISTS session_diff SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS session_diff_content SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS session_approval SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS session_run_state SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_run_input SCHEMAFULL;
+DEFINE TABLE IF NOT EXISTS session_run_input_content SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS trace_event SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS trace_event_content SCHEMAFULL;
 DEFINE TABLE IF NOT EXISTS user_memory SCHEMAFULL;
@@ -146,6 +148,22 @@ DEFINE FIELD IF NOT EXISTS phase ON TABLE session_run_state TYPE object FLEXIBLE
 DEFINE FIELD IF NOT EXISTS active ON TABLE session_run_state TYPE option<object> FLEXIBLE;
 DEFINE FIELD IF NOT EXISTS updated_at ON TABLE session_run_state TYPE datetime;
 
+-- session_run_input. The cross-turn carrier of a run's request context, 1:1
+-- with the session. The non-secret metadata (policy, preferences, workspace
+-- paths and flags) is stored in clear as JSON strings; the secret half lives in
+-- `session_run_input_content` and is sealed for an encrypted session.
+DEFINE FIELD IF NOT EXISTS session ON TABLE session_run_input TYPE record<session> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS user ON TABLE session_run_input TYPE record<user> ASSERT record::exists($value);
+DEFINE FIELD IF NOT EXISTS run_id ON TABLE session_run_input TYPE string;
+DEFINE FIELD IF NOT EXISTS policy ON TABLE session_run_input TYPE string;
+DEFINE FIELD IF NOT EXISTS local_preferences ON TABLE session_run_input TYPE string;
+DEFINE FIELD IF NOT EXISTS workspace ON TABLE session_run_input TYPE string;
+DEFINE FIELD IF NOT EXISTS plan_active ON TABLE session_run_input TYPE bool;
+DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_run_input TYPE datetime;
+
+-- session_run_input_content
+DEFINE FIELD IF NOT EXISTS content ON TABLE session_run_input_content TYPE object FLEXIBLE;
+
 -- session_plan
 DEFINE FIELD IF NOT EXISTS session ON TABLE session_plan TYPE record<session> ASSERT record::exists($value);
 DEFINE FIELD IF NOT EXISTS user ON TABLE session_plan TYPE record<user> ASSERT record::exists($value);
@@ -157,7 +175,7 @@ DEFINE FIELD IF NOT EXISTS approved_at ON TABLE session_plan TYPE option<datetim
 DEFINE FIELD IF NOT EXISTS content_hash ON TABLE session_plan TYPE option<string>;
 
 -- session_plan_content
-DEFINE FIELD IF NOT EXISTS content_snapshot ON TABLE session_plan_content TYPE option<object> FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS content ON TABLE session_plan_content TYPE option<object> FLEXIBLE;
 
 -- session_diff
 DEFINE FIELD IF NOT EXISTS session ON TABLE session_diff TYPE record<session> ASSERT record::exists($value);
@@ -168,7 +186,7 @@ DEFINE FIELD IF NOT EXISTS created_at ON TABLE session_diff TYPE datetime;
 DEFINE FIELD IF NOT EXISTS applied_at ON TABLE session_diff TYPE option<datetime>;
 
 -- session_diff_content
-DEFINE FIELD IF NOT EXISTS diff ON TABLE session_diff_content TYPE object FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS content ON TABLE session_diff_content TYPE object FLEXIBLE;
 
 -- trace_event
 DEFINE FIELD IF NOT EXISTS session ON TABLE trace_event TYPE record<session> ASSERT record::exists($value);
@@ -181,7 +199,7 @@ DEFINE FIELD IF NOT EXISTS matched_rule ON TABLE trace_event TYPE option<string>
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE trace_event TYPE datetime;
 
 -- trace_event_content
-DEFINE FIELD IF NOT EXISTS payload ON TABLE trace_event_content TYPE object FLEXIBLE;
+DEFINE FIELD IF NOT EXISTS content ON TABLE trace_event_content TYPE object FLEXIBLE;
 
 -- user_memory
 DEFINE FIELD IF NOT EXISTS user ON TABLE user_memory TYPE record<user> ASSERT record::exists($value);
@@ -219,6 +237,7 @@ DEFINE INDEX IF NOT EXISTS session_plan_session ON TABLE session_plan FIELDS ses
 DEFINE INDEX IF NOT EXISTS session_diff_session ON TABLE session_diff FIELDS session;
 DEFINE INDEX IF NOT EXISTS session_approval_session ON TABLE session_approval FIELDS session;
 DEFINE INDEX IF NOT EXISTS session_run_state_session ON TABLE session_run_state FIELDS session UNIQUE;
+DEFINE INDEX IF NOT EXISTS session_run_input_session ON TABLE session_run_input FIELDS session UNIQUE;
 DEFINE INDEX IF NOT EXISTS trace_event_session ON TABLE trace_event FIELDS session;
 
 -- Keyed-memory lookups. Not UNIQUE: keyless memories carry a NULL key and may
