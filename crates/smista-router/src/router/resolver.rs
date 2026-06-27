@@ -39,14 +39,17 @@
 pub(crate) mod context;
 mod model;
 mod normalizer;
-mod policy_matcher;
+pub(crate) mod policy_matcher;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use smista_core::api::ApiErrorCode;
 use smista_core::intent::TaskIntent;
 use smista_core::model::{ModelDescriptor, ModelReference, Provider, RoutingRequirements};
-use smista_core::policy::{Classification, ClassificationConfig, PrivacyPolicy, RoutingPolicy};
+use smista_core::policy::{
+    Classification, ClassificationConfig, PrivacyPolicy, RoutingPolicy, ToolsConfig,
+};
 use smista_core::skill::Skill;
 
 use crate::router::resolver::context::{
@@ -220,6 +223,10 @@ pub struct ResolvedTurn {
     pub fallbacks: Vec<ModelReference>,
     /// The finalized context: what was included, what was excluded, and why.
     pub context: ResolvedContext,
+    /// The tool permissions the matched route requires, as declared by the
+    /// matched rule's `required_permissions`. Empty for an override or the
+    /// default route, neither of which declares any.
+    pub required_permissions: ToolsConfig,
 }
 
 /// An error resolving a turn.
@@ -238,6 +245,28 @@ pub enum ResolverError {
     /// Policy matching found no route for the task.
     #[error("routing error: {0}")]
     Routing(#[from] PolicyMatchError),
+}
+
+impl ResolverError {
+    /// Maps the error onto the stable [`ApiErrorCode`] clients match on.
+    ///
+    /// A failed context fit is a context-window rejection; a model-selection
+    /// failure is either an exhausted route or a forbidden override; an
+    /// unmatched policy with no default is a missing route.
+    pub fn api_code(&self) -> ApiErrorCode {
+        match self {
+            Self::Context(ContextError::WindowExceeded { .. }) => {
+                ApiErrorCode::ContextWindowExceeded
+            }
+            Self::Model(
+                ModelSelectorError::FallbackExhausted | ModelSelectorError::NoLocalModel,
+            ) => ApiErrorCode::FallbackExhausted,
+            Self::Model(ModelSelectorError::OverrideNotAllowed(_)) => {
+                ApiErrorCode::OverrideNotAllowed
+            }
+            Self::Routing(PolicyMatchError::NoRoute) => ApiErrorCode::NoRoute,
+        }
+    }
 }
 
 /// The deterministic, LLM-free resolver: one entry point over the five stages.
@@ -327,6 +356,12 @@ impl Resolver {
             reason: route.reason.clone(),
         };
         let fallbacks = remaining_fallbacks(&route, &selection.model.reference());
+        // The route's required permissions are declared on the matched rule; an
+        // override or the default route declares none.
+        let required_permissions = route
+            .matched_rule()
+            .map(|rule| rule.required_permissions.clone())
+            .unwrap_or_default();
 
         tracing::trace!(
             model = %routing.model,
@@ -351,6 +386,7 @@ impl Resolver {
             model: selection.model,
             fallbacks,
             context,
+            required_permissions,
         })
     }
 }
@@ -755,6 +791,136 @@ mod tests {
             .expect_err("no route");
 
         assert!(matches!(error, ResolverError::Routing(_)));
+        assert_eq!(error.api_code(), ApiErrorCode::NoRoute);
+    }
+
+    #[test]
+    fn should_carry_the_matched_rule_required_permissions_in_the_plan() {
+        let inputs = Inputs {
+            input: input("refactor the auth middleware"),
+            workspace: Workspace {
+                referenced_paths: vec![PathBuf::from("src/auth/login.rs")],
+                ..workspace()
+            },
+            attachments: attachments(vec![file("src/auth/login.rs", "fn login() {}", true)]),
+            recalled: recalled(),
+            classification: serde_json::from_value(json!({
+                "default_intent": "chat",
+                "rules": [{ "intent": "edit", "keywords": ["refactor"] }],
+            }))
+            .expect("valid classification config"),
+            routing: policy(json!({
+                "default": { "model": "ollama/llama3" },
+                "rules": [{
+                    "name": "auth edits ask before writing",
+                    "intent": "edit",
+                    "paths": ["src/auth/**"],
+                    "model": "ollama/llama3",
+                    "required_permissions": { "permissions": { "file_write": "ask" } },
+                }],
+            })),
+            privacy: privacy(&[]),
+            catalog: catalog(vec![descriptor("ollama/llama3", true, false, 200_000)]),
+            credentialed: credentialed(&[]),
+            local_only: false,
+        };
+
+        let plan = Resolver::default()
+            .resolve(inputs.args())
+            .expect("resolves");
+
+        assert_eq!(
+            plan.required_permissions.mode_for("file_write"),
+            Some(smista_core::policy::PermissionMode::Ask)
+        );
+    }
+
+    #[test]
+    fn should_leave_required_permissions_empty_for_the_default_route() {
+        let inputs = Inputs {
+            input: input("hello"),
+            workspace: workspace(),
+            attachments: attachments(Vec::new()),
+            recalled: recalled(),
+            classification: ClassificationConfig::default(),
+            routing: policy(json!({
+                "default": { "model": "ollama/llama3" },
+            })),
+            privacy: privacy(&[]),
+            catalog: catalog(vec![descriptor("ollama/llama3", true, false, 32_000)]),
+            credentialed: credentialed(&[]),
+            local_only: false,
+        };
+
+        let plan = Resolver::default()
+            .resolve(inputs.args())
+            .expect("resolves");
+
+        assert!(plan.required_permissions.permissions.is_empty());
+    }
+
+    #[test]
+    fn should_map_a_forbidden_override_to_override_not_allowed() {
+        let inputs = Inputs {
+            input: TaskInput {
+                // A remote override pinned on remote-restricted content is refused.
+                explicit_model: Some(reference("anthropic/claude-sonnet")),
+                ..input("hello")
+            },
+            workspace: workspace(),
+            attachments: attachments(vec![file(".env", "SECRET=1", true)]),
+            recalled: recalled(),
+            classification: ClassificationConfig::default(),
+            routing: policy(json!({
+                "default": { "model": "ollama/llama3" },
+            })),
+            privacy: privacy(&[".env"]),
+            catalog: catalog(vec![descriptor(
+                "anthropic/claude-sonnet",
+                false,
+                true,
+                200_000,
+            )]),
+            credentialed: credentialed(&["anthropic"]),
+            local_only: false,
+        };
+
+        let error = Resolver::default()
+            .resolve(inputs.args())
+            .expect_err("override forbidden");
+
+        assert!(matches!(error, ResolverError::Model(_)));
+        assert_eq!(error.api_code(), ApiErrorCode::OverrideNotAllowed);
+    }
+
+    #[test]
+    fn should_map_an_unservable_route_to_fallback_exhausted() {
+        let inputs = Inputs {
+            input: input("hello"),
+            workspace: workspace(),
+            attachments: attachments(Vec::new()),
+            recalled: recalled(),
+            classification: ClassificationConfig::default(),
+            routing: policy(json!({
+                "default": { "model": "openai/gpt-5.5-mini" },
+            })),
+            privacy: privacy(&[]),
+            // The only model needs a credential that was not supplied.
+            catalog: catalog(vec![descriptor(
+                "openai/gpt-5.5-mini",
+                false,
+                true,
+                200_000,
+            )]),
+            credentialed: credentialed(&[]),
+            local_only: false,
+        };
+
+        let error = Resolver::default()
+            .resolve(inputs.args())
+            .expect_err("no usable model");
+
+        assert_eq!(error.api_code(), ApiErrorCode::FallbackExhausted);
     }
 
     #[test]

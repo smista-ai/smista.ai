@@ -52,6 +52,8 @@ use crate::web::{AppState, AuthenticatedUser};
             ),
             (status = 400, description = "Malformed session id", body = smista_core::api::ApiError),
             (status = 401, description = "Missing or invalid token", body = smista_core::api::ApiError),
+            (status = 403, description = "An explicit model override is forbidden by policy", body = smista_core::api::ApiError),
+            (status = 404, description = "Session not found or no access to session", body = smista_core::api::ApiError),
             (status = 422, description = "Routing rejected the request", body = smista_core::api::ApiError),
             (status = 503, description = "Provider credentials missing or fallbacks exhausted", body = smista_core::api::ApiError),
             (status = 502, description = "Provider error", body = smista_core::api::ApiError),

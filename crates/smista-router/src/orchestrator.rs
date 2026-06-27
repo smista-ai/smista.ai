@@ -18,6 +18,7 @@ mod error;
 mod invoke;
 mod mediation;
 mod persist;
+mod preview;
 mod prompt;
 mod recall;
 mod registry;
@@ -29,18 +30,18 @@ mod tools;
 mod trace_emit;
 mod turn;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::Utc;
 use secrecy::SecretString;
 use smista_core::api::{
     ApprovalKind, CompletedTurn, ContentRef, ContextOutcome, ContinueKind, ContinueRequest,
-    EncryptedPayload, ExecuteRequest, PendingApproval, RoutingOutcome, ToolResult, TurnOutcome,
-    TurnResponse, UserMessage,
+    EncryptedPayload, ExecuteRequest, PendingApproval, PreviewResponse, RoutingOutcome, ToolResult,
+    TurnOutcome, TurnResponse, UserMessage,
 };
 use smista_core::message::{Message, MessageRole};
-use smista_core::model::Provider;
+use smista_core::model::{Provider, RoutingRequirements};
 use smista_providers::api::RequestMessage;
 use smista_providers::memory::MemoryScope;
 use smista_storage::database::surreal::SurrealDatabase;
@@ -57,15 +58,20 @@ use self::persist::{
     persist_approval, persist_context_references, persist_routing_decision, persist_run_input,
     write_sealed_message, write_sealed_plan, write_sealed_tool_call,
 };
+use self::preview::preview_response;
+use self::recall::{Recalled, recall};
 use self::registry::{InFlightRegistry, TurnToken};
-use self::run_input::{RunInputBundle, RunInputMeta, rebuild_run_meta, split_execute_request};
+use self::run_input::{
+    RunInputBundle, RunInputMeta, rebuild_run_meta, rebuild_workspace, split_execute_request,
+};
 pub(crate) use self::stream::TurnSink;
 use self::turn::{
-    AwaitingApprovalData, AwaitingToolData, BundleSource, CompletedData, TurnCx, TurnStep, run_turn,
+    AwaitingApprovalData, AwaitingToolData, BundleSource, CATALOG_TIMEOUT, CompletedData, TurnCx,
+    TurnStep, run_turn, to_resolver_attachments, to_resolver_input, to_resolver_workspace,
 };
 use crate::router::Router;
-use crate::router::resolver::context::ResolvedContext;
-use crate::router::resolver::{Resolver, RoutingDecision};
+use crate::router::resolver::context::{RecalledContext, ResolvedContext};
+use crate::router::resolver::{ResolveArgs, Resolver, RoutingDecision};
 use crate::session::{Sessions, UserSession};
 
 /// Whether a continuation supersedes the in-flight turn instead of being
@@ -245,6 +251,87 @@ impl Orchestrator {
             .finish_step(&session, user_id, session_id, run_id, step)
             .await;
         self.settle(result, &session, run_id, &token, None).await
+    }
+
+    /// Previews how a turn would be routed, without ever calling the model.
+    ///
+    /// Opens the session, recalls its plaintext context, and runs the same
+    /// deterministic resolve an `execute` turn would, then maps the resolved
+    /// plan onto a [`PreviewResponse`]. It acquires no run lock and persists
+    /// nothing: a preview neither admits a run nor mutates session state, so it
+    /// can run while a turn is in flight and never spends a token.
+    ///
+    /// An encrypted session whose history is still sealed cannot be opened in a
+    /// single request, so the preview resolves over empty recall: the routing
+    /// decision is driven by the request, not by the sealed history.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OrchestratorError`] when the session cannot be opened — an
+    /// unknown, archived or non-owned session is reported as not found — or the
+    /// resolver finds no usable route for the request.
+    #[tracing::instrument(skip_all, fields(session_id = %session_id))]
+    pub async fn preview(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+        request: ExecuteRequest,
+        credentials: HashMap<Provider, SecretString>,
+    ) -> Result<PreviewResponse, OrchestratorError> {
+        let sessions = Sessions::new(self.database.clone(), user_id);
+        let session = sessions.open(session_id).await?;
+
+        let (meta, bundle) = split_execute_request(request);
+
+        // A preview never pauses to decrypt: a still-sealed history previews over
+        // empty recall, since the routing decision is driven by the request.
+        let recalled = match recall(&session, &BTreeMap::new()).await? {
+            Recalled::Ready(recalled) => recalled,
+            Recalled::NeedsDecrypt(_) => {
+                tracing::debug!("session history is sealed; previewing over empty recall");
+                RecalledContext::default()
+            }
+        };
+
+        // The catalog is read with the supplied credentials so model selection
+        // sees exactly the models the turn would; no provider request is made
+        // beyond listing, and the chosen model is never invoked.
+        let catalog = self
+            .router
+            .fetch_models(credentials.clone(), CATALOG_TIMEOUT)
+            .await
+            .models;
+        let credentialed: HashSet<Provider> = credentials.keys().cloned().collect();
+
+        let workspace = rebuild_workspace(&meta, &bundle);
+        let resolver_workspace = to_resolver_workspace(&workspace);
+        let resolver_attachments = to_resolver_attachments(&bundle.attachments);
+        let resolver_input = to_resolver_input(&bundle.input);
+
+        let resolved = self.resolver.resolve(ResolveArgs {
+            input: &resolver_input,
+            workspace: &resolver_workspace,
+            attachments: &resolver_attachments,
+            recalled: &recalled,
+            classification: &meta.policy.classification,
+            routing: &meta.policy.routing,
+            privacy: &meta.policy.privacy,
+            requirements: RoutingRequirements::default(),
+            catalog: &catalog,
+            credentialed: &credentialed,
+            local_only: meta.local_preferences.local_only,
+        })?;
+
+        tracing::debug!(
+            provider = %resolved.routing.provider,
+            model = %resolved.routing.model,
+            "previewed the route without invoking the model"
+        );
+        Ok(preview_response(
+            &resolved,
+            &bundle.input,
+            &meta.policy.tools,
+        ))
     }
 
     /// Advances an in-flight run with the client's continuation.

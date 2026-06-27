@@ -48,7 +48,7 @@ You are a capable assistant. Complete the task you are given accurately and \
 concisely, using the tools available to you.";
 
 /// The timeout applied to each provider when listing the model catalog.
-const CATALOG_TIMEOUT: Duration = Duration::from_secs(30);
+pub(super) const CATALOG_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The borrowed inputs the turn loop needs for one turn.
 pub(crate) struct TurnCx<'a> {
@@ -614,7 +614,9 @@ fn to_storage_approval(approval: ToolApproval) -> StorageToolApproval {
 }
 
 /// Maps a wire [`TaskInput`](smista_core::api::TaskInput) into the resolver's.
-fn to_resolver_input(input: &smista_core::api::TaskInput) -> crate::router::resolver::TaskInput {
+pub(super) fn to_resolver_input(
+    input: &smista_core::api::TaskInput,
+) -> crate::router::resolver::TaskInput {
     crate::router::resolver::TaskInput {
         text: input.text.clone(),
         command: input.command,
@@ -623,7 +625,7 @@ fn to_resolver_input(input: &smista_core::api::TaskInput) -> crate::router::reso
 }
 
 /// Maps a wire [`Workspace`](smista_core::api::Workspace) into the resolver's.
-fn to_resolver_workspace(
+pub(super) fn to_resolver_workspace(
     workspace: &smista_core::api::Workspace,
 ) -> crate::router::resolver::Workspace {
     crate::router::resolver::Workspace {
@@ -636,7 +638,7 @@ fn to_resolver_workspace(
 }
 
 /// Maps wire [`Attachments`](smista_core::api::Attachments) into the resolver's.
-fn to_resolver_attachments(
+pub(super) fn to_resolver_attachments(
     attachments: &smista_core::api::Attachments,
 ) -> crate::router::resolver::Attachments {
     crate::router::resolver::Attachments {

@@ -24,7 +24,7 @@ const CHARS_PER_TOKEN: u64 = 4;
 /// so any non-empty text costs at least one token. Pure and stable: the same
 /// input always yields the same estimate, with no tokenizer or network.
 #[must_use]
-pub(super) fn estimate_tokens(text: &str) -> u64 {
+pub(crate) fn estimate_tokens(text: &str) -> u64 {
     let chars = text.chars().count() as u64;
     chars.div_ceil(CHARS_PER_TOKEN)
 }

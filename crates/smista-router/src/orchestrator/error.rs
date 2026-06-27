@@ -83,6 +83,7 @@ impl OrchestratorError {
         match self {
             Self::Busy => ApiErrorCode::RunInFlight,
             Self::ContextWindowExceeded => ApiErrorCode::ContextWindowExceeded,
+            Self::Session(SessionError::NotFound) => ApiErrorCode::SessionNotFound,
             Self::Crypto(_) | Self::Internal(_) | Self::Session(_) | Self::Superseded => {
                 ApiErrorCode::InternalError
             }
@@ -92,7 +93,8 @@ impl OrchestratorError {
             Self::NoRoute(_) => ApiErrorCode::NoRoute,
             Self::OverrideNotAllowed(_) => ApiErrorCode::OverrideNotAllowed,
             Self::Provider(error) => provider_api_code(error.category),
-            Self::Resolver(error) => resolver_api_code(error),
+            // The resolver owns the canonical mapping for its own failures.
+            Self::Resolver(error) => error.api_code(),
         }
     }
 }
@@ -113,15 +115,6 @@ fn provider_api_code(category: ProviderErrorCategory) -> ApiErrorCode {
         ProviderErrorCategory::Timeout => ApiErrorCode::RequestTimeout,
         ProviderErrorCategory::UnsupportedCapability => ApiErrorCode::ProviderUnsupportedCapability,
         ProviderErrorCategory::Unknown => ApiErrorCode::ProviderError,
-    }
-}
-
-/// Maps a resolver error onto the stable API error code per the protocol table.
-fn resolver_api_code(error: &ResolverError) -> ApiErrorCode {
-    match error {
-        ResolverError::Context(_) => ApiErrorCode::ContextWindowExceeded,
-        ResolverError::Model(_) => ApiErrorCode::MissingCapability,
-        ResolverError::Routing(_) => ApiErrorCode::NoRoute,
     }
 }
 
@@ -162,5 +155,21 @@ mod tests {
             OrchestratorError::FallbackExhausted.api_code(),
             ApiErrorCode::FallbackExhausted
         );
+    }
+
+    #[test]
+    fn should_map_a_not_found_session_to_session_not_found() {
+        let error = OrchestratorError::Session(SessionError::NotFound);
+        assert_eq!(error.api_code(), ApiErrorCode::SessionNotFound);
+    }
+
+    #[test]
+    fn should_delegate_resolver_errors_to_the_resolver_mapping() {
+        use crate::router::resolver::policy_matcher::PolicyMatchError;
+
+        // The resolver owns the canonical code; the orchestrator forwards it
+        // verbatim rather than re-deriving it.
+        let error = OrchestratorError::Resolver(ResolverError::Routing(PolicyMatchError::NoRoute));
+        assert_eq!(error.api_code(), ApiErrorCode::NoRoute);
     }
 }
