@@ -180,6 +180,16 @@ pub struct UpdateSessionRequest {
     pub archived: Option<bool>,
 }
 
+/// Response to `PUT /sessions/{id}`, wrapping the updated session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "ts", ts(export))]
+pub struct UpdateSessionResponse {
+    /// The updated session.
+    pub session: SessionSummary,
+}
+
 /// Response to `DELETE /sessions/{id}`, confirming deletion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -323,6 +333,14 @@ mod tests {
                 archived: Some(true),
             }
         );
+    }
+
+    #[test]
+    fn should_wrap_the_summary_in_an_update_response() {
+        let response = UpdateSessionResponse { session: summary() };
+        let value = serde_json::to_value(&response).unwrap();
+        assert_eq!(value["session"]["title"], "Refactor auth middleware");
+        assert_eq!(value["session"]["archived"], false);
     }
 
     #[test]

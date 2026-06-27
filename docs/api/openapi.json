@@ -464,13 +464,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionSummary"
+                  "$ref": "#/components/schemas/UpdateSessionResponse"
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid request",
+            "description": "Invalid session id",
             "content": {
               "application/json": {
                 "schema": {
@@ -490,7 +490,17 @@
             }
           },
           "404": {
-            "description": "Session not found",
+            "description": "Session not found or no access to session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
             "content": {
               "application/json": {
                 "schema": {
@@ -4046,6 +4056,19 @@
               "null"
             ],
             "description": "New archive state, if changing it."
+          }
+        }
+      },
+      "UpdateSessionResponse": {
+        "type": "object",
+        "description": "Response to `PUT /sessions/{id}`, wrapping the updated session.",
+        "required": [
+          "session"
+        ],
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/SessionSummary",
+            "description": "The updated session."
           }
         }
       },

@@ -317,8 +317,28 @@ PUT /api/v1/sessions/{session_id}
 { "title": "Refactor auth and sessions", "archived": false }
 ```
 
-The body is partial; omit a field to leave it unchanged. Returns the updated
-session summary.
+The body is partial: send only the fields you want to change, and any field you
+omit keeps its current value. Set `archived` to `true` to archive the session or
+`false` to restore it. Every successful update refreshes `updated_at`.
+
+It returns the updated session summary:
+
+```json
+{
+  "session": {
+    "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
+    "title": "Refactor auth and sessions",
+    "encrypted": false,
+    "created_at": "2026-05-25T09:00:00Z",
+    "updated_at": "2026-05-25T09:30:00Z",
+    "archived": false
+  }
+}
+```
+
+Only the owner can update a session. A session owned by another user, like an
+unknown id, responds `404`, so its existence is never disclosed. A malformed
+`session_id` that is not a valid UUID responds `400` with `invalid_session_id`.
 
 ### Delete a session
 

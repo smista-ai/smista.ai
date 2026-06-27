@@ -473,6 +473,33 @@ pub(crate) mod test_support {
             .expect("failed to build request")
     }
 
+    /// Builds an empty `PUT` request for `uri`.
+    pub(crate) fn put(uri: &str) -> Request<Body> {
+        Request::builder()
+            .method(Method::PUT)
+            .uri(uri)
+            .body(Body::empty())
+            .expect("failed to build request")
+    }
+
+    /// Builds a `PUT` request for `uri` carrying `token` as a Bearer credential
+    /// and `body` serialized as a JSON request body.
+    pub(crate) fn put_json_with_token(
+        uri: &str,
+        token: &str,
+        body: &serde_json::Value,
+    ) -> Request<Body> {
+        Request::builder()
+            .method(Method::PUT)
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(body).expect("failed to serialize request body"),
+            ))
+            .expect("failed to build request")
+    }
+
     /// Builds the application router alongside a valid Bearer token for a freshly
     /// bootstrapped user.
     ///
