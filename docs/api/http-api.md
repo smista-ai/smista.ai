@@ -228,7 +228,8 @@ present, so there is no separate `encrypted` flag to keep in step with it:
 Whether a session is encrypted is fixed for its life and cannot be changed
 later. See [End-to-end encryption](../technical/e2e_encryption.md). The response
 echoes the resulting `encrypted` flag, which is `true` exactly when a `key_id`
-was supplied. Returns `201` with the new session summary:
+was supplied, and an encrypted summary carries that `key_id` back; a plaintext
+summary omits the field entirely. Returns `201` with the new session summary:
 
 ```json
 {
@@ -250,7 +251,9 @@ GET /api/v1/sessions
 ```
 
 Returns every session that belongs to you, archived ones included, each as a
-summary. A summary's `title` may be `null` for a session that has none:
+summary and ordered most recently updated first. A summary's `title` may be
+`null` for a session that has none, and an encrypted summary carries its
+`key_id` while a plaintext one omits the field:
 
 ```json
 {

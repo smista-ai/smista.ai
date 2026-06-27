@@ -265,10 +265,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SessionSummary"
-                  }
+                  "$ref": "#/components/schemas/ListSessionsResponse"
                 }
               }
             }
@@ -2077,6 +2074,22 @@
           }
         }
       },
+      "ListSessionsResponse": {
+        "type": "object",
+        "description": "Response to `GET /sessions`, wrapping list of sessions.",
+        "required": [
+          "sessions"
+        ],
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionSummary"
+            },
+            "description": "The fetched sessions."
+          }
+        }
+      },
       "LocalPreferences": {
         "type": "object",
         "description": "Client-side execution preferences.",
@@ -3128,6 +3141,13 @@
           "encrypted": {
             "type": "boolean",
             "description": "Whether the session's content is end-to-end encrypted."
+          },
+          "key_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Key fingerprint of the per-session key, if the session is encrypted."
           },
           "created_at": {
             "type": "string",

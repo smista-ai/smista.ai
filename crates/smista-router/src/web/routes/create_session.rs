@@ -89,6 +89,7 @@ pub(crate) async fn create_session(
         id: user_session.session_id(),
         title: session.title,
         encrypted: session.encrypted,
+        key_id: session.key_id,
         created_at: session.created_at,
         updated_at: session.updated_at,
         archived: session.archived_at.is_some(),

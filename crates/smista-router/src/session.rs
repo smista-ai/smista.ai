@@ -98,13 +98,6 @@ impl Sessions {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the sessions cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn list(&self) -> SessionResult<Vec<Session>> {
         self.database
             .list_sessions(self.user_id)

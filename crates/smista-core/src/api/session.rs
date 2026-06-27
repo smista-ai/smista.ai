@@ -43,6 +43,10 @@ pub struct SessionSummary {
     pub title: Option<String>,
     /// Whether the session's content is end-to-end encrypted.
     pub encrypted: bool,
+    /// Key fingerprint of the per-session key, if the session is encrypted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub key_id: Option<String>,
     /// When the session was created.
     pub created_at: DateTime<Utc>,
     /// When the session was last updated.
@@ -162,6 +166,16 @@ pub struct GetSessionResponse {
     pub session: SessionDetail,
 }
 
+/// Response to `GET /sessions`, wrapping list of sessions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "ts", ts(export))]
+pub struct ListSessionsResponse {
+    /// The fetched sessions.
+    pub sessions: Vec<SessionSummary>,
+}
+
 /// Body of `PUT /sessions/{id}`, updating title and/or archive state.
 ///
 /// Each field is optional; omit a field to leave it unchanged.
@@ -213,6 +227,19 @@ mod tests {
             id: Uuid::nil(),
             title: Some("Refactor auth middleware".to_string()),
             encrypted: false,
+            key_id: None,
+            created_at: timestamp(),
+            updated_at: timestamp(),
+            archived: false,
+        }
+    }
+
+    fn encrypted_summary() -> SessionSummary {
+        SessionSummary {
+            id: Uuid::nil(),
+            title: Some("Refactor auth middleware".to_string()),
+            encrypted: true,
+            key_id: Some("kf_ab12".to_string()),
             created_at: timestamp(),
             updated_at: timestamp(),
             archived: false,
@@ -224,6 +251,17 @@ mod tests {
         let value = serde_json::to_value(summary()).unwrap();
         assert_eq!(value["title"], "Refactor auth middleware");
         assert_eq!(value["encrypted"], false);
+        assert!(value.get("key_id").is_none());
+        assert_eq!(value["created_at"], "2026-05-25T09:00:00Z");
+        assert_eq!(value["archived"], false);
+    }
+
+    #[test]
+    fn should_serialize_encrypted_summary_with_key_id() {
+        let value = serde_json::to_value(encrypted_summary()).unwrap();
+        assert_eq!(value["title"], "Refactor auth middleware");
+        assert_eq!(value["encrypted"], true);
+        assert_eq!(value["key_id"], "kf_ab12");
         assert_eq!(value["created_at"], "2026-05-25T09:00:00Z");
         assert_eq!(value["archived"], false);
     }
