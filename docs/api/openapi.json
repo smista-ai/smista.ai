@@ -384,6 +384,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid session id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid token",
             "content": {
@@ -395,7 +405,17 @@
             }
           },
           "404": {
-            "description": "Session not found",
+            "description": "Session not found or no access to session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
             "content": {
               "application/json": {
                 "schema": {
@@ -2101,6 +2121,37 @@
           }
         }
       },
+      "MessageContent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The message text in clear, for a non-encrypted session.",
+            "required": [
+              "plaintext"
+            ],
+            "properties": {
+              "plaintext": {
+                "type": "string",
+                "description": "The message text in clear, for a non-encrypted session."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The message sealed as an AEAD envelope, for an encrypted session.",
+            "required": [
+              "encrypted"
+            ],
+            "properties": {
+              "encrypted": {
+                "$ref": "#/components/schemas/EncryptedPayload",
+                "description": "The message sealed as an AEAD envelope, for an encrypted session."
+              }
+            }
+          }
+        ],
+        "description": "A session message's content, in clear or sealed.\n\nA non-encrypted session yields [`Plaintext`](Self::Plaintext) with the\nmessage text. An end-to-end encrypted session yields\n[`Encrypted`](Self::Encrypted) with the sealed [`EncryptedPayload`] envelope;\nthe router holds no key, so only a client holding the session key can open it\nback into the message text. This mirrors\n[`TraceEventPayload`](crate::trace::TraceEventPayload) for message bodies."
+      },
       "MessagePayload": {
         "type": "object",
         "description": "Payload of a [`TraceEventType::Message`] event.",
@@ -2952,7 +3003,7 @@
           "messages": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Message"
+              "$ref": "#/components/schemas/SessionMessageDetail"
             },
             "description": "The session's conversation history."
           },
@@ -2962,6 +3013,42 @@
               "null"
             ],
             "description": "Free-form session metadata."
+          }
+        }
+      },
+      "SessionMessageDetail": {
+        "type": "object",
+        "description": "One message in a fetched [`SessionDetail`], in clear or sealed.\n\nMirrors [`Message`](crate::message::Message) but carries its `content` as a\n[`MessageContent`], so an end-to-end encrypted session can return its sealed\nbody without the router ever holding the key. `provider` and `model` name the\nmodel that produced an assistant turn and are absent for the other roles.",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/MessageRole",
+            "description": "The role of the message's author."
+          },
+          "content": {
+            "$ref": "#/components/schemas/MessageContent",
+            "description": "The message content, in clear or sealed."
+          },
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Provider",
+                "description": "Provider that produced the message, if applicable."
+              }
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Model that produced the message, if applicable."
           }
         }
       },

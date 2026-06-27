@@ -74,6 +74,8 @@ pub enum ApiErrorCode {
     InvalidProviderName,
     /// The provider rejected the request body as malformed.
     InvalidRequest,
+    /// Invalid session identifier.
+    InvalidSessionId,
     /// The session token is malformed or unknown.
     InvalidToken,
     /// The selected model lacks a capability the task requires.
@@ -108,6 +110,8 @@ pub enum ApiErrorCode {
     RoutingUnsupportedCapability,
     /// A turn is already in flight for the session; the run is busy.
     RunInFlight,
+    /// Session not found
+    SessionNotFound,
     /// An error occurred while reading or writing from memory storage.
     StorageError,
     /// The session token is past its expiry timestamp.
@@ -141,6 +145,7 @@ impl ApiErrorCode {
             Self::InvalidProviderCredentials => "invalid_provider_credentials",
             Self::InvalidProviderName => "invalid_provider_name",
             Self::InvalidRequest => "invalid_request",
+            Self::InvalidSessionId => "invalid_session_id",
             Self::InvalidToken => "invalid_token",
             Self::MissingCapability => "missing_capability",
             Self::MissingCredentials => "missing_credentials",
@@ -158,6 +163,7 @@ impl ApiErrorCode {
             Self::RequestTimeout => "request_timeout",
             Self::RoutingUnsupportedCapability => "routing_unsupported_capability",
             Self::RunInFlight => "run_in_flight",
+            Self::SessionNotFound => "session_not_found",
             Self::StorageError => "storage_error",
             Self::TokenExpired => "token_expired",
             Self::TokenRevoked => "token_revoked",
@@ -186,7 +192,7 @@ impl ApiErrorCode {
             | Self::UnknownIntent
             | Self::UnknownModel
             | Self::UnknownProvider => StatusCode::UNPROCESSABLE_ENTITY,
-            Self::CredentialsInQuery => StatusCode::BAD_REQUEST,
+            Self::CredentialsInQuery | Self::InvalidSessionId => StatusCode::BAD_REQUEST,
             Self::RunInFlight => StatusCode::CONFLICT,
             Self::NotImplemented => StatusCode::NOT_IMPLEMENTED,
             Self::FallbackExhausted
@@ -203,7 +209,7 @@ impl ApiErrorCode {
             | Self::MissingCredentials
             | Self::TokenExpired
             | Self::TokenRevoked => StatusCode::UNAUTHORIZED,
-            Self::ModelNotFound => StatusCode::NOT_FOUND,
+            Self::ModelNotFound | Self::SessionNotFound => StatusCode::NOT_FOUND,
             Self::ProviderError | Self::StorageError => StatusCode::BAD_GATEWAY,
             Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             Self::RequestTimeout => StatusCode::GATEWAY_TIMEOUT,
@@ -435,6 +441,26 @@ mod tests {
             ApiErrorCode::ProviderUnsupportedCapability.status(),
             StatusCode::UNPROCESSABLE_ENTITY
         );
+    }
+
+    #[test]
+    fn should_map_session_codes_to_their_statuses() {
+        // A malformed session id is bad request syntax, like a credential in a
+        // query, not a well-formed-but-unknown value (which would be 422).
+        assert_eq!(
+            ApiErrorCode::InvalidSessionId.status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            ApiErrorCode::InvalidSessionId.as_str(),
+            "invalid_session_id"
+        );
+        // An absent (or non-owned, treated as absent) session is not found.
+        assert_eq!(
+            ApiErrorCode::SessionNotFound.status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(ApiErrorCode::SessionNotFound.as_str(), "session_not_found");
     }
 
     #[test]
