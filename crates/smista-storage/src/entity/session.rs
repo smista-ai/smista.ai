@@ -5,6 +5,7 @@ use surrealdb::types::{RecordId, SurrealValue};
 use uuid::Uuid;
 
 use super::{Table, record_uuid};
+use crate::entity::User;
 
 /// A resumable user interaction with smista.ai.
 ///
@@ -40,6 +41,21 @@ pub struct Session {
 }
 
 impl Session {
+    /// Creates a new session for the given user.
+    pub fn new(id: Uuid, user: Uuid, title: Option<String>, key_id: Option<String>) -> Self {
+        let now = Utc::now();
+        Self {
+            id: RecordId::new(Self::name(), id.to_string()),
+            user: RecordId::new(User::table(), user.to_string()),
+            title,
+            encrypted: key_id.is_some(),
+            key_id,
+            created_at: now,
+            updated_at: now,
+            archived_at: None,
+        }
+    }
+
     /// Returns this session's UUIDv7 key.
     pub fn uuid(&self) -> Uuid {
         record_uuid(&self.id)
@@ -56,6 +72,40 @@ impl Table for Session {
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn should_build_a_plaintext_session_without_a_key_id() {
+        let id = Uuid::now_v7();
+        let user = Uuid::now_v7();
+        let session = Session::new(id, user, Some("My session".to_string()), None);
+
+        assert_eq!(session.uuid(), id);
+        assert_eq!(session.user, RecordId::new(User::name(), user.to_string()));
+        assert_eq!(session.title, Some("My session".to_string()));
+        // No key id means the session is not end-to-end encrypted.
+        assert!(!session.encrypted);
+        assert_eq!(session.key_id, None);
+        // A fresh session is created and updated at the same instant and is not
+        // archived.
+        assert_eq!(session.created_at, session.updated_at);
+        assert_eq!(session.archived_at, None);
+    }
+
+    #[test]
+    fn should_mark_a_session_encrypted_when_a_key_id_is_present() {
+        let session = Session::new(
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            None,
+            Some("kf_ab12".to_string()),
+        );
+
+        // The key id alone drives the encrypted flag; no separate argument sets
+        // it, so the two can never disagree.
+        assert!(session.encrypted);
+        assert_eq!(session.key_id, Some("kf_ab12".to_string()));
+        assert_eq!(session.title, None);
+    }
 
     #[tokio::test]
     async fn should_store_and_read_session() {

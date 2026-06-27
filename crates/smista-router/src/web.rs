@@ -68,10 +68,6 @@ pub(crate) struct AppState {
     /// The validated router configuration.
     pub(crate) config: Arc<RouterConfig>,
     /// The storage backend handle.
-    #[expect(
-        dead_code,
-        reason = "read by request handlers landing in follow-up issues (#133+)"
-    )]
     pub(crate) database: SurrealDatabase,
     /// The router, holding the providers requests are routed to.
     pub(crate) router: Arc<SmistaRouter>,
@@ -366,6 +362,28 @@ pub(crate) mod test_support {
         (status, body)
     }
 
+    /// Sends a request through the router and returns only the status code.
+    ///
+    /// Unlike [`send`], it does not parse the body as JSON, so it tolerates the
+    /// plain-text body axum returns when a request fails to deserialize.
+    pub(crate) async fn send_status(router: Router, mut request: Request<Body>) -> StatusCode {
+        if request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .is_none()
+        {
+            request.extensions_mut().insert(ConnectInfo(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                0,
+            )));
+        }
+        router
+            .oneshot(request)
+            .await
+            .expect("router failed to handle the request")
+            .status()
+    }
+
     /// Builds an empty `GET` request for `uri`.
     pub(crate) fn get(uri: &str) -> Request<Body> {
         Request::builder()
@@ -417,6 +435,24 @@ pub(crate) mod test_support {
             .expect("failed to build request")
     }
 
+    /// Builds a `POST` request for `uri` carrying `token` as a Bearer credential
+    /// and `body` serialized as a JSON request body.
+    pub(crate) fn post_json_with_token(
+        uri: &str,
+        token: &str,
+        body: &serde_json::Value,
+    ) -> Request<Body> {
+        Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(body).expect("failed to serialize request body"),
+            ))
+            .expect("failed to build request")
+    }
+
     /// Builds the application router alongside a valid Bearer token for a freshly
     /// bootstrapped user.
     ///
@@ -432,6 +468,15 @@ pub(crate) mod test_support {
     /// Like [`authenticated_router`] but also returns the bootstrapped user's
     /// [`Uuid`](uuid::Uuid), so a test can assert which user a token resolves to.
     pub(crate) async fn authenticated_router_with_user() -> (Router, String, uuid::Uuid) {
+        let (router, token, user_id, _db) = authenticated_router_with_database().await;
+        (router, token, user_id)
+    }
+
+    /// Like [`authenticated_router_with_user`] but also returns the
+    /// [`SurrealDatabase`] handle the router writes through, so a test can assert
+    /// what an authenticated endpoint persisted.
+    pub(crate) async fn authenticated_router_with_database()
+    -> (Router, String, uuid::Uuid, SurrealDatabase) {
         let database = test_database().await;
         let config = RouterConfig::default();
         let token_ttl = std::time::Duration::from_secs(config.auth.token_ttl_seconds);
@@ -448,10 +493,10 @@ pub(crate) mod test_support {
         let state = AppState {
             authenticator,
             config: Arc::new(config),
-            database,
+            database: database.clone(),
             router: test_smista_router(),
         };
-        (build_router(state), token, user.user_id)
+        (build_router(state), token, user.user_id, database)
     }
 }
 

@@ -211,20 +211,22 @@ only access their own sessions; another user's session returns `403`.
 ```http
 POST /api/v1/sessions
 
-{ "title": "Refactor auth middleware", "encrypted": false }
+{ "title": "Refactor auth middleware" }
 ```
 
-A `title` is required. `encrypted` is optional and defaults to `false`; set it to
-`true` to make the session end-to-end encrypted, in which case a `key_id` (the
-fingerprint of the per-session key your client holds) is also required:
+A `title` is required; omitting it returns `422`. To make the session
+end-to-end encrypted, send a `key_id` — the fingerprint of the per-session key
+your client holds. A session is encrypted when, and only when, a `key_id` is
+present, so there is no separate `encrypted` flag to keep in step with it:
 
 ```json
-{ "title": "Refactor auth middleware", "encrypted": true, "key_id": "kf_ab12" }
+{ "title": "Refactor auth middleware", "key_id": "kf_ab12" }
 ```
 
-`encrypted` is fixed for the life of the session and cannot be changed later. See
-[End-to-end encryption](../technical/e2e_encryption.md). Returns `201` with the new session
-summary:
+Whether a session is encrypted is fixed for its life and cannot be changed
+later. See [End-to-end encryption](../technical/e2e_encryption.md). The response
+echoes the resulting `encrypted` flag, which is `true` exactly when a `key_id`
+was supplied. Returns `201` with the new session summary:
 
 ```json
 {
@@ -246,7 +248,7 @@ GET /api/v1/sessions
 ```
 
 Returns every session that belongs to you, archived ones included, each as a
-summary:
+summary. A summary's `title` may be `null` for a session that has none:
 
 ```json
 {

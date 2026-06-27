@@ -81,13 +81,6 @@ impl Sessions {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the session cannot be persisted.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn create(&self, session: Session) -> SessionResult<UserSession> {
         let session_id = session.uuid();
         self.database
