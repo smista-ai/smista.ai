@@ -21,7 +21,6 @@ mod session_usage;
 mod sign_in;
 mod sign_out;
 mod status;
-mod stream;
 mod update_session;
 
 use axum::Json;
@@ -77,9 +76,6 @@ pub(crate) use self::sign_out::sign_out;
 #[cfg(feature = "openapi")]
 pub(crate) use self::status::__path_status;
 pub(crate) use self::status::status;
-#[cfg(feature = "openapi")]
-pub(crate) use self::stream::__path_stream;
-pub(crate) use self::stream::stream;
 #[cfg(feature = "openapi")]
 pub(crate) use self::update_session::__path_update_session;
 pub(crate) use self::update_session::update_session;

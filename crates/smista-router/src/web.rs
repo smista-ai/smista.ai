@@ -25,6 +25,7 @@ mod middleware;
 #[cfg(feature = "openapi")]
 mod openapi;
 mod routes;
+mod streaming;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -192,7 +193,6 @@ fn build_router(state: AppState) -> Router {
                 .delete(routes::delete_session),
         )
         .route("/sessions/{session_id}/execute", post(routes::execute))
-        .route("/sessions/{session_id}/stream", post(routes::stream))
         .route("/sessions/{session_id}/preview", post(routes::preview))
         .route(
             "/sessions/{session_id}/continue",

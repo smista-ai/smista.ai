@@ -633,6 +633,16 @@
               }
             }
           },
+          "400": {
+            "description": "Malformed session id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid token",
             "content": {
@@ -643,8 +653,18 @@
               }
             }
           },
+          "409": {
+            "description": "A turn is already in flight for the run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "Routing rejected the request",
+            "description": "Routing rejected the request, no run is in progress, or the continuation does not answer the current pause",
             "content": {
               "application/json": {
                 "schema": {
@@ -884,73 +904,6 @@
           },
           "504": {
             "description": "Provider timed out",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/sessions/{session_id}/stream": {
-      "post": {
-        "tags": [
-          "execution"
-        ],
-        "summary": "Handles `POST /api/v1/sessions/{session_id}/stream`.",
-        "operationId": "streamTurn",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "description": "Session id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExecuteRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Server-Sent Events stream. Each `data:` line is one TurnEvent (internally tagged by `type`, snake_case). Exactly one terminal `turn_end` event carries the TurnResponse payload.",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "$ref": "#/components/schemas/TurnEvent"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Routing rejected the request",
             "content": {
               "application/json": {
                 "schema": {

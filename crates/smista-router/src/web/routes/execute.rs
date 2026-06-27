@@ -16,16 +16,17 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
-use smista_core::api::{ApiErrorCode, ExecuteRequest, TurnEvent, TurnOutcome, TurnResponse};
+use smista_core::api::{ApiErrorCode, ExecuteRequest};
 use uuid::Uuid;
 
 use crate::orchestrator::Orchestrator;
 use crate::router::resolver::Resolver;
 use crate::web::error::WebError;
 use crate::web::middleware::RequestCredentials;
+use crate::web::streaming::{replay_events, sse_response, wants_event_stream};
 use crate::web::{AppState, AuthenticatedUser};
 
 /// Handles `POST /api/v1/sessions/{session_id}/execute`.
@@ -96,97 +97,6 @@ pub(crate) async fn execute(
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => WebError::from(error).into_response(),
     }
-}
-
-/// Whether the client asked for the Server-Sent Events stream.
-///
-/// Returns `true` only when one of the `Accept` header's media ranges is exactly
-/// `text/event-stream`; any media parameters (for example a `q` weight) are
-/// ignored. An absent, unparsable, `application/json` or `*/*` `Accept` yields
-/// `false`, so the buffered JSON body is the default.
-fn wants_event_stream(headers: &HeaderMap) -> bool {
-    headers
-        .get(header::ACCEPT)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|accept| {
-            accept
-                .split(',')
-                .map(|media| media.split(';').next().unwrap_or("").trim())
-                .any(|media| media == "text/event-stream")
-        })
-}
-
-/// Replays a buffered [`TurnResponse`] as the short event sequence a streaming
-/// turn would have produced.
-///
-/// A completed turn replays its assistant text and usage; a tool pause replays
-/// each requested call as its `tool_call_started`/`tool_call_requested` pair; any
-/// other outcome carries no intermediate events. Every outcome ends with the
-/// terminal `turn_end` event holding the full response, so the client reads the
-/// same `status` it would from the buffered reply.
-fn replay_events(response: TurnResponse) -> Vec<TurnEvent> {
-    let mut events = Vec::new();
-    match &response.outcome {
-        TurnOutcome::Completed(turn) => {
-            if !turn.message.content.is_empty() {
-                events.push(TurnEvent::TextDelta {
-                    delta: turn.message.content.clone(),
-                });
-            }
-            events.push(TurnEvent::Usage(turn.usage.clone()));
-        }
-        TurnOutcome::AwaitingTool { tool_requests, .. } => {
-            events.extend(tool_requests.iter().flat_map(|request| {
-                [
-                    TurnEvent::ToolCallStarted {
-                        call_id: request.call_id.clone(),
-                        name: request.name.clone(),
-                    },
-                    TurnEvent::ToolCallRequested {
-                        call_id: request.call_id.clone(),
-                        name: request.name.clone(),
-                        arguments: request.arguments.clone(),
-                        requires_approval: request.requires_approval,
-                    },
-                ]
-            }));
-        }
-        _ => {}
-    }
-    events.push(TurnEvent::TurnEnd(Box::new(response)));
-    events
-}
-
-/// Renders a sequence of [`TurnEvent`]s as a `text/event-stream` response.
-///
-/// Each event becomes one `data:` record terminated by a blank line, the
-/// Server-Sent Events framing the client parses. A serialization failure (which
-/// the documented turn types never produce) is reported as an internal error.
-fn sse_response(events: &[TurnEvent]) -> Response {
-    let mut body = String::new();
-    for event in events {
-        let payload = match serde_json::to_string(event) {
-            Ok(payload) => payload,
-            Err(error) => {
-                tracing::error!(%error, "failed to serialize a turn event for streaming");
-                return WebError::from_code(
-                    ApiErrorCode::InternalError,
-                    "An internal error occurred.",
-                )
-                .into_response();
-            }
-        };
-        body.push_str("data: ");
-        body.push_str(&payload);
-        body.push_str("\n\n");
-    }
-
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "text/event-stream")],
-        body,
-    )
-        .into_response()
 }
 
 #[cfg(test)]
