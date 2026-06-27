@@ -8,10 +8,11 @@
 //! [`TurnEvent`](smista_core::api::TurnEvent) Server-Sent Events when the client
 //! asks via `Accept: text/event-stream`.
 //!
-//! The orchestrator buffers a turn rather than streaming it token by token, so a
-//! streamed request is answered by replaying the finished outcome as the same
-//! event vocabulary a live stream uses, terminated by the `turn_end` event that
-//! carries the full response.
+//! A streamed request is driven from the model's live output: text and reasoning
+//! deltas arrive as the model produces them, and the terminal events — usage,
+//! tool-call activity and the closing `turn_end` carrying the full response — are
+//! appended once the turn finishes. A model that cannot stream is replayed as the
+//! same event shape, so the client only ever handles one stream.
 
 use std::sync::Arc;
 
@@ -26,7 +27,7 @@ use crate::orchestrator::Orchestrator;
 use crate::router::resolver::Resolver;
 use crate::web::error::WebError;
 use crate::web::middleware::RequestCredentials;
-use crate::web::streaming::{replay_events, sse_response, wants_event_stream};
+use crate::web::streaming::{stream_turn, wants_event_stream};
 use crate::web::{AppState, AuthenticatedUser};
 
 /// Handles `POST /api/v1/sessions/{session_id}/execute`.
@@ -89,11 +90,21 @@ pub(crate) async fn execute(
         Arc::new(Resolver::default()),
     );
 
+    if streaming {
+        // A streamed turn is driven on a spawned task so deltas flush as the model
+        // produces them; the shared helper appends the terminal events.
+        let user_id = user.user_id;
+        return stream_turn(move |sink| async move {
+            orchestrator
+                .execute_streaming(user_id, session_id, request, credentials, Some(sink))
+                .await
+        });
+    }
+
     match orchestrator
         .execute(user.user_id, session_id, request, credentials)
         .await
     {
-        Ok(response) if streaming => sse_response(&replay_events(response)),
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => WebError::from(error).into_response(),
     }
@@ -101,12 +112,10 @@ pub(crate) async fn execute(
 
 #[cfg(test)]
 mod tests {
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::sync::Arc;
 
     use axum::Router;
     use axum::body::Body;
-    use axum::extract::ConnectInfo;
     use axum::http::{Method, Request, StatusCode, header};
     use smista_core::api::{
         Attachments, ExecutePolicy, ExecuteRequest, LocalPreferences, TaskInput, Workspace,
@@ -117,13 +126,12 @@ mod tests {
     };
     use smista_core::usage::Usage;
     use smista_providers::api::{CompletionResponse, FinishReason, ToolCall};
-    use tower::ServiceExt as _;
     use uuid::Uuid;
 
     use crate::router::Router as SmistaRouter;
     use crate::web::test_support::{
         authenticated_router_with_database, authenticated_router_with_router, post,
-        post_json_with_token, send, send_status,
+        post_json_with_token, send, send_raw, send_status, sse_events,
     };
 
     /// Creates a session for the authenticated user and returns its id, so an
@@ -223,40 +231,6 @@ mod tests {
             .expect("failed to build request")
     }
 
-    /// Sends a request through the router and returns the status, the
-    /// `Content-Type` header and the raw body, so a streaming response can be
-    /// asserted on without parsing it as a single JSON value.
-    async fn send_raw(router: Router, mut request: Request<Body>) -> (StatusCode, String, String) {
-        request.extensions_mut().insert(ConnectInfo(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::LOCALHOST),
-            0,
-        )));
-        let response = router
-            .oneshot(request)
-            .await
-            .expect("router failed to handle the request");
-        let status = response.status();
-        let content_type = response
-            .headers()
-            .get(header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or_default()
-            .to_string();
-        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("failed to read the response body");
-        let body = String::from_utf8(bytes.to_vec()).expect("response body was not UTF-8");
-        (status, content_type, body)
-    }
-
-    /// Parses a Server-Sent Events body into its decoded `data:` events.
-    fn sse_events(body: &str) -> Vec<serde_json::Value> {
-        body.split("\n\n")
-            .filter_map(|record| record.strip_prefix("data: "))
-            .map(|json| serde_json::from_str(json).expect("event payload was not valid JSON"))
-            .collect()
-    }
-
     #[tokio::test]
     async fn should_complete_a_turn_and_return_json_by_default() {
         let (router, token, _user_id, _db) = authenticated_router_with_database().await;
@@ -331,19 +305,112 @@ mod tests {
         );
 
         let events = sse_events(&body);
-        // The completed turn replays its assistant text, its usage and a terminal
-        // `turn_end` carrying the same outcome the buffered reply would.
-        assert_eq!(events[0]["type"], "text_delta");
+        // Incremental text arrives as multiple deltas, reasoning is exposed, and
+        // the stream ends with usage and a terminal completed `turn_end`.
+        let text_deltas = events
+            .iter()
+            .filter(|event| event["type"] == "text_delta")
+            .count();
         assert!(
-            !events[0]["delta"]
-                .as_str()
-                .expect("delta missing")
-                .is_empty()
+            text_deltas >= 2,
+            "expected incremental text, got {text_deltas}"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| event["type"] == "reasoning_delta")
         );
         assert!(events.iter().any(|event| event["type"] == "usage"));
         let last = events.last().expect("stream had no events");
         assert_eq!(last["type"], "turn_end");
         assert_eq!(last["status"], "completed");
+    }
+
+    #[tokio::test]
+    async fn should_replay_a_non_streaming_model_over_the_stream() {
+        let router = Arc::new(SmistaRouter::mock_non_streaming());
+        let (router, token, _user_id, _db) = authenticated_router_with_router(router).await;
+        let session_id = create_session(router.clone(), &token).await;
+
+        let (status, content_type, body) = send_raw(
+            router,
+            execute_post(
+                &session_id.to_string(),
+                &token,
+                &execute_request(),
+                Some("text/event-stream"),
+            ),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert!(content_type.starts_with("text/event-stream"));
+        let events = sse_events(&body);
+        // A non-streaming model is replayed as one text delta plus the terminal.
+        let text_deltas: Vec<_> = events
+            .iter()
+            .filter(|event| event["type"] == "text_delta")
+            .collect();
+        assert_eq!(text_deltas.len(), 1);
+        let last = events.last().expect("stream had no events");
+        assert_eq!(last["type"], "turn_end");
+        assert_eq!(last["status"], "completed");
+    }
+
+    #[tokio::test]
+    async fn should_stream_an_approval_pause() {
+        let router = Arc::new(SmistaRouter::mock_scripted(vec![tool_call_response(
+            "edit_file",
+        )]));
+        let (router, token, _user_id, _db) = authenticated_router_with_router(router).await;
+        let session_id = create_session(router.clone(), &token).await;
+
+        let mut request = execute_request();
+        request.input.command = Some(smista_core::intent::TaskIntent::Plan);
+
+        let (status, content_type, body) = send_raw(
+            router,
+            execute_post(
+                &session_id.to_string(),
+                &token,
+                &request,
+                Some("text/event-stream"),
+            ),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert!(content_type.starts_with("text/event-stream"));
+        let events = sse_events(&body);
+        let last = events.last().expect("stream had no events");
+        assert_eq!(last["type"], "turn_end");
+        assert_eq!(last["status"], "awaiting_approval");
+    }
+
+    #[tokio::test]
+    async fn should_end_a_failed_stream_with_an_error_turn_end() {
+        let router = Arc::new(SmistaRouter::mock_stream_error());
+        let (router, token, _user_id, _db) = authenticated_router_with_router(router).await;
+        let session_id = create_session(router.clone(), &token).await;
+
+        let (status, content_type, body) = send_raw(
+            router,
+            execute_post(
+                &session_id.to_string(),
+                &token,
+                &execute_request(),
+                Some("text/event-stream"),
+            ),
+        )
+        .await;
+
+        // The stream opened with 200; the failure rides the terminal event.
+        assert_eq!(status, StatusCode::OK);
+        assert!(content_type.starts_with("text/event-stream"));
+        let events = sse_events(&body);
+        let last = events.last().expect("stream had no events");
+        assert_eq!(last["type"], "turn_end");
+        assert_eq!(last["status"], "error");
     }
 
     #[tokio::test]

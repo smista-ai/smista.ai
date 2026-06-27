@@ -362,6 +362,48 @@ pub(crate) mod test_support {
         (status, body)
     }
 
+    /// Sends a request and returns the status, `Content-Type` and the raw body,
+    /// so a streaming response can be asserted without parsing it as one JSON value.
+    pub(crate) async fn send_raw(
+        router: Router,
+        mut request: Request<Body>,
+    ) -> (StatusCode, String, String) {
+        if request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .is_none()
+        {
+            request.extensions_mut().insert(ConnectInfo(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                0,
+            )));
+        }
+        let response = router
+            .oneshot(request)
+            .await
+            .expect("router failed to handle the request");
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("failed to read the response body");
+        let body = String::from_utf8(bytes.to_vec()).expect("response body was not UTF-8");
+        (status, content_type, body)
+    }
+
+    /// Parses a Server-Sent Events body into its decoded `data:` events.
+    pub(crate) fn sse_events(body: &str) -> Vec<serde_json::Value> {
+        body.split("\n\n")
+            .filter_map(|record| record.strip_prefix("data: "))
+            .map(|json| serde_json::from_str(json).expect("event payload was not valid JSON"))
+            .collect()
+    }
+
     /// Sends a request through the router and returns only the status code.
     ///
     /// Unlike [`send`], it does not parse the body as JSON, so it tolerates the

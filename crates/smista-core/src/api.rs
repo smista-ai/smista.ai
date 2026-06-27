@@ -24,10 +24,8 @@
 //!
 //! # Streaming
 //!
-//! The `POST /sessions/{id}/stream` endpoint takes the same body as
-//! [`ExecuteRequest`] and emits a stream of
-//! [`StreamEvent`](crate::stream::StreamEvent) values (Server-Sent Events);
-//! there is no dedicated streaming envelope here.
+//! The `POST /sessions/{id}/continue` and `POST /sessions/{id}/execute` endpoints emit a stream of
+//! [`StreamEvent`](crate::stream::StreamEvent) values (Server-Sent Events) when called with `Accept: text/event-stream`.
 //!
 //! # Secrets
 //!

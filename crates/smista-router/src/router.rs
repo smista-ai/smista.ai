@@ -139,6 +139,56 @@ impl Router {
                 )),
             )
     }
+
+    /// Builds a mock router whose local model cannot stream, for the buffered
+    /// fallback path under a streaming request.
+    #[cfg(test)]
+    pub(crate) fn mock_non_streaming() -> Self {
+        use crate::router::mock_provider::MockProvider;
+
+        Self::default()
+            .with_local(
+                ProviderId::Ollama,
+                Box::new(
+                    MockProvider::new(ProviderId::Ollama, "Mock Local", true, "mock-local")
+                        .with_streaming(false),
+                ),
+            )
+            .with_remote(
+                ProviderId::OpenAI,
+                Box::new(MockProvider::new(
+                    ProviderId::OpenAI,
+                    "Mock Remote",
+                    false,
+                    "mock-remote",
+                )),
+            )
+    }
+
+    /// Builds a mock router whose local model fails part-way through its stream,
+    /// for the mid-stream-error path.
+    #[cfg(test)]
+    pub(crate) fn mock_stream_error() -> Self {
+        use crate::router::mock_provider::MockProvider;
+
+        Self::default()
+            .with_local(
+                ProviderId::Ollama,
+                Box::new(
+                    MockProvider::new(ProviderId::Ollama, "Mock Local", true, "mock-local")
+                        .with_stream_error(true),
+                ),
+            )
+            .with_remote(
+                ProviderId::OpenAI,
+                Box::new(MockProvider::new(
+                    ProviderId::OpenAI,
+                    "Mock Remote",
+                    false,
+                    "mock-remote",
+                )),
+            )
+    }
 }
 
 #[cfg(test)]
