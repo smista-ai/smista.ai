@@ -653,6 +653,26 @@
               }
             }
           },
+          "403": {
+            "description": "An explicit model override is forbidden by policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found or no access to session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "409": {
             "description": "A turn is already in flight for the run",
             "content": {
@@ -775,6 +795,26 @@
               }
             }
           },
+          "403": {
+            "description": "An explicit model override is forbidden by policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found or no access to session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Routing rejected the request",
             "content": {
@@ -862,8 +902,38 @@
               }
             }
           },
+          "400": {
+            "description": "Malformed session id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "An explicit model override is forbidden by policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found or no access to session",
             "content": {
               "application/json": {
                 "schema": {
@@ -882,28 +952,8 @@
               }
             }
           },
-          "502": {
-            "description": "Provider error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
           "503": {
             "description": "Provider credentials missing or fallbacks exhausted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "Provider timed out",
             "content": {
               "application/json": {
                 "schema": {

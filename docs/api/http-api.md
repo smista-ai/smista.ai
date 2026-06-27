@@ -640,9 +640,11 @@ this stream: the full response is replayed as a short stream of the same events.
 POST /api/v1/sessions/{session_id}/preview
 ```
 
-Same body as `/execute`, but the selected model is **never called**. Returns the
-task type, chosen provider/model, matched rule, included/excluded context, an
-estimated cost range and the required permissions:
+Same body as `/execute`, but the selected model is **never called**: no provider
+request is made and no tokens are spent. The router opens the session, runs the
+same deterministic routing `/execute` would, and returns the task type, chosen
+provider/model, matched rule, included/excluded context, an estimated cost range
+and the required permissions:
 
 ```json
 {
@@ -660,6 +662,21 @@ estimated cost range and the required permissions:
   ]
 }
 ```
+
+`required_permissions` is the project tool permissions tightened by the matched
+rule's `required_permissions`. `estimated_cost` is a decimal-string range: `min`
+prices only the input (the selected context and the prompt) and `max` adds an
+assumed reply, so a model that declares no prices — a local model, for instance —
+reports a `0`–`0` range. The preview is deterministic: the same body and policy
+always yield the same result.
+
+Only the owner may preview, and previewing needs no run: it acquires no lock and
+changes nothing, so it works even while a turn is in flight. An unknown,
+archived or another user's session responds `404` `session_not_found`, alike so
+existence stays private; a `session_id` that is not a valid UUID responds `400`
+`invalid_session_id`; and a request whose routing cannot resolve responds `422`
+(`no_route`, `context_window_exceeded`), `403` `override_not_allowed`, or `503`
+`fallback_exhausted`.
 
 ## Approvals
 

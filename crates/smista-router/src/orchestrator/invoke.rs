@@ -359,7 +359,7 @@ mod tests {
     use smista_core::model::{
         ModelAuthRequirement, ModelCapabilities, ModelDescriptor, ModelParameters,
     };
-    use smista_core::policy::{Classification, IntentSource};
+    use smista_core::policy::{Classification, IntentSource, ToolsConfig};
     use tokio::sync::mpsc;
 
     use super::*;
@@ -419,6 +419,7 @@ mod tests {
                 outcome: ContextOutcome::default(),
                 references: Vec::new(),
             },
+            required_permissions: ToolsConfig::default(),
         }
     }
 

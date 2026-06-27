@@ -21,7 +21,7 @@
 //! - [`ContextSelector::finalize`] runs *after*, trimming the set to the chosen
 //!   model's window without ever dropping a required candidate.
 
-mod estimator;
+pub(crate) mod estimator;
 
 use std::path::{Path, PathBuf};
 
@@ -408,7 +408,7 @@ fn supersedes(candidate: &Candidate, existing: &Candidate) -> bool {
 ///
 /// Every content field is plain text: the state machine opened any sealed rows
 /// before constructing this, so no crypto type appears here.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RecalledContext {
     /// The session's conversation history, oldest first.
     pub messages: Vec<RecalledMessage>,
