@@ -270,13 +270,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the session cannot be updated.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn update(&self, session: Session) -> SessionResult<Session> {
         self.database
             .update_session(self.user_id, session)
