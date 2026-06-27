@@ -308,13 +308,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the session cannot be deleted.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn delete(&self) -> SessionResult<()> {
         self.database
             .delete_session(self.user_id, self.session_id)
