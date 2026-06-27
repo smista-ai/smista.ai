@@ -19,7 +19,7 @@
     - [Policy](#policy)
     - [Execute the task](#execute-the-task)
     - [Advance a run](#advance-a-run)
-    - [Stream the task](#stream-the-task)
+    - [Streaming](#streaming)
     - [Preview a route](#preview-a-route)
   - [Approvals](#approvals)
   - [Traces](#traces)
@@ -570,8 +570,8 @@ set of continuation payloads.
 
 By default `/execute` buffers the turn as a single JSON `TurnResponse`. Send
 `Accept: text/event-stream` to stream it instead as the Server-Sent Events
-described under [Stream the task](#stream-the-task), ending with the terminal
-`turn_end` event that carries the same envelope.
+described under [Streaming](#streaming), ending with the terminal `turn_end`
+event that carries the same envelope.
 
 ### Advance a run
 
@@ -606,14 +606,11 @@ form `kind:id` (`message`, `tool_call`, `diff`, `plan`, `memory` or `trace`).
 }
 ```
 
-### Stream the task
+### Streaming
 
-```http
-POST /api/v1/sessions/{session_id}/stream
-```
-
-Same body as `/execute`, and `/continue` streams the same way when asked. The
-response is a stream (Server-Sent Events) of structured events:
+`/execute` and `/continue` buffer the turn as a single JSON `TurnResponse` by
+default. Send `Accept: text/event-stream` on either to receive the turn as a
+stream of Server-Sent Events instead, each a structured object with a `type`:
 
 ```json
 { "type": "text_delta", "delta": "The first step is..." }
@@ -632,11 +629,10 @@ the actual cost of the invocation. Local models report a zero cost.
 
 Every stream ends with exactly one `turn_end` event, whose `status` is the
 same value the buffered response carries (`completed`, `awaiting_tool`,
-`awaiting_approval`, `awaiting_decrypt`, `awaiting_encrypt`, `idle` or
-`error`). It
-tells the client whether the turn finished or paused for a continuation, so the
-client never has to infer it. Models that cannot stream still answer here: the
-full response is replayed as a short stream of the same events.
+`awaiting_approval`, `awaiting_decrypt`, `awaiting_encrypt`, `idle` or `error`).
+It tells the client whether the turn finished or paused for a continuation, so
+the client never has to infer it. Models that cannot stream still answer over
+this stream: the full response is replayed as a short stream of the same events.
 
 ### Preview a route
 

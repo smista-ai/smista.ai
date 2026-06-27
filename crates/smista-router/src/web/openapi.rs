@@ -86,7 +86,6 @@ impl Modify for SecurityAddon {
         routes::list_models,
         routes::execute,
         routes::continue_run,
-        routes::stream,
         routes::preview,
         routes::get_traces,
         routes::session_usage

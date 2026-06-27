@@ -1,7 +1,7 @@
 //! Request and response bodies for running a task in a session.
 //!
 //! [`ExecuteRequest`] is the input to `POST /sessions/{id}/execute` and,
-//! unchanged, to `/stream` and `/preview`: the user's input, the workspace
+//! unchanged, to `/preview`: the user's input, the workspace
 //! snapshot, the deterministic policy, local preferences, and the local
 //! [`Attachments`] (files, instructions and skills)
 //! the router cannot read for itself. Session history, memory and the assembled

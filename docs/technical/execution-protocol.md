@@ -166,13 +166,13 @@ the user sends the next prompt.
 ## Starting a run
 
 ```http
-POST /sessions/{session_id}/execute   # buffered
-POST /sessions/{session_id}/stream    # server-sent events
+POST /sessions/{session_id}/execute   # buffered, or streamed via Accept
 ```
 
-Both start a run from a new user prompt. `execute` returns the turn's outcome as
-one JSON body; `stream` returns it as a stream (see [Streaming](#streaming)).
-`preview` takes the same body but never calls a model.
+Starts a run from a new user prompt. `execute` returns the turn's outcome as one
+JSON body by default, or as server-sent events when the client sends
+`Accept: text/event-stream` (see [Streaming](#streaming)). `preview` takes the
+same body but never calls a model.
 
 ### Request body
 
@@ -512,7 +512,7 @@ sequenceDiagram
     participant Model
 
     User->>Client: prompt
-    Client->>Router: POST /stream (input, attachments, policy, ...)
+    Client->>Router: POST /execute, Accept: text/event-stream (input, attachments, policy, ...)
     Router->>Storage: persist user message; recall history + memory
     Router->>Router: classify -> select context -> select model -> finalize
     Router->>Model: invoke (stream)
@@ -601,7 +601,7 @@ sequenceDiagram
     participant Storage
     participant Model
 
-    Client->>Router: POST /stream (prompt plaintext + ciphertext)
+    Client->>Router: POST /execute, Accept: text/event-stream (prompt plaintext + ciphertext)
     Router->>Storage: persist user ciphertext
     Router->>Router: select relevant history (ciphertext)
     Router-->>Client: turn_end (awaiting_decrypt: to_decrypt map)
