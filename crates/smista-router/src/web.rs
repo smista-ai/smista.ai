@@ -435,6 +435,26 @@ pub(crate) mod test_support {
             .expect("failed to build request")
     }
 
+    /// Builds an empty `DELETE` request for `uri`.
+    pub(crate) fn delete(uri: &str) -> Request<Body> {
+        Request::builder()
+            .method(Method::DELETE)
+            .uri(uri)
+            .body(Body::empty())
+            .expect("failed to build request")
+    }
+
+    /// Builds an empty `DELETE` request for `uri` carrying `token` as a Bearer
+    /// credential in the `Authorization` header.
+    pub(crate) fn delete_with_token(uri: &str, token: &str) -> Request<Body> {
+        Request::builder()
+            .method(Method::DELETE)
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .expect("failed to build request")
+    }
+
     /// Builds a `POST` request for `uri` carrying `token` as a Bearer credential
     /// and `body` serialized as a JSON request body.
     pub(crate) fn post_json_with_token(

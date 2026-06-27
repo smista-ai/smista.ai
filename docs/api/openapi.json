@@ -524,8 +524,25 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Session deleted"
+          "200": {
+            "description": "Session deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid session id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing or invalid token",
@@ -538,7 +555,17 @@
             }
           },
           "404": {
-            "description": "Session not found",
+            "description": "Session not found or no access to session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
             "content": {
               "application/json": {
                 "schema": {
@@ -1846,6 +1873,19 @@
               "$ref": "#/components/schemas/ModelReference"
             },
             "description": "Models tried, in order, when the default model is unavailable."
+          }
+        }
+      },
+      "DeleteSessionResponse": {
+        "type": "object",
+        "description": "Response to `DELETE /sessions/{id}`, confirming deletion.",
+        "required": [
+          "deleted"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "description": "Whether the session was deleted."
           }
         }
       },
