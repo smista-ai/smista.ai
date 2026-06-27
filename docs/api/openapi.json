@@ -735,6 +735,16 @@
               }
             }
           },
+          "400": {
+            "description": "Malformed session id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid token",
             "content": {

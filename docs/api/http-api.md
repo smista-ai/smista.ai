@@ -568,6 +568,11 @@ The client does the work and resumes the run with [`/continue`](#advance-a-run).
 See the [execution protocol](../technical/execution-protocol.md) for the full
 set of continuation payloads.
 
+By default `/execute` buffers the turn as a single JSON `TurnResponse`. Send
+`Accept: text/event-stream` to stream it instead as the Server-Sent Events
+described under [Stream the task](#stream-the-task), ending with the terminal
+`turn_end` event that carries the same envelope.
+
 ### Advance a run
 
 ```http

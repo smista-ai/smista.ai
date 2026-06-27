@@ -524,6 +524,16 @@ pub(crate) mod test_support {
     /// what an authenticated endpoint persisted.
     pub(crate) async fn authenticated_router_with_database()
     -> (Router, String, uuid::Uuid, SurrealDatabase) {
+        authenticated_router_with_router(test_smista_router()).await
+    }
+
+    /// Like [`authenticated_router_with_database`] but routes through the given
+    /// [`SmistaRouter`](super::SmistaRouter), so a test can install a scripted
+    /// mock and drive the execution endpoints through a specific outcome (a tool
+    /// pause, a plan approval) rather than the default completing mock.
+    pub(crate) async fn authenticated_router_with_router(
+        router: Arc<super::SmistaRouter>,
+    ) -> (Router, String, uuid::Uuid, SurrealDatabase) {
         let database = test_database().await;
         let config = RouterConfig::default();
         let token_ttl = std::time::Duration::from_secs(config.auth.token_ttl_seconds);
@@ -541,7 +551,7 @@ pub(crate) mod test_support {
             authenticator,
             config: Arc::new(config),
             database: database.clone(),
-            router: test_smista_router(),
+            router,
         };
         (build_router(state), token, user.user_id, database)
     }
