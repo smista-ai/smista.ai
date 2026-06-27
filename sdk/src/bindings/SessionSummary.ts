@@ -17,6 +17,10 @@ title: string | null,
  */
 encrypted: boolean, 
 /**
+ * Key fingerprint of the per-session key, if the session is encrypted.
+ */
+key_id?: string, 
+/**
  * When the session was created.
  */
 created_at: string, 

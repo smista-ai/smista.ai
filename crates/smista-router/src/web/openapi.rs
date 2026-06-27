@@ -102,20 +102,29 @@ mod tests {
 
     use super::ApiDoc;
 
-    /// Serializes the OpenAPI document to `docs/api/openapi.json` at the workspace
-    /// root. Run by `just gen_openapi`; the committed artifact is the source the
-    /// drift gate (`just check_openapi`) compares against.
+    /// Serializes the OpenAPI document and writes it out. By default it writes
+    /// the committed artifact at `docs/api/openapi.json`; set the `OPENAPI_OUT`
+    /// environment variable to redirect it elsewhere. The drift gate
+    /// (`just check_openapi`) uses that to render the schema to a scratch file
+    /// and `diff` it against the committed one, so the check never depends on
+    /// git working-tree state.
     #[test]
     fn gen_openapi_schema() {
         let json = ApiDoc::openapi()
             .to_pretty_json()
             .expect("failed to serialize the OpenAPI document");
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.pop(); // crates/smista-router → crates/
-        path.pop(); // crates/ → workspace root
-        path.push("docs");
-        path.push("api");
-        path.push("openapi.json");
+        let path = match std::env::var_os("OPENAPI_OUT") {
+            Some(out) => PathBuf::from(out),
+            None => {
+                let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+                path.pop(); // crates/smista-router → crates/
+                path.pop(); // crates/ → workspace root
+                path.push("docs");
+                path.push("api");
+                path.push("openapi.json");
+                path
+            }
+        };
         std::fs::write(&path, format!("{json}\n"))
             .unwrap_or_else(|e| panic!("failed to write {}: {e}", path.display()));
     }

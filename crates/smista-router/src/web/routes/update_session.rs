@@ -127,6 +127,7 @@ pub(crate) async fn update_session(
         id: session_id,
         title: updated.title,
         encrypted: updated.encrypted,
+        key_id: updated.key_id,
         created_at: updated.created_at,
         updated_at: updated.updated_at,
         archived: updated.archived_at.is_some(),

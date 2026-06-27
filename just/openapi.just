@@ -6,5 +6,9 @@ gen_openapi:
 # Fail if the committed OpenAPI schema is out of date with the Rust types
 [group('openapi')]
 check_openapi:
-    cargo test -p smista-router --features openapi gen_openapi_schema
-    git diff --exit-code -- docs/api/openapi.json
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="$(mktemp)"
+    trap 'rm -f "$out"' EXIT
+    OPENAPI_OUT="$out" cargo test -p smista-router --features openapi gen_openapi_schema
+    diff -u docs/api/openapi.json "$out"
