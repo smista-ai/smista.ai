@@ -11,7 +11,7 @@ id: string,
 /**
  * Human-readable session title.
  */
-title: string, 
+title: string | null, 
 /**
  * Whether the session's content is end-to-end encrypted.
  */

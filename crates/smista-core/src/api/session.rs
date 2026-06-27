@@ -17,11 +17,10 @@
 //!
 //! let request = CreateSessionRequest {
 //!     title: "Refactor auth".to_string(),
-//!     encrypted: false,
 //!     key_id: None,
 //! };
 //! let json = serde_json::to_string(&request).unwrap();
-//! assert_eq!(json, r#"{"title":"Refactor auth","encrypted":false}"#);
+//! assert_eq!(json, r#"{"title":"Refactor auth"}"#);
 //! ```
 
 use chrono::{DateTime, Utc};
@@ -39,7 +38,7 @@ pub struct SessionSummary {
     /// Unique session identifier.
     pub id: Uuid,
     /// Human-readable session title.
-    pub title: String,
+    pub title: Option<String>,
     /// Whether the session's content is end-to-end encrypted.
     pub encrypted: bool,
     /// When the session was created.
@@ -78,11 +77,10 @@ pub struct SessionDetail {
 
 /// Body of `POST /sessions`. The title is mandatory.
 ///
-/// `encrypted` opts the session into end-to-end encryption and defaults to
-/// `false` when omitted. When it is `true`, `key_id` is required and names the
-/// fingerprint of the per-session key the client holds; when it is `false`,
-/// `key_id` must be absent. The pairing is validated by the router, not by this
-/// type. The choice is fixed for the life of the session.
+/// `key_id` opts the session into end-to-end encryption: a session is encrypted
+/// when, and only when, a `key_id` is present, naming the fingerprint of the
+/// per-session key the client holds. There is no separate `encrypted` flag, so
+/// the two can never disagree. The choice is fixed for the life of the session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -90,10 +88,8 @@ pub struct SessionDetail {
 pub struct CreateSessionRequest {
     /// Title for the new session.
     pub title: String,
-    /// Whether the new session is end-to-end encrypted.
-    #[serde(default)]
-    pub encrypted: bool,
-    /// Fingerprint of the per-session key, required when `encrypted` is `true`.
+    /// Fingerprint of the per-session key; its presence makes the session
+    /// end-to-end encrypted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub key_id: Option<String>,
@@ -158,7 +154,7 @@ mod tests {
     fn summary() -> SessionSummary {
         SessionSummary {
             id: Uuid::nil(),
-            title: "Refactor auth middleware".to_string(),
+            title: Some("Refactor auth middleware".to_string()),
             encrypted: false,
             created_at: timestamp(),
             updated_at: timestamp(),
@@ -218,19 +214,17 @@ mod tests {
     fn should_serialize_create_request() {
         let request = CreateSessionRequest {
             title: "Refactor auth".to_string(),
-            encrypted: false,
             key_id: None,
         };
         assert_eq!(
             serde_json::to_string(&request).unwrap(),
-            r#"{"title":"Refactor auth","encrypted":false}"#
+            r#"{"title":"Refactor auth"}"#
         );
     }
 
     #[test]
     fn should_default_encrypted_to_false_when_omitted() {
         let request: CreateSessionRequest = serde_json::from_str(r#"{"title":"x"}"#).unwrap();
-        assert!(!request.encrypted);
         assert_eq!(request.key_id, None);
     }
 
@@ -238,12 +232,11 @@ mod tests {
     fn should_serialize_encrypted_create_request_with_key_id() {
         let request = CreateSessionRequest {
             title: "secret".to_string(),
-            encrypted: true,
             key_id: Some("kf_ab12".to_string()),
         };
         assert_eq!(
             serde_json::to_string(&request).unwrap(),
-            r#"{"title":"secret","encrypted":true,"key_id":"kf_ab12"}"#
+            r#"{"title":"secret","key_id":"kf_ab12"}"#
         );
     }
 

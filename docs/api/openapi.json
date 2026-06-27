@@ -336,6 +336,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1768,7 +1778,7 @@
       },
       "CreateSessionRequest": {
         "type": "object",
-        "description": "Body of `POST /sessions`. The title is mandatory.\n\n`encrypted` opts the session into end-to-end encryption and defaults to\n`false` when omitted. When it is `true`, `key_id` is required and names the\nfingerprint of the per-session key the client holds; when it is `false`,\n`key_id` must be absent. The pairing is validated by the router, not by this\ntype. The choice is fixed for the life of the session.",
+        "description": "Body of `POST /sessions`. The title is mandatory.\n\n`key_id` opts the session into end-to-end encryption: a session is encrypted\nwhen, and only when, a `key_id` is present, naming the fingerprint of the\nper-session key the client holds. There is no separate `encrypted` flag, so\nthe two can never disagree. The choice is fixed for the life of the session.",
         "required": [
           "title"
         ],
@@ -1777,16 +1787,12 @@
             "type": "string",
             "description": "Title for the new session."
           },
-          "encrypted": {
-            "type": "boolean",
-            "description": "Whether the new session is end-to-end encrypted."
-          },
           "key_id": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Fingerprint of the per-session key, required when `encrypted` is `true`."
+            "description": "Fingerprint of the per-session key; its presence makes the session\nend-to-end encrypted."
           }
         }
       },
@@ -2964,7 +2970,6 @@
         "description": "Lightweight view of a session, used in listings and on creation.",
         "required": [
           "id",
-          "title",
           "encrypted",
           "created_at",
           "updated_at",
@@ -2977,7 +2982,10 @@
             "description": "Unique session identifier."
           },
           "title": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Human-readable session title."
           },
           "encrypted": {
