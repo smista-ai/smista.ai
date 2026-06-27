@@ -22,6 +22,7 @@ mod prompt;
 mod recall;
 mod registry;
 mod run_input;
+mod stream;
 #[cfg(test)]
 mod tests;
 mod tools;
@@ -51,13 +52,14 @@ use smista_storage::surrealdb::RecordId;
 use smista_storage::types::SecretContent;
 use uuid::Uuid;
 
-use self::error::OrchestratorError;
+pub(crate) use self::error::OrchestratorError;
 use self::persist::{
     persist_approval, persist_context_references, persist_routing_decision, persist_run_input,
     write_sealed_message, write_sealed_plan, write_sealed_tool_call,
 };
 use self::registry::{InFlightRegistry, TurnToken};
 use self::run_input::{RunInputBundle, RunInputMeta, rebuild_run_meta, split_execute_request};
+pub(crate) use self::stream::TurnSink;
 use self::turn::{
     AwaitingApprovalData, AwaitingToolData, BundleSource, CompletedData, TurnCx, TurnStep, run_turn,
 };
@@ -99,6 +101,8 @@ struct ContinuationCx<'a> {
     credentials: &'a HashMap<Provider, SecretString>,
     /// The in-flight turn token, for supersede and lock release.
     token: &'a TurnToken,
+    /// The live event sink for a streamed continuation, threaded into each turn.
+    sink: Option<&'a TurnSink>,
 }
 
 impl ContinuationCx<'_> {
@@ -160,10 +164,38 @@ impl Orchestrator {
         request: ExecuteRequest,
         credentials: HashMap<Provider, SecretString>,
     ) -> Result<TurnResponse, OrchestratorError> {
+        self.execute_streaming(user_id, session_id, request, credentials, None)
+            .await
+    }
+
+    /// Runs one `execute` turn, optionally streaming live events to `sink`.
+    ///
+    /// Identical to [`Self::execute`] but, when `sink` is set and the model can
+    /// stream, drives the turn from the model's live output, forwarding text and
+    /// reasoning deltas as they arrive.
+    ///
+    /// The whole turn runs inside a tracing span carrying the session and (once
+    /// admitted) run id, so every event the turn loop emits — down through
+    /// resolve, invoke and persistence — is attributable without each call
+    /// restating them. `skip_all` keeps the request and credentials out of the
+    /// span fields, so no secret is ever recorded.
+    #[tracing::instrument(
+        skip_all,
+        fields(session_id = %session_id, run_id = tracing::field::Empty)
+    )]
+    pub async fn execute_streaming(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+        request: ExecuteRequest,
+        credentials: HashMap<Provider, SecretString>,
+        sink: Option<TurnSink>,
+    ) -> Result<TurnResponse, OrchestratorError> {
         let sessions = Sessions::new(self.database.clone(), user_id);
         let session = sessions.open(session_id).await?;
 
         let (run_id, token) = self.acquire(&session, user_id, session_id).await?;
+        tracing::Span::current().record("run_id", tracing::field::display(run_id));
         tracing::debug!(%session_id, %run_id, "admitted execute request; lock acquired");
 
         let scope = MemoryScope {
@@ -206,6 +238,7 @@ impl Orchestrator {
             plan_active,
             encrypted,
             decrypted: &decrypted,
+            sink: sink.as_ref(),
         };
         let step = run_turn(&cx, ResumeStep::BuildPrompt, Vec::new()).await;
         let result = self
@@ -234,6 +267,31 @@ impl Orchestrator {
         continuation: ContinueRequest,
         credentials: HashMap<Provider, SecretString>,
     ) -> Result<TurnResponse, OrchestratorError> {
+        self.advance_streaming(user_id, session_id, continuation, credentials, None)
+            .await
+    }
+
+    /// Advances an in-flight run, optionally streaming live events to `sink`.
+    ///
+    /// Identical to [`Self::advance`] but, when `sink` is set and the resumed
+    /// turn's model can stream, drives it from the model's live output.
+    ///
+    /// Runs inside a tracing span carrying the session and (once recalled) run
+    /// id, so every event the continuation's turn loop emits is attributable
+    /// without each call restating them. `skip_all` keeps the continuation
+    /// payload and credentials out of the span fields, so no secret is recorded.
+    #[tracing::instrument(
+        skip_all,
+        fields(session_id = %session_id, run_id = tracing::field::Empty)
+    )]
+    pub async fn advance_streaming(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+        continuation: ContinueRequest,
+        credentials: HashMap<Provider, SecretString>,
+        sink: Option<TurnSink>,
+    ) -> Result<TurnResponse, OrchestratorError> {
         let sessions = Sessions::new(self.database.clone(), user_id);
         let session = sessions.open(session_id).await?;
 
@@ -245,6 +303,7 @@ impl Orchestrator {
         };
         let run_id = Uuid::parse_str(&state.run_id)
             .map_err(|_| OrchestratorError::Internal("stored run id is not a uuid".to_string()))?;
+        tracing::Span::current().record("run_id", tracing::field::display(run_id));
 
         let (input, content) = session
             .run_input()
@@ -294,6 +353,7 @@ impl Orchestrator {
             plan_active,
             credentials: &credentials,
             token: &token,
+            sink: sink.as_ref(),
         };
         // A rejected continuation falls back to this checkpoint rather than
         // resetting the run to idle, so the pause stays answerable.
@@ -788,6 +848,7 @@ impl Orchestrator {
             plan_active: cx.plan_active,
             encrypted: is_encrypted(cx.session).await?,
             decrypted,
+            sink: cx.sink,
         };
         Ok(run_turn(&turn_cx, resume, followups).await)
     }

@@ -12,9 +12,8 @@
 //! The reply is buffered as a single `TurnResponse` (`application/json`) by
 //! default, or streamed as [`TurnEvent`](smista_core::api::TurnEvent)
 //! Server-Sent Events when the client asks via `Accept: text/event-stream`. As
-//! with execute, a streamed request replays the buffered outcome as the same
-//! event vocabulary a live stream uses, terminated by the `turn_end` event that
-//! carries the full response.
+//! with execute, a streamed request is driven from the resumed turn's live model
+//! output, with the terminal events appended once it finishes.
 
 use std::sync::Arc;
 
@@ -29,7 +28,7 @@ use crate::orchestrator::Orchestrator;
 use crate::router::resolver::Resolver;
 use crate::web::error::WebError;
 use crate::web::middleware::RequestCredentials;
-use crate::web::streaming::{replay_events, sse_response, wants_event_stream};
+use crate::web::streaming::{stream_turn, wants_event_stream};
 use crate::web::{AppState, AuthenticatedUser};
 
 /// Handles `POST /api/v1/sessions/{session_id}/continue`.
@@ -93,11 +92,21 @@ pub(crate) async fn continue_run(
         Arc::new(Resolver::default()),
     );
 
+    if streaming {
+        // As with execute, a streamed continuation is driven on a spawned task so
+        // the resumed turn's deltas flush as they arrive.
+        let user_id = user.user_id;
+        return stream_turn(move |sink| async move {
+            orchestrator
+                .advance_streaming(user_id, session_id, request, credentials, Some(sink))
+                .await
+        });
+    }
+
     match orchestrator
         .advance(user.user_id, session_id, request, credentials)
         .await
     {
-        Ok(response) if streaming => sse_response(&replay_events(response)),
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => WebError::from(error).into_response(),
     }
@@ -109,7 +118,7 @@ mod tests {
 
     use axum::Router;
     use axum::body::Body;
-    use axum::http::{Request, StatusCode};
+    use axum::http::{Method, Request, StatusCode, header};
     use smista_core::api::{
         ApprovalDecision, ApprovalDecisionEntry, Attachments, ContinueRequest, ExecutePolicy,
         ExecuteRequest, LocalPreferences, TaskInput, ToolResult, Workspace,
@@ -125,7 +134,7 @@ mod tests {
     use crate::router::Router as SmistaRouter;
     use crate::web::test_support::{
         authenticated_router_with_database, authenticated_router_with_router, post,
-        post_json_with_token, send, send_status,
+        post_json_with_token, send, send_raw, send_status, sse_events,
     };
 
     /// Creates a session for the authenticated user and returns its id, so a
@@ -218,6 +227,69 @@ mod tests {
             token,
             &serde_json::to_value(body).expect("failed to serialize continue body"),
         )
+    }
+
+    /// Builds a `POST` request with an explicit `Accept` for streaming.
+    fn streaming_post(uri: &str, token: &str, body: &serde_json::Value) -> Request<Body> {
+        Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::ACCEPT, "text/event-stream")
+            .body(Body::from(
+                serde_json::to_vec(body).expect("serialize body"),
+            ))
+            .expect("build request")
+    }
+
+    #[tokio::test]
+    async fn should_stream_a_continuation_to_completion() {
+        // The execute turn pauses on an allowed tool; the streamed continuation
+        // feeds the result back and the resumed turn streams to completion.
+        let router = Arc::new(SmistaRouter::mock_scripted(vec![tool_call_response(
+            "read_file",
+        )]));
+        let (router, token, _user_id, _db) = authenticated_router_with_router(router).await;
+        let session_id = create_session(router.clone(), &token).await;
+
+        let mut request = execute_request();
+        request.policy.tools.set("read_file", PermissionMode::Allow);
+
+        let (status, body) = send(router.clone(), execute_post(session_id, &token, &request)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "awaiting_tool");
+        let call_id = body["data"]["tool_requests"][0]["call_id"]
+            .as_str()
+            .expect("call_id missing")
+            .to_string();
+
+        let continuation = ContinueRequest::ToolResults {
+            results: vec![ToolResult {
+                call_id,
+                content: "file body".to_string(),
+                is_error: false,
+                decision: None,
+            }],
+            encrypted: Default::default(),
+        };
+
+        let (status, content_type, raw) = send_raw(
+            router,
+            streaming_post(
+                &format!("/api/v1/sessions/{session_id}/continue"),
+                &token,
+                &serde_json::to_value(&continuation).expect("serialize continuation"),
+            ),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert!(content_type.starts_with("text/event-stream"));
+        let events = sse_events(&raw);
+        let last = events.last().expect("stream had no events");
+        assert_eq!(last["type"], "turn_end");
+        assert_eq!(last["status"], "completed");
     }
 
     #[tokio::test]

@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use futures::stream;
+use smista_core::error::{ProviderError, ProviderErrorCategory};
 use smista_core::model::{
     ModelAuthRequirement, ModelCapabilities, ModelDescriptor, ModelParameters, ModelReference,
     Provider as ProviderId, ProviderDescriptor,
@@ -47,6 +48,10 @@ pub(super) struct MockProvider {
     model: String,
     /// Pre-built completions returned in order; empty means the fixed response.
     script: Script,
+    /// Whether the model advertises the streaming capability.
+    streaming: bool,
+    /// Whether `stream` yields a single transport error instead of events.
+    stream_error: bool,
 }
 
 impl MockProvider {
@@ -63,6 +68,8 @@ impl MockProvider {
             local,
             model: model.into(),
             script: Arc::new(Mutex::new(VecDeque::new())),
+            streaming: true,
+            stream_error: false,
         }
     }
 
@@ -73,6 +80,20 @@ impl MockProvider {
     #[cfg(test)]
     pub(super) fn with_script(mut self, responses: Vec<CompletionResponse>) -> Self {
         self.script = Arc::new(Mutex::new(VecDeque::from(responses)));
+        self
+    }
+
+    /// Sets whether the model advertises the streaming capability.
+    #[cfg(test)]
+    pub(super) fn with_streaming(mut self, streaming: bool) -> Self {
+        self.streaming = streaming;
+        self
+    }
+
+    /// Makes `stream` yield a single transport error, for the mid-stream-error path.
+    #[cfg(test)]
+    pub(super) fn with_stream_error(mut self, stream_error: bool) -> Self {
+        self.stream_error = stream_error;
         self
     }
 
@@ -89,7 +110,7 @@ impl MockProvider {
                 ModelAuthRequirement::ApiKey
             },
             capabilities: ModelCapabilities {
-                streaming: true,
+                streaming: self.streaming,
                 tools: true,
                 json_output: true,
                 system_prompt: true,
@@ -140,6 +161,7 @@ impl Provider for MockProvider {
             descriptor: self.descriptor_for(reference),
             reference: reference.clone(),
             script: self.script.clone(),
+            stream_error: self.stream_error,
         }))
     }
 
@@ -163,6 +185,8 @@ struct MockModel {
     descriptor: ModelDescriptor,
     /// The shared script; each completion pops the next entry, if any.
     script: Script,
+    /// Whether `stream` yields a single transport error instead of events.
+    stream_error: bool,
 }
 
 #[async_trait]
@@ -193,12 +217,159 @@ impl Model for MockModel {
     }
 
     async fn stream(&self, _request: CompletionRequest) -> ProviderResult<ResponseStream> {
-        let events = stream::iter(vec![
-            Ok(StreamEvent::TextDelta {
-                delta: MOCK_RESPONSE.to_string(),
-            }),
-            Ok(StreamEvent::Done),
-        ]);
-        Ok(ResponseStream::new(events))
+        if self.stream_error {
+            let error = ProviderError {
+                category: ProviderErrorCategory::ProviderUnavailable,
+                message: "mock stream failure".to_string(),
+                provider: self.reference.provider.clone(),
+                model: Some(self.reference.model.clone()),
+            };
+            return Ok(ResponseStream::new(stream::iter(vec![Err(error)])));
+        }
+        let events = match self
+            .script
+            .lock()
+            .expect("mock script poisoned")
+            .pop_front()
+        {
+            Some(scripted) => render_completion(scripted),
+            None => canned_stream(),
+        };
+        Ok(ResponseStream::new(stream::iter(
+            events.into_iter().map(Ok),
+        )))
+    }
+}
+
+/// Renders a scripted completion as the stream a streaming model would produce.
+///
+/// Content is split into two chunks so a test can observe incremental delivery;
+/// each tool call becomes a `tool_call_started` then `tool_call_requested` pair.
+fn render_completion(response: CompletionResponse) -> Vec<StreamEvent> {
+    let mut events = Vec::new();
+    for chunk in chunk_in_two(&response.content) {
+        events.push(StreamEvent::TextDelta { delta: chunk });
+    }
+    for call in response.tool_calls {
+        events.push(StreamEvent::ToolCallStarted {
+            call_id: call.call_id.clone(),
+            name: call.name.clone(),
+        });
+        events.push(StreamEvent::ToolCallRequested {
+            call_id: call.call_id,
+            name: call.name,
+            arguments: call.arguments,
+        });
+    }
+    events.push(StreamEvent::Usage(response.usage));
+    events.push(StreamEvent::Done);
+    events
+}
+
+/// The default stream when nothing is scripted: a reasoning delta and two text
+/// deltas that aggregate to [`MOCK_RESPONSE`], plus usage and a terminal marker.
+fn canned_stream() -> Vec<StreamEvent> {
+    vec![
+        StreamEvent::ReasoningDelta {
+            delta: "thinking...".to_string(),
+        },
+        StreamEvent::TextDelta {
+            delta: "mock ".to_string(),
+        },
+        StreamEvent::TextDelta {
+            delta: "response".to_string(),
+        },
+        StreamEvent::Usage(Usage::default()),
+        StreamEvent::Done,
+    ]
+}
+
+/// Splits `text` into two character-balanced chunks; one chunk (or none) when it
+/// is too short to split.
+fn chunk_in_two(text: &str) -> Vec<String> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() < 2 {
+        return vec![text.to_string()];
+    }
+    let mid = chars.len() / 2;
+    vec![chars[..mid].iter().collect(), chars[mid..].iter().collect()]
+}
+
+#[cfg(test)]
+mod tests {
+    use futures::StreamExt as _;
+    use smista_core::model::Provider as ProviderId;
+    use smista_providers::auth::Authentication;
+    use smista_providers::memory::MemoryScope;
+
+    use super::*;
+
+    fn scope() -> MemoryScope {
+        MemoryScope {
+            user_id: uuid::Uuid::nil(),
+            session_id: uuid::Uuid::nil(),
+        }
+    }
+
+    async fn resolve(provider: MockProvider) -> Arc<dyn Model> {
+        let reference = provider.reference();
+        provider
+            .resolve(&reference, &Authentication::None, scope(), &[])
+            .await
+            .expect("resolve")
+    }
+
+    #[tokio::test]
+    async fn should_stream_canned_response_as_reasoning_and_multiple_text_deltas() {
+        let model = resolve(MockProvider::new(
+            ProviderId::Ollama,
+            "Mock",
+            true,
+            "mock-local",
+        ))
+        .await;
+        let events: Vec<_> = model
+            .stream(CompletionRequest::default())
+            .await
+            .expect("stream")
+            .collect()
+            .await;
+        let events: Vec<StreamEvent> = events.into_iter().map(|e| e.expect("event")).collect();
+
+        let text_deltas = events
+            .iter()
+            .filter(|e| matches!(e, StreamEvent::TextDelta { .. }))
+            .count();
+        assert!(
+            text_deltas >= 2,
+            "expected >=2 text deltas, got {text_deltas}"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, StreamEvent::ReasoningDelta { .. })),
+            "expected a reasoning delta"
+        );
+        assert!(matches!(events.last(), Some(StreamEvent::Done)));
+    }
+
+    #[tokio::test]
+    async fn should_stream_an_error_when_configured() {
+        let model = resolve(
+            MockProvider::new(ProviderId::Ollama, "Mock", true, "mock-local")
+                .with_stream_error(true),
+        )
+        .await;
+        let first = model
+            .stream(CompletionRequest::default())
+            .await
+            .expect("stream")
+            .next()
+            .await
+            .expect("an item");
+        assert!(first.is_err(), "expected a transport error item");
     }
 }

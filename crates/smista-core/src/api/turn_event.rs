@@ -1,6 +1,6 @@
 //! Streaming events for a turn delivered over Server-Sent Events.
 //!
-//! `/stream`, and `/continue` when the client asks for streaming, deliver a turn
+//! `/continue` when the client asks for streaming, deliver a turn
 //! as a sequence of [`TurnEvent`]s: incremental text and reasoning, tool-call
 //! activity, usage, and a terminal [`TurnEnd`](TurnEvent::TurnEnd) carrying the
 //! turn's [`TurnResponse`]. The terminal event names the outcome, so the client

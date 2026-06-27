@@ -19,6 +19,7 @@ anyhow = { workspace = true }
 argon2 = { workspace = true, features = ["password-hash"] }
 axum = { workspace = true, features = ["http1", "http2", "json", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing"] }
 chrono = { workspace = true, features = ["serde"] }
+futures = { workspace = true }
 globset = { workspace = true }
 password-hash = { workspace = true }
 rand = { workspace = true }
@@ -45,7 +46,6 @@ uuid = { workspace = true, features = ["v7"] }
 [dev-dependencies]
 async-trait = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
-futures = { workspace = true }
 serde_json = { workspace = true }
 surrealdb = { workspace = true, features = ["kv-mem"] }
 tempfile = { workspace = true }

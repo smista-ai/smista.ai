@@ -28,7 +28,7 @@ use uuid::Uuid;
 
 use crate::orchestrator::cost::priced;
 use crate::orchestrator::error::OrchestratorError;
-use crate::orchestrator::invoke::invoke_complete;
+use crate::orchestrator::invoke::invoke;
 use crate::orchestrator::mediation::mediate;
 use crate::orchestrator::persist::{
     persist_plaintext_message, persist_plan_draft, persist_tool_request,
@@ -86,6 +86,9 @@ pub(crate) struct TurnCx<'a> {
     /// a plaintext session; on an encrypted session it carries the plaintext that
     /// lets recall build the prompt without re-pausing for decryption.
     pub(crate) decrypted: &'a BTreeMap<ContentRef, String>,
+    /// The live event sink for a streamed turn. `None` for a buffered turn; when
+    /// set, the invoke step forwards text and reasoning deltas as they arrive.
+    pub(crate) sink: Option<&'a crate::orchestrator::stream::TurnSink>,
 }
 
 /// Where a turn's run-input bundle comes from.
@@ -339,13 +342,14 @@ async fn run_turn_inner(
             tools,
             tool_choice,
         };
-        let response = invoke_complete(
+        let response = invoke(
             cx.router,
             &resolved,
             cx.credentials,
             cx.scope,
             request,
             cx.cancel.cancellation(),
+            cx.sink,
         )
         .await?;
 
