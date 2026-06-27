@@ -66,7 +66,7 @@ pub use llm::{ListModelsResponse, ListProvidersResponse, UnavailableProvider};
 pub use preview::{CostRange, PreviewResponse, RequiredPermission};
 pub use session::{
     CreateSessionRequest, CreateSessionResponse, DeleteSessionResponse, GetSessionResponse,
-    SessionDetail, SessionSummary, UpdateSessionRequest,
+    MessageContent, SessionDetail, SessionMessageDetail, SessionSummary, UpdateSessionRequest,
 };
 pub use status::StatusResponse;
 pub use trace::TraceResponse;

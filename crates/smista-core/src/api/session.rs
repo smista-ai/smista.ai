@@ -27,7 +27,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::message::Message;
+use super::EncryptedPayload;
+use crate::message::MessageRole;
+use crate::model::Provider;
 
 /// Lightweight view of a session, used in listings and on creation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +49,51 @@ pub struct SessionSummary {
     pub updated_at: DateTime<Utc>,
     /// Whether the session is archived.
     pub archived: bool,
+}
+
+/// A session message's content, in clear or sealed.
+///
+/// A non-encrypted session yields [`Plaintext`](Self::Plaintext) with the
+/// message text. An end-to-end encrypted session yields
+/// [`Encrypted`](Self::Encrypted) with the sealed [`EncryptedPayload`] envelope;
+/// the router holds no key, so only a client holding the session key can open it
+/// back into the message text. This mirrors
+/// [`TraceEventPayload`](crate::trace::TraceEventPayload) for message bodies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", ts(export))]
+pub enum MessageContent {
+    /// The message text in clear, for a non-encrypted session.
+    Plaintext(String),
+    /// The message sealed as an AEAD envelope, for an encrypted session.
+    Encrypted(EncryptedPayload),
+}
+
+/// One message in a fetched [`SessionDetail`], in clear or sealed.
+///
+/// Mirrors [`Message`](crate::message::Message) but carries its `content` as a
+/// [`MessageContent`], so an end-to-end encrypted session can return its sealed
+/// body without the router ever holding the key. `provider` and `model` name the
+/// model that produced an assistant turn and are absent for the other roles.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "ts", ts(export))]
+pub struct SessionMessageDetail {
+    /// The role of the message's author.
+    pub role: MessageRole,
+    /// The message content, in clear or sealed.
+    pub content: MessageContent,
+    /// Provider that produced the message, if applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub provider: Option<Provider>,
+    /// Model that produced the message, if applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub model: Option<String>,
 }
 
 /// Full view of a session, returned when it is fetched to be resumed.
@@ -69,7 +116,7 @@ pub struct SessionDetail {
     /// When the session was last updated.
     pub updated_at: DateTime<Utc>,
     /// The session's conversation history.
-    pub messages: Vec<Message>,
+    pub messages: Vec<SessionMessageDetail>,
     /// Free-form session metadata.
     #[cfg_attr(feature = "openapi", schema(value_type = Object, nullable = true))]
     pub metadata: serde_json::Value,
@@ -171,6 +218,16 @@ mod tests {
         assert_eq!(value["archived"], false);
     }
 
+    fn envelope() -> EncryptedPayload {
+        EncryptedPayload {
+            version: 1,
+            algorithm: "xchacha20poly1305".to_string(),
+            key_id: "kf_ab12".to_string(),
+            nonce: "bm9uY2U".to_string(),
+            ciphertext: "Y2lwaGVydGV4dA".to_string(),
+        }
+    }
+
     #[test]
     fn should_roundtrip_session_detail() {
         let detail = SessionDetail {
@@ -179,13 +236,71 @@ mod tests {
             encrypted: false,
             created_at: timestamp(),
             updated_at: timestamp(),
-            messages: Vec::new(),
+            messages: vec![
+                SessionMessageDetail {
+                    role: MessageRole::User,
+                    content: MessageContent::Plaintext("Refactor the auth middleware.".to_string()),
+                    provider: None,
+                    model: None,
+                },
+                SessionMessageDetail {
+                    role: MessageRole::Assistant,
+                    content: MessageContent::Plaintext("Here is the plan...".to_string()),
+                    provider: Some(Provider::Anthropic),
+                    model: Some("claude-sonnet".to_string()),
+                },
+            ],
             metadata: serde_json::json!({}),
         };
         let json = serde_json::to_string(&detail).unwrap();
         assert_eq!(
             serde_json::from_str::<SessionDetail>(&json).unwrap(),
             detail
+        );
+    }
+
+    #[test]
+    fn should_serialize_plaintext_message_content_as_clear_text() {
+        let content = MessageContent::Plaintext("hello".to_string());
+        assert_eq!(
+            serde_json::to_value(&content).unwrap(),
+            serde_json::json!({ "plaintext": "hello" })
+        );
+    }
+
+    #[test]
+    fn should_serialize_encrypted_message_content_as_a_sealed_envelope() {
+        let content = MessageContent::Encrypted(envelope());
+        let value = serde_json::to_value(&content).unwrap();
+        assert_eq!(value["encrypted"]["key_id"], "kf_ab12");
+        assert_eq!(value["encrypted"]["ciphertext"], "Y2lwaGVydGV4dA");
+    }
+
+    #[test]
+    fn should_omit_provider_and_model_for_a_non_assistant_message() {
+        let message = SessionMessageDetail {
+            role: MessageRole::User,
+            content: MessageContent::Plaintext("hello".to_string()),
+            provider: None,
+            model: None,
+        };
+        let value = serde_json::to_value(&message).unwrap();
+        assert!(value.get("provider").is_none());
+        assert!(value.get("model").is_none());
+    }
+
+    #[test]
+    fn should_roundtrip_a_sealed_message() {
+        let message = SessionMessageDetail {
+            role: MessageRole::Assistant,
+            content: MessageContent::Encrypted(envelope()),
+            provider: Some(Provider::Anthropic),
+            model: Some("claude-sonnet".to_string()),
+        };
+        let json = serde_json::to_string(&message).unwrap();
+        assert_eq!(
+            serde_json::from_str::<SessionMessageDetail>(&json).unwrap(),
+            message
         );
     }
 

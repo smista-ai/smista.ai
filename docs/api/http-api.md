@@ -204,7 +204,9 @@ DELETE /api/v1/sessions/{session_id}     # delete
 ```
 
 All session routes require `Authorization: Bearer <session-token>`. A user can
-only access their own sessions; another user's session returns `403`.
+only access their own sessions. A session that belongs to another user is
+treated as if it did not exist and returns `404`, so the API never reveals that
+someone else's session exists.
 
 ### Create a session
 
@@ -271,8 +273,16 @@ summary. A summary's `title` may be `null` for a session that has none:
 GET /api/v1/sessions/{session_id}
 ```
 
-Returns the full session, including its messages and free-form metadata. An
-archived session is not returned here; use the list endpoint to find it.
+Returns the full session, including its messages and free-form metadata.
+`messages` are ordered oldest first, and `metadata` is always present even when
+empty. An archived session is not returned here, and neither is a session owned
+by another user; both respond `404`, the same as an unknown id.
+
+Each message's `content` is tagged with how it is stored. A plaintext session
+returns `{ "plaintext": "..." }`; an end-to-end encrypted session returns
+`{ "encrypted": { ... } }` with the sealed envelope, since the router holds no
+key and cannot open it. `provider` and `model` name the model behind an
+assistant turn and are omitted for the other roles.
 
 ```json
 {
@@ -283,13 +293,21 @@ archived session is not returned here; use the list endpoint to find it.
     "created_at": "2026-05-25T09:00:00Z",
     "updated_at": "2026-05-25T09:30:00Z",
     "messages": [
-      { "role": "user", "content": "Refactor the auth middleware." },
-      { "role": "assistant", "content": "Here is the plan..." }
+      { "role": "user", "content": { "plaintext": "Refactor the auth middleware." } },
+      {
+        "role": "assistant",
+        "content": { "plaintext": "Here is the plan..." },
+        "provider": "anthropic",
+        "model": "claude-sonnet"
+      }
     ],
     "metadata": {}
   }
 }
 ```
+
+A malformed `session_id` that is not a valid UUID responds `400` with
+`invalid_session_id`.
 
 ### Update a session
 
@@ -907,6 +925,7 @@ alongside for convenience.
 | `invalid_provider_credentials`    | 503    | Provider rejected the configured credentials.                                                                                                          |
 | `invalid_provider_name`           | 422    | A provider identifier in a model or routing reference was not in the expected form.                                                                    |
 | `invalid_request`                 | 422    | Provider rejected the request body as malformed.                                                                                                       |
+| `invalid_session_id`              | 400    | A session id in the path was not a valid UUID.                                                                                                         |
 | `invalid_token`                   | 401    | Session token is malformed or unknown.                                                                                                                 |
 | `missing_capability`              | 422    | Selected model lacks a capability the task requires.                                                                                                   |
 | `missing_credentials`             | 401    | No credential was presented: a session token on a protected endpoint, or the `X-Smista-Api-Key` header on `POST /auth/sign-in`.                        |
@@ -924,6 +943,7 @@ alongside for convenience.
 | `request_timeout`                 | 504    | Call to the provider timed out before a response was returned.                                                                                         |
 | `routing_unsupported_capability`  | 422    | Routing rejected the selected model because it lacks a required capability.                                                                            |
 | `run_in_flight`                   | 409    | A turn is already in flight for the session; the run is busy until it reaches a checkpoint.                                                            |
+| `session_not_found`               | 404    | The session does not exist, is archived, or belongs to another user; the three are reported alike so existence stays private.                          |
 | `storage_error`                   | 502    | An error occurred while reading or writing from memory storage.                                                                                        |
 | `token_expired`                   | 401    | Session token is past its expiry timestamp.                                                                                                            |
 | `token_revoked`                   | 401    | Session token was previously valid but has been revoked.                                                                                               |
