@@ -1,8 +1,7 @@
 //! Response body wrapping an execution trace.
 //!
-//! [`TraceResponse`] is returned by both `GET /sessions/{id}/traces/latest` and
-//! `GET /sessions/{id}/traces/{trace_id}`, wrapping the [`Trace`] under a
-//! `trace` key.
+//! [`TraceResponse`] is returned by `GET /sessions/{id}/traces`, wrapping the
+//! [`Trace`] under a `trace` key.
 //!
 //! # Examples
 //!
