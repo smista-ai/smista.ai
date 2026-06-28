@@ -1098,6 +1098,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid session id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing or invalid token",
             "content": {
@@ -1110,6 +1120,16 @@
           },
           "404": {
             "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
             "content": {
               "application/json": {
                 "schema": {
@@ -3202,18 +3222,28 @@
         "type": "object",
         "description": "Response to `GET /sessions/{id}/usage`.",
         "required": [
-          "session_id",
-          "usage"
+          "total",
+          "by_model",
+          "by_task_type"
         ],
         "properties": {
-          "session_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Session the usage belongs to."
+          "total": {
+            "$ref": "#/components/schemas/Usage",
+            "description": "Combined usage across the whole session."
           },
-          "usage": {
-            "$ref": "#/components/schemas/UsageBreakdown",
-            "description": "Usage totals and breakdowns."
+          "by_model": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelUsage"
+            },
+            "description": "Usage attributed to each model."
+          },
+          "by_task_type": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskTypeUsage"
+            },
+            "description": "Usage attributed to each task type."
           }
         }
       },
@@ -4190,35 +4220,6 @@
               "null"
             ],
             "description": "ISO 4217 currency code for the costs; defaults to `USD` when absent."
-          }
-        }
-      },
-      "UsageBreakdown": {
-        "type": "object",
-        "description": "A session's usage total and its per-model and per-task-type breakdowns.",
-        "required": [
-          "total",
-          "by_model",
-          "by_task_type"
-        ],
-        "properties": {
-          "total": {
-            "$ref": "#/components/schemas/Usage",
-            "description": "Combined usage across the whole session."
-          },
-          "by_model": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ModelUsage"
-            },
-            "description": "Usage attributed to each model."
-          },
-          "by_task_type": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TaskTypeUsage"
-            },
-            "description": "Usage attributed to each task type."
           }
         }
       },

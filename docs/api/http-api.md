@@ -875,44 +875,57 @@ missing, zero or non-numeric value falls back to the default.
 GET /api/v1/sessions/{session_id}/usage
 ```
 
-Reports the session total plus per-model and per-task-type breakdowns. Cost
-fields are decimal strings; tokens absent from a provider's report are omitted:
+Reports the session total plus a per-model and a per-task-type breakdown,
+aggregated from the session's cost events in one read. The top-level `total`,
+`by_model` and `by_task_type` are returned directly, with no enclosing wrapper.
+Each `by_model` entry carries its `provider`, `model` and `request_count`, and
+each `by_task_type` entry its `task_type` and `request_count`. Cost fields are
+decimal strings priced in `USD`, and a token count the provider never reported
+is omitted rather than guessed:
 
 ```json
 {
-  "session_id": "00000000-0000-0000-0000-000000000000",
-  "usage": {
-    "total": {
-      "input_tokens": 12000,
-      "output_tokens": 4200,
-      "total_tokens": 16200,
-      "estimated_cost": "0.42",
-      "currency": "USD"
-    },
-    "by_model": [
-      {
-        "provider": "openai",
-        "model": "gpt-5.5-thinking",
-        "input_tokens": 8000,
-        "output_tokens": 2200,
-        "total_tokens": 10200,
-        "estimated_cost": "0.31",
-        "currency": "USD",
-        "request_count": 3
-      }
-    ],
-    "by_task_type": [
-      {
-        "task_type": "plan",
-        "input_tokens": 4000,
-        "output_tokens": 1200,
-        "estimated_cost": "0.18",
-        "request_count": 1
-      }
-    ]
-  }
+  "total": {
+    "input_tokens": 12000,
+    "output_tokens": 4200,
+    "total_tokens": 16200,
+    "estimated_cost": "0.42",
+    "currency": "USD"
+  },
+  "by_model": [
+    {
+      "provider": "openai",
+      "model": "gpt-5.5-thinking",
+      "input_tokens": 8000,
+      "output_tokens": 2200,
+      "total_tokens": 10200,
+      "estimated_cost": "0.31",
+      "currency": "USD",
+      "request_count": 3
+    }
+  ],
+  "by_task_type": [
+    {
+      "task_type": "plan",
+      "input_tokens": 4000,
+      "output_tokens": 1200,
+      "estimated_cost": "0.18",
+      "request_count": 1
+    }
+  ]
 }
 ```
+
+Only the owner may read a session's usage. An unknown, archived or another
+user's session responds `404` `session_not_found`, reported alike so existence
+stays private; a `session_id` that is not a valid UUID responds `400`
+`invalid_session_id`. A session that exists but has recorded no cost yet answers
+`200` with an empty `by_model` and `by_task_type`.
+
+In an end-to-end encrypted session the cost figures are sealed and the router
+holds no key, so it reports each request's `provider`, `model` and `task_type`
+from the plaintext metadata and its `request_count`, but omits the token and
+cost fields it cannot read.
 
 ## Errors
 

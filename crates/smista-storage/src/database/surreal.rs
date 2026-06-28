@@ -7,7 +7,9 @@ mod schema;
 mod tests;
 
 use chrono::{DateTime, Duration, Utc};
-use smista_core::trace::{Payload, Trace, TraceEvent as CoreTraceEvent, TraceEventPayload};
+use smista_core::trace::{
+    Payload, Trace, TraceEvent as CoreTraceEvent, TraceEventPayload, TraceEventType,
+};
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::opt::auth::Namespace;
@@ -424,6 +426,59 @@ impl SurrealDatabase {
                 Err(err.into())
             }
         }
+    }
+
+    /// Pairs each trace event with its stored content and maps the rows to the
+    /// core read-model events, oldest first.
+    ///
+    /// The `_content` payload shares each event's record key, so only the rows
+    /// paired with `events` are fetched. A plaintext payload is parsed into the
+    /// typed [`Payload`]; an encrypted one is surfaced as its sealed envelope,
+    /// since storage holds no key and so cannot open it.
+    async fn assemble_trace_events(
+        &self,
+        events: Vec<TraceEvent>,
+    ) -> StorageResult<Vec<CoreTraceEvent>> {
+        let content_ids: Vec<RecordId> = events
+            .iter()
+            .map(|event| RecordId::new(TraceEventContent::name(), event.id.key.clone()))
+            .collect();
+        let contents: Vec<TraceEventContent> = self
+            .0
+            .query("SELECT * FROM $content_table WHERE id IN $ids")
+            .bind(("content_table", TraceEventContent::table()))
+            .bind(("ids", content_ids))
+            .await?
+            .take(0)?;
+
+        events
+            .into_iter()
+            // A paired write is transactional, so a base row without its content
+            // only happens on an externally tampered store; skip it.
+            .filter_map(|event| {
+                let content = contents
+                    .iter()
+                    .find(|content| content.id.key == event.id.key)?;
+                let payload = match &content.content {
+                    SecretContent::Plaintext(json) => {
+                        serde_json::from_str::<Payload>(json).map(TraceEventPayload::Plaintext)
+                    }
+                    SecretContent::Encrypted(envelope) => {
+                        Ok(TraceEventPayload::Encrypted(envelope.clone().into()))
+                    }
+                };
+                Some(payload.map(|payload| CoreTraceEvent {
+                    event_type: event.event_type,
+                    task_type: event.task_type,
+                    provider: event.provider,
+                    model: event.model,
+                    matched_rule: event.matched_rule,
+                    created_at: event.created_at,
+                    payload,
+                }))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(StorageError::from)
     }
 }
 
@@ -1076,57 +1131,48 @@ impl Database for SurrealDatabase {
             .await?
             .take(0)?;
 
-        // The `_content` payloads share each event's record key; fetch only the
-        // rows paired with this page rather than the whole session.
-        let content_ids: Vec<RecordId> = events
-            .iter()
-            .map(|event| RecordId::new(TraceEventContent::name(), event.id.key.clone()))
-            .collect();
-        let contents: Vec<TraceEventContent> = self
-            .0
-            .query("SELECT * FROM $content_table WHERE id IN $ids")
-            .bind(("content_table", TraceEventContent::table()))
-            .bind(("ids", content_ids))
-            .await?
-            .take(0)?;
-
-        // Map each storage row (metadata + paired content) to the core read-model
-        // event. A plaintext payload is parsed into the typed `Payload`; an
-        // encrypted one is surfaced as its sealed envelope, since storage holds
-        // no key and so cannot open it.
-        let mut read = Vec::with_capacity(events.len());
-        for event in events {
-            let Some(content) = contents
-                .iter()
-                .find(|content| content.id.key == event.id.key)
-            else {
-                // A paired write is transactional, so a base row without its
-                // content only happens on an externally tampered store; skip it.
-                continue;
-            };
-            let payload = match &content.content {
-                SecretContent::Plaintext(json) => {
-                    TraceEventPayload::Plaintext(serde_json::from_str::<Payload>(json)?)
-                }
-                SecretContent::Encrypted(envelope) => {
-                    TraceEventPayload::Encrypted(envelope.clone().into())
-                }
-            };
-            read.push(CoreTraceEvent {
-                event_type: event.event_type,
-                task_type: event.task_type,
-                provider: event.provider,
-                model: event.model,
-                matched_rule: event.matched_rule,
-                created_at: event.created_at,
-                payload,
-            });
-        }
+        let read = self.assemble_trace_events(events).await?;
 
         Ok(Some(Trace {
             session_id,
             events: read,
         }))
+    }
+
+    async fn get_session_cost_events(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> StorageResult<Option<Vec<CoreTraceEvent>>> {
+        tracing::debug!("loading cost trace events for session {session_id} and user {user_id}");
+
+        // An archived session is treated as gone: its events are never returned,
+        // so the caller cannot tell it apart from an unknown or non-owned one.
+        let Some(session) = self
+            .get_session(user_id, session_id)
+            .await?
+            .filter(|session| session.archived_at.is_none())
+        else {
+            return Ok(None);
+        };
+        let owned_session = session.id.clone();
+
+        // Usage aggregates over every cost event, so the whole session is read
+        // in one query — filtered to cost events on the queryable `event_type`
+        // column — rather than paged like the full trace.
+        let events: Vec<TraceEvent> = self
+            .0
+            .query(
+                "SELECT * FROM $table WHERE session = $sess AND event_type = $etype \
+                 ORDER BY created_at",
+            )
+            .bind(("table", TraceEvent::table()))
+            .bind(("sess", owned_session))
+            .bind(("etype", TraceEventType::Cost))
+            .await?
+            .take(0)?;
+
+        Ok(Some(self.assemble_trace_events(events).await?))
     }
 
     async fn record_user_memory(
