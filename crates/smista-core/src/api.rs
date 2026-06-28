@@ -70,4 +70,4 @@ pub use session::{
 pub use status::StatusResponse;
 pub use trace::TraceResponse;
 pub use turn_event::TurnEvent;
-pub use usage::{ModelUsage, SessionUsageResponse, TaskTypeUsage, UsageBreakdown};
+pub use usage::{ModelUsage, SessionUsageResponse, TaskTypeUsage};

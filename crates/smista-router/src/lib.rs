@@ -33,6 +33,7 @@ mod router;
 mod session;
 pub mod storage;
 mod trace;
+mod usage;
 pub mod web;
 
 use std::time::Duration;

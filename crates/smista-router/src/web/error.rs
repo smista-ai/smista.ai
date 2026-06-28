@@ -31,15 +31,6 @@ impl WebError {
     pub(crate) fn from_code(code: ApiErrorCode, message: impl Into<String>) -> Self {
         Self(ApiErrorResponse::from_code(code, message))
     }
-
-    /// Builds the placeholder error returned by endpoints that are scaffolded
-    /// but not yet implemented.
-    pub(crate) fn not_implemented() -> Self {
-        Self::from_code(
-            ApiErrorCode::NotImplemented,
-            "This endpoint is not implemented yet.",
-        )
-    }
 }
 
 impl From<AuthenticatorError> for WebError {
@@ -102,12 +93,6 @@ mod tests {
     fn should_render_status_and_body() {
         let response = WebError::from_code(ApiErrorCode::CredentialsInQuery, "bad").into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[test]
-    fn should_build_not_implemented() {
-        let response = WebError::not_implemented().into_response();
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     }
 
     #[test]

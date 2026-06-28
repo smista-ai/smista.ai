@@ -32,7 +32,7 @@ pub mod surreal;
 
 use std::future::Future;
 
-use smista_core::trace::Trace;
+use smista_core::trace::{Trace, TraceEvent as CoreTraceEvent};
 use uuid::Uuid;
 
 use crate::StorageResult;
@@ -413,6 +413,24 @@ pub trait Database: Send + Sync {
         session_id: Uuid,
         pagination: Pagination,
     ) -> impl Future<Output = StorageResult<Option<Trace>>> + Send;
+
+    /// Loads every [`TraceEventType::Cost`](smista_core::trace::TraceEventType::Cost)
+    /// event for a session owned by `user_id`, oldest first.
+    ///
+    /// Returns the session's cost events as the core read-model
+    /// [`TraceEvent`](smista_core::trace::TraceEvent)s, so usage can be
+    /// aggregated from a single query rather than paging the whole trace. A cost
+    /// event of a plaintext session carries its decoded
+    /// [`Payload::Cost`](smista_core::trace::Payload::Cost); one of an encrypted
+    /// session carries its sealed envelope, since storage holds no key and never
+    /// decrypts it. `None` is returned when the session is absent, archived, or
+    /// not owned by `user_id`, the three reported alike so existence stays
+    /// private.
+    fn get_session_cost_events(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Option<Vec<CoreTraceEvent>>>> + Send;
 
     // -- User memory ---------------------------------------------------------
 

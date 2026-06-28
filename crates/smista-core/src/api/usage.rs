@@ -25,7 +25,6 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::intent::TaskIntent;
 use crate::model::Provider;
@@ -37,18 +36,6 @@ use crate::usage::Usage;
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts", ts(export))]
 pub struct SessionUsageResponse {
-    /// Session the usage belongs to.
-    pub session_id: Uuid,
-    /// Usage totals and breakdowns.
-    pub usage: UsageBreakdown,
-}
-
-/// A session's usage total and its per-model and per-task-type breakdowns.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "ts", ts(export))]
-pub struct UsageBreakdown {
     /// Combined usage across the whole session.
     pub total: Usage,
     /// Usage attributed to each model.
@@ -96,47 +83,43 @@ mod tests {
     #[test]
     fn should_deserialize_spec_usage() {
         let json = r#"{
-            "session_id": "00000000-0000-0000-0000-000000000000",
-            "usage": {
-                "total": {
-                    "input_tokens": 12000,
-                    "output_tokens": 4200,
-                    "total_tokens": 16200,
-                    "estimated_cost": "0.42",
-                    "currency": "USD"
-                },
-                "by_model": [
-                    {
-                        "provider": "openai",
-                        "model": "gpt-5.5-thinking",
-                        "input_tokens": 8000,
-                        "output_tokens": 2200,
-                        "total_tokens": 10200,
-                        "estimated_cost": "0.31",
-                        "currency": "USD",
-                        "request_count": 3
-                    }
-                ],
-                "by_task_type": [
-                    {
-                        "task_type": "plan",
-                        "input_tokens": 4000,
-                        "output_tokens": 1200,
-                        "estimated_cost": "0.18",
-                        "request_count": 1
-                    }
-                ]
-            }
+            "total": {
+                "input_tokens": 12000,
+                "output_tokens": 4200,
+                "total_tokens": 16200,
+                "estimated_cost": "0.42",
+                "currency": "USD"
+            },
+            "by_model": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-5.5-thinking",
+                    "input_tokens": 8000,
+                    "output_tokens": 2200,
+                    "total_tokens": 10200,
+                    "estimated_cost": "0.31",
+                    "currency": "USD",
+                    "request_count": 3
+                }
+            ],
+            "by_task_type": [
+                {
+                    "task_type": "plan",
+                    "input_tokens": 4000,
+                    "output_tokens": 1200,
+                    "estimated_cost": "0.18",
+                    "request_count": 1
+                }
+            ]
         }"#;
         let response: SessionUsageResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.session_id, Uuid::nil());
-        assert_eq!(response.usage.total.total_tokens, Some(16_200));
-        assert_eq!(response.usage.by_model[0].request_count, 3);
-        assert_eq!(response.usage.by_model[0].usage.input_tokens, Some(8_000));
-        assert_eq!(response.usage.by_task_type[0].task_type, TaskIntent::Plan);
+        assert_eq!(response.total.total_tokens, Some(16_200));
+        assert_eq!(response.by_model[0].request_count, 3);
+        assert_eq!(response.by_model[0].usage.input_tokens, Some(8_000));
+        assert_eq!(response.by_task_type[0].task_type, TaskIntent::Plan);
         assert_eq!(
-            response.usage.by_task_type[0].usage.estimated_cost,
+            response.by_task_type[0].usage.estimated_cost,
             Some("0.18".parse().unwrap())
         );
     }
