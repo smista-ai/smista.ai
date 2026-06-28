@@ -8,10 +8,10 @@
 //! via [`ProviderErrorCategory::is_fallback_eligible`]) stays consistent across
 //! providers.
 //!
-//! `rig` has no single error type: a call can fail with a [`PromptError`], a
-//! [`CompletionError`], a [`StructuredOutputError`], a transport-level
-//! [`RigHttpClientError`], a [`reqwest::Error`], or a [`serde_json::Error`]
-//! while (de)serializing payloads. Each gets a `category_from_*` classifier.
+//! `rig` has no single error type: a call can fail with a [`CompletionError`], a
+//! transport-level [`RigHttpClientError`], a [`reqwest::Error`], or a
+//! [`serde_json::Error`] while (de)serializing payloads. Each gets a
+//! `category_from_*` classifier.
 //!
 //! Two facts shape the heuristics:
 //!
@@ -29,15 +29,7 @@
 //! constructed, upholding the secrecy invariant.
 //!
 
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "shared mapping layer, wired into provider adapters (#12/#79/#13/#81)"
-    )
-)]
-
-use rig_core::completion::request::{CompletionError, PromptError, StructuredOutputError};
+use rig_core::completion::request::CompletionError;
 use rig_core::http_client::Error as RigHttpClientError;
 use smista_core::error::{ProviderError, ProviderErrorCategory};
 use smista_core::model::Provider;
@@ -164,33 +156,6 @@ pub(crate) fn category_from_completion(error: &CompletionError) -> ProviderError
         CompletionError::ProviderError(message) => {
             message_or(message, ProviderErrorCategory::Unknown)
         }
-    }
-}
-
-/// Classifies a [`PromptError`] returned by a `rig` prompt or agent call.
-pub(crate) fn category_from_prompt(error: &PromptError) -> ProviderErrorCategory {
-    match error {
-        PromptError::CompletionError(error) => category_from_completion(error),
-        // Tool execution failures are not provider transport failures and carry
-        // no useful category for fallback routing.
-        PromptError::ToolError(_) | PromptError::ToolServerError(_) => {
-            ProviderErrorCategory::Unknown
-        }
-        // The request or its tool wiring was wrong; retrying elsewhere would
-        // fail the same way.
-        PromptError::MaxTurnsError { .. } | PromptError::UnknownToolCall { .. } => {
-            ProviderErrorCategory::InvalidRequest
-        }
-        PromptError::PromptCancelled { .. } => ProviderErrorCategory::Unknown,
-    }
-}
-
-/// Classifies a [`StructuredOutputError`] from a typed prompt call.
-pub(crate) fn category_from_structured(error: &StructuredOutputError) -> ProviderErrorCategory {
-    match error {
-        StructuredOutputError::PromptError(error) => category_from_prompt(error),
-        StructuredOutputError::DeserializationError(error) => category_from_serde(error),
-        StructuredOutputError::EmptyResponse => ProviderErrorCategory::Unknown,
     }
 }
 
@@ -426,72 +391,6 @@ mod test {
         assert_eq!(
             category_from_serde(&json_error()),
             ProviderErrorCategory::InvalidRequest
-        );
-    }
-
-    #[test]
-    fn should_map_unknown_tool_call_to_invalid_request() {
-        let error = PromptError::UnknownToolCall {
-            tool_name: "ghost".to_string(),
-            available_tools: Vec::new(),
-            allowed_tools: Vec::new(),
-            chat_history: Box::new(Vec::new()),
-        };
-
-        assert_eq!(
-            category_from_prompt(&error),
-            ProviderErrorCategory::InvalidRequest
-        );
-    }
-
-    #[test]
-    fn should_map_prompt_cancelled_to_unknown() {
-        let error = PromptError::PromptCancelled {
-            chat_history: Vec::new(),
-            reason: "user aborted".to_string(),
-        };
-
-        assert_eq!(category_from_prompt(&error), ProviderErrorCategory::Unknown);
-    }
-
-    #[test]
-    fn should_delegate_prompt_completion_error_to_completion_category() {
-        let error =
-            PromptError::CompletionError(CompletionError::ProviderError("rate limit".to_string()));
-
-        assert_eq!(
-            category_from_prompt(&error),
-            ProviderErrorCategory::RateLimit
-        );
-    }
-
-    #[test]
-    fn should_map_structured_empty_response_to_unknown() {
-        assert_eq!(
-            category_from_structured(&StructuredOutputError::EmptyResponse),
-            ProviderErrorCategory::Unknown
-        );
-    }
-
-    #[test]
-    fn should_map_structured_deserialization_error_to_invalid_request() {
-        let error = StructuredOutputError::DeserializationError(json_error());
-
-        assert_eq!(
-            category_from_structured(&error),
-            ProviderErrorCategory::InvalidRequest
-        );
-    }
-
-    #[test]
-    fn should_delegate_structured_prompt_error_to_prompt_category() {
-        let error = StructuredOutputError::PromptError(Box::new(PromptError::CompletionError(
-            CompletionError::ProviderError("model not found".to_string()),
-        )));
-
-        assert_eq!(
-            category_from_structured(&error),
-            ProviderErrorCategory::ModelNotFound
         );
     }
 

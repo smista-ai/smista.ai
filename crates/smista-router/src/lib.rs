@@ -31,10 +31,10 @@ mod orchestrator;
 mod retention;
 mod router;
 mod session;
-pub mod storage;
+mod storage;
 mod trace;
 mod usage;
-pub mod web;
+mod web;
 
 use std::time::Duration;
 

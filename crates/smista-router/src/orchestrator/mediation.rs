@@ -5,11 +5,6 @@
 //! file-changing tool) is refused with a reason fed back to the model; an
 //! `allow` runs without confirmation; an `ask` (or an unset mode) runs only
 //! after the user approves. Read-only tools are never denied by plan mode.
-#![allow(
-    dead_code,
-    reason = "wired into the turn loop in a later orchestrator task"
-)]
-
 use smista_core::api::ToolApproval;
 use smista_core::policy::{PermissionMode, ToolsConfig};
 use smista_providers::api::ToolCall;

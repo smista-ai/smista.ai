@@ -18,7 +18,7 @@ pub use smista_core::trace::TraceEventType;
 use surrealdb::types::{RecordId, SurrealValue};
 use uuid::Uuid;
 
-use super::Table;
+use super::{Table, record_uuid};
 use crate::types::SecretContent;
 
 /// A structured, append-only event recorded during task execution.
@@ -49,6 +49,13 @@ pub struct TraceEvent {
     pub matched_rule: Option<String>,
     /// When the event occurred.
     pub created_at: DateTime<Utc>,
+}
+
+impl TraceEvent {
+    /// Returns this event's UUIDv7 key.
+    pub fn uuid(&self) -> Uuid {
+        record_uuid(&self.id)
+    }
 }
 
 impl Table for TraceEvent {

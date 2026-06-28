@@ -3,11 +3,6 @@
 //! Fills a turn's [`Usage::actual_cost`] from its token counts and the chosen
 //! model's per-million-token rates. Costs are [`Decimal`], never `f64`. An
 //! unpriced model (no rates) leaves the cost unset.
-#![allow(
-    dead_code,
-    reason = "wired into the turn loop in a later orchestrator task"
-)]
-
 use rust_decimal::Decimal;
 use smista_core::model::ModelDescriptor;
 use smista_core::usage::Usage;

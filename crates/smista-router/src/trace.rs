@@ -13,16 +13,16 @@
 //! method. The event and its content are written together, sharing one record
 //! id, in a single append.
 //!
-//! Content is never re-encrypted in place after that write. For a normal session
-//! the stage wraps the serialized payload with [`SecretContent::plaintext`]. For
-//! an end-to-end encrypted session the run pauses, the client seals the
-//! serialized payload, and the stage records the resulting
-//! [`SecretContent::Encrypted`] envelope. Either way the `record_*` method takes
-//! the content exactly as it is to be stored, and the trace never holds a key.
+//! The router records the trace in clear as the run proceeds: each stage wraps
+//! its serialized payload with [`SecretContent::plaintext`] and the `record_*`
+//! method stores it. For an end-to-end encrypted session those clear rows are
+//! sealed before the run ends — a finishing turn folds them into its `to_encrypt`
+//! and the sealed ciphertext is written back in place — exactly as session memory
+//! is sealed. The tracer itself never holds a key.
 //!
-//! Per the trace invariants, payloads never carry secret or restricted content:
-//! context and tool payloads record references (paths, tool names, statuses),
-//! not file bodies or raw tool output.
+//! Even so, payloads are kept free of raw secrets by construction: context and
+//! tool payloads record references (paths, tool names, statuses), not file bodies
+//! or raw tool output.
 
 use chrono::Utc;
 use smista_core::intent::TaskIntent;
@@ -137,19 +137,6 @@ impl SerializedPayload {
     /// Returns [`TracerError`] if the payload cannot be serialized.
     pub fn cost(payload: CostPayload) -> TracerResult<Self> {
         Self::encode(Payload::Cost(payload))
-    }
-
-    /// Borrows the serialized JSON, the form a client seals for an encrypted
-    /// session.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 
     /// Consumes the payload, returning the serialized JSON, the form
@@ -493,11 +480,9 @@ mod tests {
     async fn should_record_event_content_as_given() {
         let (tracer, _session_id, _user_id) = tracer().await;
 
-        // An encrypted session seals the serialized payload (the bytes a client
-        // reads through `as_str`) and hands the tracer the resulting envelope;
-        // the tracer stores it verbatim, so the read model surfaces it as
-        // encrypted.
-        assert!(!message_payload().as_str().is_empty());
+        // An encrypted session seals the serialized payload and hands the tracer
+        // the resulting envelope; the tracer stores it verbatim, so the read
+        // model surfaces it as encrypted.
         let envelope = ContentEnvelope {
             version: 1,
             algorithm: "xchacha20poly1305".to_string(),

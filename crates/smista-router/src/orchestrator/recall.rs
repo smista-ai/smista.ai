@@ -7,11 +7,6 @@
 //! supplied plaintext when present or collects the row's [`ContentRef`] into a
 //! decrypt request otherwise. It returns [`Recalled::Ready`] only when every
 //! needed row is available in plaintext.
-#![allow(
-    dead_code,
-    reason = "wired into the turn loop in a later orchestrator task"
-)]
-
 use std::collections::BTreeMap;
 
 use smista_core::api::ContentRef;

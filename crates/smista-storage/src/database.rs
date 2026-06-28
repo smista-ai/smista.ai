@@ -432,6 +432,18 @@ pub trait Database: Send + Sync {
         session_id: Uuid,
     ) -> impl Future<Output = StorageResult<Option<Vec<CoreTraceEvent>>>> + Send;
 
+    /// Loads the session's trace events paired with their raw content rows.
+    ///
+    /// Unlike [`Self::get_session_trace_events`], which assembles the decoded
+    /// read view, this returns each [`TraceEvent`] with its [`TraceEventContent`]
+    /// exactly as stored — clear or sealed — so a finishing encrypted run can fold
+    /// the still-clear payloads into its seal and write the ciphertext in place.
+    fn list_session_trace_content(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> impl Future<Output = StorageResult<Vec<(TraceEvent, TraceEventContent)>>> + Send;
+
     // -- User memory ---------------------------------------------------------
 
     /// Records a user memory together with its paired content.

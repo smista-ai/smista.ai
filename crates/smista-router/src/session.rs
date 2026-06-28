@@ -26,9 +26,11 @@
 //! owned by another user is treated as absent, never disclosed. Reading or
 //! writing across users is impossible through these handles.
 
+#[cfg(test)]
 use smista_core::trace::Trace;
 use smista_storage::StorageError;
-use smista_storage::api::{MemoryRef, Pagination, SessionState};
+#[cfg(test)]
+use smista_storage::api::{Pagination, SessionState};
 use smista_storage::database::Database as _;
 use smista_storage::database::surreal::SurrealDatabase;
 use smista_storage::entity::{
@@ -36,7 +38,7 @@ use smista_storage::entity::{
     SessionApproval, SessionContextReference, SessionDiff, SessionDiffContent, SessionMessage,
     SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
     SessionRunInput, SessionRunInputContent, SessionToolCall, SessionToolCallContent,
-    ToolCallStatus, UserMemory, UserMemoryContent,
+    ToolCallStatus, TraceEvent, TraceEventContent, UserMemory, UserMemoryContent,
 };
 use smista_storage::types::SecretContent;
 use uuid::Uuid;
@@ -178,6 +180,32 @@ impl UserSession {
         self.session_id
     }
 
+    /// Lists the session's trace events paired with their raw content rows.
+    ///
+    /// Returns each event with its content exactly as stored — clear or sealed —
+    /// so a finishing encrypted run can fold the still-clear payloads into its
+    /// seal and write the ciphertext in place.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SessionError`] if the trace rows cannot be read.
+    pub(crate) async fn list_trace_content(
+        &self,
+    ) -> SessionResult<Vec<(TraceEvent, TraceEventContent)>> {
+        self.database
+            .list_session_trace_content(self.user_id, self.session_id)
+            .await
+            .map_err(SessionError::Database)
+    }
+
+    /// A [`Tracer`](crate::trace::Tracer) bound to this session and user.
+    ///
+    /// The run loop records its deterministic trace through this handle; the
+    /// database is a cheap, shared handle, so each turn builds one freely.
+    pub(crate) fn tracer(&self) -> crate::trace::Tracer {
+        crate::trace::Tracer::new(self.database.clone(), self.session_id, self.user_id)
+    }
+
     /// Loads the session metadata, or `None` if absent.
     ///
     /// # Errors
@@ -198,13 +226,7 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the state cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
+    #[cfg(test)]
     pub async fn state(&self) -> SessionResult<Option<SessionState>> {
         self.database
             .get_session_state(self.user_id, self.session_id)
@@ -232,13 +254,7 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the trace cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
+    #[cfg(test)]
     pub async fn traces(&self, pagination: Pagination) -> SessionResult<Option<Trace>> {
         self.database
             .get_session_trace_events(self.user_id, self.session_id, pagination)
@@ -275,13 +291,7 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the session cannot be archived.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
+    #[cfg(test)]
     pub async fn archive(&self) -> SessionResult<()> {
         self.database
             .archive_session(self.user_id, self.session_id)
@@ -445,13 +455,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the diff cannot be appended.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn append_diff(
         &self,
         diff: SessionDiff,
@@ -499,13 +502,6 @@ impl UserSession {
     /// # Errors
     ///
     /// Returns [`SessionError`] if the diff cannot be updated.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
     pub async fn set_diff_status(
         &self,
         diff_id: Uuid,
@@ -534,92 +530,6 @@ impl UserSession {
     ) -> SessionResult<SessionToolCall> {
         self.database
             .set_tool_call_outcome(self.user_id, call_id, status, result, error)
-            .await
-            .map_err(SessionError::Database)
-    }
-
-    /// Records a context memory together with its paired content.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SessionError`] if the memory cannot be recorded.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
-    pub async fn record_context_memory(
-        &self,
-        memory: ContextMemory,
-        content: ContextMemoryContent,
-    ) -> SessionResult<ContextMemory> {
-        self.database
-            .record_context_memory(self.user_id, memory, content)
-            .await
-            .map_err(SessionError::Database)
-    }
-
-    /// Updates the content of one of the session's context memories.
-    ///
-    /// The target row is selected by id or by key (see [`MemoryRef`]).
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SessionError`] if the memory cannot be updated.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
-    pub async fn update_context_memory(
-        &self,
-        target: MemoryRef,
-        content: ContextMemoryContent,
-    ) -> SessionResult<ContextMemory> {
-        self.database
-            .update_context_memory(self.user_id, self.session_id, target, content)
-            .await
-            .map_err(SessionError::Database)
-    }
-
-    /// Loads one of the session's context memories, or `None` if absent.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SessionError`] if the memory cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
-    pub async fn get_context_memory(&self, id: Uuid) -> SessionResult<Option<ContextMemory>> {
-        self.database
-            .get_context_memory(self.user_id, self.session_id, id)
-            .await
-            .map_err(SessionError::Database)
-    }
-
-    /// Lists the session's context memories.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SessionError`] if the memories cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
-    pub async fn list_context_memory(&self) -> SessionResult<Vec<ContextMemory>> {
-        self.database
-            .list_context_memory(self.user_id, self.session_id)
             .await
             .map_err(SessionError::Database)
     }
@@ -653,25 +563,6 @@ impl UserSession {
     ) -> SessionResult<Vec<(UserMemory, UserMemoryContent)>> {
         self.database
             .list_user_memory_with_content(self.user_id)
-            .await
-            .map_err(SessionError::Database)
-    }
-
-    /// Forgets one of the session's context memories, with its paired content.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SessionError`] if the memory cannot be forgotten.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the session endpoints and orchestrator later"
-        )
-    )]
-    pub async fn forget_context_memory(&self, id: Uuid) -> SessionResult<()> {
-        self.database
-            .forget_context_memory(self.user_id, self.session_id, id)
             .await
             .map_err(SessionError::Database)
     }
@@ -1036,68 +927,6 @@ mod tests {
             .expect("failed to read run state")
             .expect("run state not found");
         assert_eq!(state.phase, RunPhase::Idle);
-    }
-
-    #[tokio::test]
-    async fn should_manage_context_memory() {
-        let (sessions, user_id) = sessions().await;
-        let (session, session_id) = open_session(&sessions, user_id).await;
-
-        let memory_id = Uuid::now_v7();
-        session
-            .record_context_memory(
-                ContextMemory::new(memory_id, session_id, user_id, Some("topic".to_string())),
-                ContextMemoryContent::new(memory_id, SecretContent::plaintext("fact".to_string())),
-            )
-            .await
-            .expect("failed to record context memory");
-
-        session
-            .update_context_memory(
-                MemoryRef::Key("topic".to_string()),
-                ContextMemoryContent::new(
-                    memory_id,
-                    SecretContent::plaintext("updated".to_string()),
-                ),
-            )
-            .await
-            .expect("failed to update context memory");
-
-        assert!(
-            session
-                .get_context_memory(memory_id)
-                .await
-                .expect("failed to get context memory")
-                .is_some()
-        );
-        assert_eq!(
-            session
-                .list_context_memory()
-                .await
-                .expect("failed to list context memory")
-                .len(),
-            1
-        );
-        assert_eq!(
-            session
-                .list_context_memory_with_content()
-                .await
-                .expect("failed to list context memory with content")
-                .len(),
-            1
-        );
-
-        session
-            .forget_context_memory(memory_id)
-            .await
-            .expect("failed to forget context memory");
-        assert!(
-            session
-                .list_context_memory()
-                .await
-                .expect("failed to list context memory")
-                .is_empty()
-        );
     }
 
     #[tokio::test]

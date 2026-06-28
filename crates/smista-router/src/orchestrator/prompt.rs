@@ -6,11 +6,6 @@
 //! the conversation in a single system message; the file and diff candidates are
 //! inlined as a user context block; history and any prior-turn tool exchanges
 //! are replayed in order.
-#![allow(
-    dead_code,
-    reason = "wired into the turn loop in a later orchestrator task"
-)]
-
 use smista_core::message::MessageRole;
 use smista_providers::api::RequestMessage;
 
