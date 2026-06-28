@@ -405,7 +405,8 @@ pub trait Database: Send + Sync {
     /// Returns the [`Trace`] read view built from the session's trace events,
     /// oldest first, windowed by `pagination`. A session that exists but has no
     /// event in the requested window yields a [`Trace`] with no events; `None`
-    /// is returned only when the session is absent or not owned by `user_id`.
+    /// is returned when the session is absent, archived, or not owned by
+    /// `user_id`, the three reported alike so existence stays private.
     fn get_session_trace_events(
         &self,
         user_id: Uuid,

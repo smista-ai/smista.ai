@@ -733,7 +733,10 @@ The events are paginated with two optional query parameters:
 | `offset`  | integer | `0`     | Number of leading events to skip.   |
 
 A session with no events in the requested window returns an empty `events`
-array; a `404` is reserved for a session that does not exist:
+array, not a `404`. Only the owner may read a trace: an unknown, archived or
+another user's session responds `404` `session_not_found`, reported alike so
+existence stays private, and a `session_id` that is not a valid UUID responds
+`400` `invalid_session_id`:
 
 ```http
 GET /api/v1/sessions/{session_id}/traces?limit=50&offset=0

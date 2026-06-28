@@ -8,17 +8,17 @@
 //!
 //! - [`WebServer`], a long-lived service that binds the listener and serves the
 //!   router until the shared [`CancellationToken`] is triggered.
-//! - One request module per endpoint (for example [`routes::status`] or [`routes::execute`]),
-//!   each owning a single handler. Endpoints not yet implemented return a
-//!   `501 Not Implemented` [`error::WebError`] until their owning issue fills
-//!   them in.
-//! - Cross-cutting [`middleware`]: structured request logging with secrets kept
+//! - One request module per endpoint (for example `routes::status` or
+//!   `routes::execute`), each owning a single handler. Endpoints not yet
+//!   implemented return a `501 Not Implemented` `error::WebError` until their
+//!   owning issue fills them in.
+//! - Cross-cutting `middleware`: structured request logging with secrets kept
 //!   out of the logs, and rejection of any credential passed as a query
 //!   parameter.
 //!
 //! Domain errors are mapped to the wire format by
 //! [`ApiErrorResponse`](smista_core::api::ApiErrorResponse) in `smista-core` and
-//! rendered as JSON by [`error::WebError`].
+//! rendered as JSON by `error::WebError`.
 
 pub(crate) mod error;
 mod middleware;
@@ -48,7 +48,7 @@ use crate::config::RouterConfig;
 use crate::router::Router as SmistaRouter;
 
 /// Authenticated user identity extracted from a request by the
-/// [`middleware::authenticate`] middleware.
+/// `middleware::authenticate` middleware.
 ///
 /// Put inside request Extensions so handlers can access it without re-authenticating.
 #[derive(Debug, Clone)]

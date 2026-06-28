@@ -1049,7 +1049,13 @@ impl Database for SurrealDatabase {
     ) -> StorageResult<Option<Trace>> {
         tracing::debug!("loading trace events for session {session_id} and user {user_id}");
 
-        let Some(session) = self.get_session(user_id, session_id).await? else {
+        // An archived session is treated as gone: its trace is never returned,
+        // so the caller cannot tell it apart from an unknown or non-owned one.
+        let Some(session) = self
+            .get_session(user_id, session_id)
+            .await?
+            .filter(|session| session.archived_at.is_none())
+        else {
             return Ok(None);
         };
         let owned_session = session.id.clone();

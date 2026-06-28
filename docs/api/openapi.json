@@ -994,7 +994,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int32",
+              "format": "int64",
               "minimum": 0
             }
           },
@@ -1005,7 +1005,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "format": "int32",
+              "format": "int64",
               "minimum": 0
             }
           }
@@ -1017,6 +1017,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TraceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid session id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -1033,6 +1043,16 @@
           },
           "404": {
             "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
             "content": {
               "application/json": {
                 "schema": {

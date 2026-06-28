@@ -194,13 +194,6 @@ struct TraceEventArgs {
 
 impl Tracer {
     /// Creates a new [`Tracer`] for the given `session_id` and `user_id`, using the provided `database`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub fn new(database: SurrealDatabase, session_id: Uuid, user_id: Uuid) -> Self {
         Self {
             database,
@@ -329,19 +322,13 @@ impl Tracer {
     /// Returns a page of the session's [`Trace`], oldest event first.
     ///
     /// The window is described by `pagination`. A session with no events in the
-    /// window yields a [`Trace`] with no events; `None` is returned only when
-    /// the session is absent or not owned by this tracer's user.
+    /// window yields a [`Trace`] with no events; `None` is returned when the
+    /// session is absent, archived, or not owned by this tracer's user, the
+    /// three reported alike so existence stays private.
     ///
     /// # Errors
     ///
     /// Returns [`TracerError`] if the trace cannot be read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired by the routing stages and trace endpoint later"
-        )
-    )]
     pub async fn traces(&self, pagination: Pagination) -> TracerResult<Option<Trace>> {
         self.database
             .get_session_trace_events(self.user_id, self.session_id, pagination)
@@ -748,6 +735,32 @@ mod tests {
             .expect("failed to read second page")
             .expect("trace not found");
         assert_eq!(second.events.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn should_not_read_trace_of_archived_session() {
+        let (tracer, session_id, user_id) = tracer().await;
+        tracer
+            .record_message(context(), plaintext(message_payload()))
+            .await
+            .expect("failed to record message");
+
+        // An archived session is treated as gone: its trace reads back as absent,
+        // indistinguishable from an unknown session.
+        tracer
+            .database
+            .archive_session(user_id, session_id)
+            .await
+            .expect("failed to archive session");
+
+        assert!(
+            tracer
+                .traces(Pagination::default())
+                .await
+                .expect("failed to read trace")
+                .is_none(),
+            "trace returned for an archived session"
+        );
     }
 
     #[tokio::test]
