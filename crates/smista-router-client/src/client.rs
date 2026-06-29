@@ -431,6 +431,47 @@ mod tests {
     }
 
     #[test]
+    fn should_exercise_every_method() {
+        // Drive each method once so the mock implementation, and therefore the
+        // whole trait surface, is exercised rather than left as dead code.
+        let client = MockClient;
+        futures::executor::block_on(async {
+            let _ = client.status().await;
+            let _ = client.bootstrap().await;
+            let _ = client.sign_in().await;
+            let _ = client.sign_out().await;
+            let _ = client.me().await;
+            let _ = client
+                .create_session(CreateSessionRequest {
+                    title: "t".to_string(),
+                    key_id: None,
+                })
+                .await;
+            let _ = client.list_sessions().await;
+            let _ = client.get_session(Uuid::nil()).await;
+            let _ = client
+                .update_session(Uuid::nil(), UpdateSessionRequest::default())
+                .await;
+            let _ = client.delete_session(Uuid::nil()).await;
+            let _ = client.execute(Uuid::nil(), dummy_execute()).await;
+            let _ = client
+                .continue_run(Uuid::nil(), ContinueRequest::Break)
+                .await;
+            let _ = client.stream_execute(Uuid::nil(), dummy_execute()).await;
+            let _ = client
+                .stream_continue(Uuid::nil(), ContinueRequest::Break)
+                .await;
+            let _ = client.preview(Uuid::nil(), dummy_execute()).await;
+            let _ = client
+                .get_session_traces(Uuid::nil(), Some(10), Some(0))
+                .await;
+            let _ = client.list_providers().await;
+            let _ = client.list_models().await;
+            let _ = client.session_usage(Uuid::nil()).await;
+        });
+    }
+
+    #[test]
     fn should_report_not_authenticated_for_protected_calls() {
         let client = MockClient;
         let error = futures::executor::block_on(client.list_sessions())

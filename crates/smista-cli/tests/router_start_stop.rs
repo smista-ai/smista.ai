@@ -9,7 +9,7 @@
 //! cleanup, so the pidfile is left for the next `start` to treat as stale.
 
 use std::fs;
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -79,10 +79,20 @@ fn pid_in(pidfile: &Path) -> Option<u32> {
     fs::read_to_string(pidfile).ok()?.trim().parse().ok()
 }
 
+/// Returns `true` once the router is accepting connections on `port`.
+///
+/// Used as the readiness probe: the pidfile is written at process start, well
+/// before the router is serving, so connecting to the port is what actually
+/// proves the router (and its shutdown signal handlers) are up.
+fn port_is_serving(port: u16) -> bool {
+    TcpStream::connect(("127.0.0.1", port)).is_ok()
+}
+
 #[test]
 fn should_start_a_router_in_the_foreground_and_stop_it() {
     let tmp = tempfile::tempdir().expect("failed to create a temp dir");
-    let config = write_router_config(tmp.path(), free_port());
+    let port = free_port();
+    let config = write_router_config(tmp.path(), port);
     let pidfile = tmp.path().join("router.pid");
 
     // Start the router in the foreground as a child, so the test keeps running
@@ -99,11 +109,14 @@ fn should_start_a_router_in_the_foreground_and_stop_it() {
         .spawn()
         .expect("failed to spawn `smista start`");
 
-    // The foreground process records its own pid once the router is up, and it
-    // is still running (it has not exited early). If it never comes up, kill the
-    // child so the test does not leak it.
+    // Wait until the router is actually serving — not merely until the pidfile
+    // exists, which it does almost immediately at process start, before the
+    // router is up. Serving implies the shutdown signal handlers are installed,
+    // so the SIGTERM from `stop` below cannot race start-up. Also confirm the
+    // child has not exited early; if it never comes up, kill it so it does not
+    // leak.
     let started = wait_until(Duration::from_secs(20), || {
-        pidfile.exists() && matches!(child.try_wait(), Ok(None))
+        port_is_serving(port) && matches!(child.try_wait(), Ok(None))
     });
     if !started {
         let _ = child.kill();
