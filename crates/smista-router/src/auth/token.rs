@@ -1,10 +1,8 @@
 //! Token module contains the logic for generating and verifying session tokens
 
-use core::fmt;
-use std::str::FromStr;
-
 use rand::RngExt as _;
-use secrecy::{ExposeSecret as _, SecretString};
+use secrecy::SecretString;
+use smista_core::credential::SessionToken;
 use uuid::Uuid;
 
 use crate::auth::{AuthenticationResult, AuthenticatorError};
@@ -21,81 +19,45 @@ const TOKEN_RANDOM_LEN: usize = 64;
 /// token format.
 const TOKEN_CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 
-/// A session token, consisting of a UUID and a random alphanumeric string.
+/// Session token issuer.
 ///
-/// The token is represented as a string in the format `<uuid>-<random>`,
-/// where `<uuid>` is a valid UUID and `<random>` is a non-empty string.
-/// The UUID serves as the stable identifier for the token, while the random part provides additional entropy for security.
-pub struct Token {
-    token_id: Uuid,
-    random: SecretString,
-}
-
-impl Token {
-    /// Returns the token's UUID, which serves as its stable identifier in the database and API.
-    pub fn token_id(&self) -> Uuid {
-        self.token_id
-    }
-
-    /// Parses a token from its `<token-id>-<random>` string representation.
-    ///
-    /// `<token-id>` must be a valid UUID and `<random>` a non-empty secret.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`AuthenticatorError::InvalidToken`] when the string lacks the
-    /// `-` separator, its id is not a valid UUID, or its secret segment is
-    /// empty.
-    pub fn parse(token_str: &str) -> AuthenticationResult<Self> {
-        let (token_id_str, random) = token_str
-            .split_once('-')
-            .ok_or(AuthenticatorError::InvalidToken)?;
-
-        let token_id =
-            Uuid::try_parse(token_id_str).map_err(|_| AuthenticatorError::InvalidToken)?;
-
-        if random.is_empty() {
-            return Err(AuthenticatorError::InvalidToken);
-        }
-
-        Ok(Self {
-            token_id,
-            random: SecretString::from(random),
-        })
-    }
-}
-
-impl FromStr for Token {
-    type Err = AuthenticatorError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
-
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}-{}",
-            self.token_id.simple(),
-            self.random.expose_secret()
-        )
-    }
-}
-
-/// Session token issuer
+/// Generates the random secret and parses presented tokens, while the
+/// `<token-id>-<secret>` wire format itself is owned by
+/// [`SessionToken`](smista_core::credential::SessionToken), shared with every
+/// client that presents a token.
 pub struct TokenIssuer;
 
 impl TokenIssuer {
-    /// Generates a new session token with a UUIDv7 id and a fresh random secret.
+    /// Generates a new session token, returning its id and the sealed string.
     ///
-    /// The secret is `TOKEN_RANDOM_LEN` characters drawn from [`TOKEN_CHARSET`].
-    pub fn generate_token() -> Token {
+    /// The id is a fresh UUIDv7 and the secret is `TOKEN_RANDOM_LEN` characters
+    /// drawn from [`TOKEN_CHARSET`]; the two are assembled into the
+    /// `<token-id>-<secret>` form by [`SessionToken`], the shared owner of the
+    /// format. The id is returned alongside the token so the caller can persist
+    /// the token row without reparsing the secret.
+    pub fn generate_token() -> (Uuid, SecretString) {
         let token_id = Uuid::now_v7();
-        let random = SecretString::from(Self::generate_secret(TOKEN_RANDOM_LEN));
+        let secret = Self::generate_secret(TOKEN_RANDOM_LEN);
+        let token = SessionToken::from_parts(&token_id, &secret);
 
-        Token { token_id, random }
+        (token_id, SecretString::from(token.expose()))
+    }
+
+    /// Parses the token id out of a presented session token.
+    ///
+    /// The token's format is validated by [`SessionToken`], the shared owner of
+    /// the format.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthenticatorError::InvalidToken`] when the string lacks its
+    /// `-` separator, its id is not a valid UUID, or its secret segment is empty.
+    pub fn parse_token_id(token: &str) -> AuthenticationResult<Uuid> {
+        token
+            .parse::<SessionToken>()
+            .map_err(|_| AuthenticatorError::InvalidToken)?
+            .token_id()
+            .map_err(|_| AuthenticatorError::InvalidToken)
     }
 
     /// Generates a random lowercase-alphanumeric string of length `len`.
@@ -113,18 +75,20 @@ impl TokenIssuer {
 
 #[cfg(test)]
 mod tests {
+    use secrecy::ExposeSecret as _;
+
     use super::*;
 
     #[test]
     fn should_generate_token_in_the_documented_format() {
-        let token = TokenIssuer::generate_token();
-        let rendered = token.to_string();
+        let (token_id, token) = TokenIssuer::generate_token();
+        let rendered = token.expose_secret();
 
         // `<token-id>-<random>`: the id renders as 32 hex digits with no hyphens.
         let (id, random) = rendered
             .split_once('-')
             .expect("token is missing its separator");
-        assert_eq!(id, token.token_id().simple().to_string());
+        assert_eq!(id, token_id.simple().to_string());
         assert_eq!(id.len(), 32);
         assert_eq!(random.len(), TOKEN_RANDOM_LEN);
         assert!(
@@ -137,56 +101,25 @@ mod tests {
 
     #[test]
     fn should_generate_unique_tokens() {
-        let first = TokenIssuer::generate_token().to_string();
-        let second = TokenIssuer::generate_token().to_string();
+        let (_, first) = TokenIssuer::generate_token();
+        let (_, second) = TokenIssuer::generate_token();
 
-        assert_ne!(first, second);
+        assert_ne!(first.expose_secret(), second.expose_secret());
     }
 
     #[test]
-    fn should_round_trip_a_token_through_parse() {
-        let token = TokenIssuer::generate_token();
-        let rendered = token.to_string();
+    fn should_parse_the_token_id_back_from_a_generated_token() {
+        let (token_id, token) = TokenIssuer::generate_token();
 
-        let parsed = Token::parse(&rendered).expect("failed to parse a freshly generated token");
-
-        assert_eq!(parsed.token_id(), token.token_id());
-        // The reparsed token renders identically, secret included.
-        assert_eq!(parsed.to_string(), rendered);
+        let parsed = TokenIssuer::parse_token_id(token.expose_secret())
+            .expect("failed to parse a freshly generated token");
+        assert_eq!(parsed, token_id);
     }
 
     #[test]
-    fn should_parse_via_from_str() {
-        let rendered = TokenIssuer::generate_token().to_string();
-
-        let parsed: Token = rendered.parse().expect("failed to parse token via FromStr");
-
-        assert_eq!(parsed.to_string(), rendered);
-    }
-
-    #[test]
-    fn should_reject_a_token_without_a_separator() {
+    fn should_reject_a_malformed_token() {
         assert!(matches!(
-            Token::parse("noseparatorhere"),
-            Err(AuthenticatorError::InvalidToken)
-        ));
-    }
-
-    #[test]
-    fn should_reject_a_token_with_an_invalid_id() {
-        assert!(matches!(
-            Token::parse("not-a-valid-secret"),
-            Err(AuthenticatorError::InvalidToken)
-        ));
-    }
-
-    #[test]
-    fn should_reject_a_token_missing_its_secret() {
-        let id = Uuid::now_v7().simple().to_string();
-        let token_str = format!("{id}-");
-
-        assert!(matches!(
-            Token::parse(&token_str),
+            TokenIssuer::parse_token_id("noseparatorhere"),
             Err(AuthenticatorError::InvalidToken)
         ));
     }

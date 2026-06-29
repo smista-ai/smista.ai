@@ -14,4 +14,35 @@
 //! Request and response types come from `smista-core`. Credentials travel in
 //! headers and are never logged, traced or sent as model context.
 //!
-//! Implementation is tracked in milestone M6.
+//! # Scope
+//!
+//! This crate is the backend-agnostic contract: the [`Client`] trait plus the
+//! credential ([`ApiKey`], [`SessionToken`], [`ProviderCredentials`]), error
+//! ([`RouterClientError`], [`Result`]) and connection ([`RouterClientConfig`])
+//! types it relies on. It depends on no HTTP library. The concrete HTTP clients
+//! that implement [`Client`] live in separate crates, one per backend.
+//!
+//! # Using the client
+//!
+//! [`Client`] returns native [`impl Future`](std::future::Future), so it is not
+//! object safe — consumers use it through a generic `C: Client`, not
+//! `dyn Client`, and pick one concrete client per application:
+//!
+//! ```
+//! use smista_router_client::{Client, Result};
+//! use smista_core::api::StatusResponse;
+//!
+//! async fn check<C: Client>(client: &C) -> Result<StatusResponse> {
+//!     client.status().await
+//! }
+//! ```
+
+mod client;
+mod config;
+mod credentials;
+mod error;
+
+pub use self::client::Client;
+pub use self::config::RouterClientConfig;
+pub use self::credentials::{ApiKey, ProviderCredentials, SessionToken};
+pub use self::error::{Result, RouterClientError};

@@ -12,6 +12,7 @@
 //!
 
 pub mod api;
+pub mod credential;
 pub mod effort;
 pub mod error;
 pub mod intent;

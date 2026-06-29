@@ -98,6 +98,13 @@ async fn run_foreground(
     log_filter: &str,
     pidfile_path: PathBuf,
 ) -> anyhow::Result<()> {
+    // Install the shutdown signal handlers before anything else, so a SIGTERM
+    // from `smista stop` that races start-up is buffered and handled gracefully.
+    // Were it to arrive before the handler exists, the Unix default disposition
+    // would kill the process outright, skipping the pidfile guard's clean-up and
+    // orphaning the pidfile written just below.
+    let signals = signal::ShutdownSignals::install();
+
     let _pidfile = Pidfile::acquire(pidfile_path)?;
 
     let config_path = args
@@ -128,8 +135,10 @@ async fn run_foreground(
 
     let exit = CancellationToken::new();
     // Cancel the token on SIGINT/SIGTERM — including the SIGTERM that
-    // `smista stop` sends — so the router winds its services down.
-    let shutdown = tokio::spawn(signal::wait_for_shutdown(exit.clone()));
+    // `smista stop` sends — so the router winds its services down. The handlers
+    // were installed at the top of this function; a signal that arrived during
+    // start-up is buffered and fires as soon as this task is polled.
+    let shutdown = tokio::spawn(signals.wait(exit.clone()));
 
     let handle = smista_router::run(smista_router::RouterArgs { config, exit })
         .await

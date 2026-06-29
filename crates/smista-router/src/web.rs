@@ -281,6 +281,7 @@ pub(crate) mod test_support {
     use axum::extract::ConnectInfo;
     use axum::http::{Method, Request, StatusCode};
     use secrecy::ExposeSecret as _;
+    use smista_core::credential::ApiKey;
     use smista_storage::database::surreal::{SurrealBackend, SurrealDatabase, SurrealOptions};
     use tower::ServiceExt as _;
 
@@ -450,7 +451,7 @@ pub(crate) mod test_support {
         Request::builder()
             .method(Method::POST)
             .uri(uri)
-            .header("X-Smista-Api-Key", api_key)
+            .header(ApiKey::header_name(), api_key)
             .body(Body::empty())
             .expect("failed to build request")
     }

@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use self::apikey::ApiKeyIssuer;
 use self::hash::SecretHasher;
-use crate::auth::token::{Token, TokenIssuer};
+use crate::auth::token::TokenIssuer;
 
 /// Error type for authentication-related operations, such as user bootstrapping and API key validation.
 #[derive(Debug, thiserror::Error)]
@@ -113,11 +113,10 @@ impl Authenticator {
         }
 
         // issue token
-        let token = TokenIssuer::generate_token();
-        let token_str = SecretString::from(token.to_string());
+        let (token_id, token_str) = TokenIssuer::generate_token();
         let token_hash = SecretHasher::sha512_crypt().hash(&token_str)?;
         let token_entity = AuthToken::new(
-            token.token_id(),
+            token_id,
             token_hash.expose_secret().to_string(),
             &user,
             self.token_ttl,
@@ -129,8 +128,7 @@ impl Authenticator {
             .map_err(|e| AuthenticatorError::InternalError(e.into()))?;
 
         tracing::info!(
-            "successfully signed in user {user_id} and issued token {token}; expires at {expires_at}",
-            token = token.token_id()
+            "successfully signed in user {user_id} and issued token {token_id}; expires at {expires_at}"
         );
 
         Ok(SessionToken {
@@ -158,24 +156,18 @@ impl Authenticator {
     /// the expired or revoked status is disclosed only to the legitimate holder.
     pub async fn authenticate(&self, token: &SecretString) -> AuthenticationResult<Uuid> {
         tracing::debug!("parsing token from string");
-        let parsed_token = Token::parse(token.expose_secret())?;
-        tracing::debug!("loading token with id {}", parsed_token.token_id());
+        let token_id = TokenIssuer::parse_token_id(token.expose_secret())?;
+        tracing::debug!("loading token with id {token_id}");
         let stored_token = self
             .storage
-            .get_token(parsed_token.token_id())
+            .get_token(token_id)
             .await
             .map_err(|e| AuthenticatorError::InternalError(e.into()))?
             .ok_or(AuthenticatorError::InvalidToken)?;
-        tracing::debug!(
-            "verifying token hash for token id {}",
-            parsed_token.token_id()
-        );
+        tracing::debug!("verifying token hash for token id {token_id}");
 
         if !SecretHasher::sha512_crypt().verify(token, &stored_token.token_hash)? {
-            tracing::debug!(
-                "token hash verification failed for token id {}",
-                parsed_token.token_id()
-            );
+            tracing::debug!("token hash verification failed for token id {token_id}");
             return Err(AuthenticatorError::InvalidToken);
         }
 
@@ -183,19 +175,16 @@ impl Authenticator {
         // is no longer accepted. Revocation is checked before expiry because a
         // sign-out is an explicit, stronger statement than a lapsed lifetime.
         if stored_token.revoked_at.is_some() {
-            tracing::debug!("token id {} has been revoked", parsed_token.token_id());
+            tracing::debug!("token id {token_id} has been revoked");
             return Err(AuthenticatorError::RevokedToken);
         }
         if stored_token.expires_at <= Utc::now() {
-            tracing::debug!("token id {} has expired", parsed_token.token_id());
+            tracing::debug!("token id {token_id} has expired");
             return Err(AuthenticatorError::ExpiredToken);
         }
 
         let user_id = stored_token.user_id();
-        tracing::info!(
-            "validated token {} for user {user_id}",
-            parsed_token.token_id()
-        );
+        tracing::info!("validated token {token_id} for user {user_id}");
 
         Ok(user_id)
     }
@@ -208,19 +197,13 @@ impl Authenticator {
     /// Returns [`AuthenticatorError::InvalidToken`] when the token is malformed.
     pub async fn sign_out(&self, token: &SecretString) -> AuthenticationResult<()> {
         tracing::debug!("parsing token from string");
-        let parsed_token = Token::parse(token.expose_secret())?;
-        tracing::debug!(
-            "revoking token with id {} in the database",
-            parsed_token.token_id()
-        );
+        let token_id = TokenIssuer::parse_token_id(token.expose_secret())?;
+        tracing::debug!("revoking token with id {token_id} in the database");
         self.storage
-            .revoke_token(parsed_token.token_id())
+            .revoke_token(token_id)
             .await
             .map_err(|e| AuthenticatorError::InternalError(e.into()))?;
-        tracing::info!(
-            "successfully revoked token with id {}",
-            parsed_token.token_id()
-        );
+        tracing::info!("successfully revoked token with id {token_id}");
 
         Ok(())
     }
@@ -359,9 +342,8 @@ mod tests {
             .expect("failed to sign in")
             .token;
 
-        let token_id = Token::parse(token.expose_secret())
-            .expect("issued token is malformed")
-            .token_id();
+        let token_id =
+            TokenIssuer::parse_token_id(token.expose_secret()).expect("issued token is malformed");
         let stored = authenticator
             .storage
             .get_active_token(token_id)
@@ -433,7 +415,7 @@ mod tests {
     async fn should_reject_validation_of_an_unknown_token() {
         let authenticator = test_authenticator().await;
         // Well-formed, but never issued, so no row exists for its id.
-        let unknown = SecretString::from(TokenIssuer::generate_token().to_string());
+        let unknown = TokenIssuer::generate_token().1;
 
         let error = authenticator
             .authenticate(&unknown)
@@ -484,13 +466,12 @@ mod tests {
             .expect("bootstrapped user not found");
 
         // Persist a token whose secret we hold but whose expiry is already past.
-        let raw = TokenIssuer::generate_token();
-        let token = SecretString::from(raw.to_string());
+        let (token_id, token) = TokenIssuer::generate_token();
         let token_hash = SecretHasher::sha512_crypt()
             .hash(&token)
             .expect("failed to hash token");
         let mut entity = AuthToken::new(
-            raw.token_id(),
+            token_id,
             token_hash.expose_secret().to_string(),
             &user,
             Duration::from_secs(3600),
@@ -525,9 +506,8 @@ mod tests {
         // Same token id, different secret: the row exists but the hash will not
         // verify, so the state of the real token is never revealed and the
         // request is rejected as simply invalid.
-        let token_id = Token::parse(issued.expose_secret())
-            .expect("issued token is malformed")
-            .token_id();
+        let token_id =
+            TokenIssuer::parse_token_id(issued.expose_secret()).expect("issued token is malformed");
         let forged = SecretString::from(format!("{}-wrongsecretsegment", token_id.simple()));
 
         let error = authenticator

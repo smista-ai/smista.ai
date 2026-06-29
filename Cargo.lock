@@ -4988,6 +4988,7 @@ dependencies = [
  "globset",
  "http",
  "rust_decimal",
+ "secrecy",
  "serde",
  "serde_json",
  "surrealdb-types",
@@ -5058,6 +5059,15 @@ dependencies = [
 [[package]]
 name = "smista-router-client"
 version = "0.0.0"
+dependencies = [
+ "futures",
+ "secrecy",
+ "serde_json",
+ "smista-core",
+ "thiserror 2.0.18",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "smista-sdk"
