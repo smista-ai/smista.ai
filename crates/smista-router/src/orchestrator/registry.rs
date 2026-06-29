@@ -5,22 +5,17 @@
 //! turn. A new request for a session supersedes the live turn by cancelling its
 //! token; `break`/`inject` cancel it on demand. Each turn is tagged with a
 //! monotonic nonce so a stale finisher never clobbers a newer turn.
-#![allow(
-    dead_code,
-    reason = "the registry is wired into the orchestrator run loop in a later task"
-)]
-
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use tokio_util::sync::{CancellationToken, WaitForCancellationFuture};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 /// A handle to one turn's cancellation, tagged with a per-turn nonce.
 ///
-/// The turn selects on [`cancelled`](Self::cancelled) to learn it was
-/// superseded; the orchestrator hands the same handle back to
+/// The turn races a provider call against [`cancellation`](Self::cancellation) to
+/// learn it was superseded; the orchestrator hands the same handle back to
 /// [`InFlightRegistry::finish`] so only the turn that is still live is removed.
 #[derive(Clone, Debug)]
 pub(crate) struct TurnToken {
@@ -30,13 +25,9 @@ pub(crate) struct TurnToken {
 
 impl TurnToken {
     /// Whether this turn has been cancelled (superseded, broken or injected).
+    #[cfg(test)]
     pub(crate) fn is_cancelled(&self) -> bool {
         self.token.is_cancelled()
-    }
-
-    /// Resolves when this turn is cancelled.
-    pub(crate) fn cancelled(&self) -> WaitForCancellationFuture<'_> {
-        self.token.cancelled()
     }
 
     /// The underlying cancellation token, to race a provider call against.
@@ -73,6 +64,7 @@ impl InFlightRegistry {
     }
 
     /// Cancels the live turn for `session_id`, if any.
+    #[cfg(test)]
     pub(crate) fn cancel(&self, session_id: Uuid) {
         if let Some(live) = self
             .live

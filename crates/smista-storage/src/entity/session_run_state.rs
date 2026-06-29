@@ -116,8 +116,15 @@ pub enum ResumeStep {
 pub struct ToolWait {
     /// Reference to the `session_tool_call` row, correlating the later result.
     pub call_id: String,
+    /// Name of the invoked tool, carried so the result trace can name it without
+    /// re-reading the tool-call row.
+    pub tool_name: String,
     /// Whether the user must approve the call before it runs.
     pub requires_approval: ToolApproval,
+    /// Whether this call authored a `session_diff` row (a file-changing tool)
+    /// to be marked applied or rejected once the result arrives. The diff shares
+    /// the call's id, so no separate reference is carried.
+    pub records_diff: bool,
 }
 
 /// Whether a client-executed tool needs the user's approval first.
@@ -224,6 +231,15 @@ pub enum PendingWrite {
         /// The plan uuid, as a string; the content reference is `plan:id`.
         id: String,
     },
+    /// A file-changing tool's proposed diff, whose body the client seals on the
+    /// continuation. The `path` is non-secret metadata carried here; the diff
+    /// shares the tool call's id, so the content reference is `diff:id`.
+    Diff {
+        /// The diff uuid, as a string; the content reference is `diff:id`.
+        id: String,
+        /// Path the diff applies to.
+        path: String,
+    },
 }
 
 /// The kind of a standalone approval that has no tool to run.
@@ -264,7 +280,9 @@ mod tests {
         crate::tests::value_roundtrip(RunPhase::AwaitingTool {
             calls: vec![ToolWait {
                 call_id: "c1".to_string(),
+                tool_name: "shell".to_string(),
                 requires_approval: ToolApproval::Ask,
+                records_diff: false,
             }],
             resume: ResumeStep::NextTurn,
             pending: vec![PendingWrite::Message {

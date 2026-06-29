@@ -7,11 +7,6 @@
 //! [`RunInputMeta`] (stored in clear) and the sealable [`RunInputBundle`] (the
 //! input text, attachments and git diff), and rebuilds the [`Workspace`] from
 //! the two when a later turn recalls them.
-#![allow(
-    dead_code,
-    reason = "wired into the orchestrator run loop in a later task"
-)]
-
 use serde::{Deserialize, Serialize};
 use smista_core::api::{
     Attachments, ExecutePolicy, ExecuteRequest, LocalPreferences, TaskInput, Workspace,

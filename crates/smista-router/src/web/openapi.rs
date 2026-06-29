@@ -1,6 +1,8 @@
 //! OpenAPI document for the router HTTP API.
 //!
-//! Compiled only under the `openapi` feature. `ApiDoc` collects every
+//! Compiled only under `cfg(all(test, feature = "openapi"))`, the configuration
+//! `just gen_openapi` builds: the document exists solely to be serialized by the
+//! `gen_openapi_schema` test. `ApiDoc` collects every
 //! `#[utoipa::path]`-annotated handler and the shared component schemas; the
 //! `SecurityAddon` registers the auth schemes the operations reference. The
 //! `gen_openapi_schema` test serializes the document to `docs/api/openapi.json`,
@@ -12,13 +14,6 @@ use utoipa::{Modify, OpenApi};
 use crate::web::routes;
 
 /// Registers the security schemes the operations reference by name.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "used as a modifier by the `#[derive(OpenApi)]` macro on ApiDoc; never constructed directly"
-    )
-)]
 struct SecurityAddon;
 
 impl Modify for SecurityAddon {
@@ -47,13 +42,6 @@ impl Modify for SecurityAddon {
 }
 
 /// The OpenAPI document for the smista-router HTTP API.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed via ApiDoc::openapi() in gen_openapi and the serving endpoint; not directly instantiated"
-    )
-)]
 #[derive(OpenApi)]
 #[openapi(
     info(

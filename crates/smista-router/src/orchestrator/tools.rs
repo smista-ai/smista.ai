@@ -5,18 +5,21 @@
 //! module ships the built-in catalog (`read_file`, `write_file`, `edit_file`,
 //! `shell`, plus the memory tool), gates it by the policy's permission modes,
 //! and offers one tool per skill alongside.
-#![allow(
-    dead_code,
-    reason = "wired into the turn loop in a later orchestrator task"
-)]
-
 use serde_json::{Value, json};
 use smista_core::policy::{PermissionMode, ToolsConfig};
 use smista_core::skill::Skill;
 use smista_providers::api::ToolDefinition;
 
+/// The name of the built-in tool that reads a file on the user's machine.
+pub(crate) const READ_FILE_TOOL: &str = "read_file";
+/// The name of the built-in tool that writes a file on the user's machine.
+pub(crate) const WRITE_FILE_TOOL: &str = "write_file";
+/// The name of the built-in tool that edits a file on the user's machine.
+pub(crate) const EDIT_FILE_TOOL: &str = "edit_file";
+/// The name of the built-in tool that runs a shell command on the user's machine.
+pub(crate) const SHELL_TOOL: &str = "shell";
 /// The name of the agent-internal memory tool, offered alongside the catalog.
-const MEMORY_TOOL: &str = "memory";
+pub(crate) const MEMORY_TOOL: &str = "memory";
 
 /// A built-in tool the router can offer the model.
 pub(crate) struct ToolSpec {
@@ -85,25 +88,25 @@ fn memory_parameters() -> Value {
 pub(crate) fn builtin_catalog() -> &'static [ToolSpec] {
     &[
         ToolSpec {
-            name: "read_file",
+            name: READ_FILE_TOOL,
             description: "Read the contents of a file on the user's machine.",
             parameters: read_file_parameters,
             changes_files: false,
         },
         ToolSpec {
-            name: "write_file",
+            name: WRITE_FILE_TOOL,
             description: "Write (creating or overwriting) a file on the user's machine.",
             parameters: write_file_parameters,
             changes_files: true,
         },
         ToolSpec {
-            name: "edit_file",
+            name: EDIT_FILE_TOOL,
             description: "Replace a span of text in a file on the user's machine.",
             parameters: edit_file_parameters,
             changes_files: true,
         },
         ToolSpec {
-            name: "shell",
+            name: SHELL_TOOL,
             description: "Run a shell command on the user's machine.",
             parameters: shell_parameters,
             changes_files: false,
@@ -120,6 +123,34 @@ pub(crate) fn tool_changes_files(name: &str) -> bool {
         .iter()
         .find(|spec| spec.name == name)
         .is_some_and(|spec| spec.changes_files)
+}
+
+/// Builds the diff a file-changing tool call records, as `(path, body)`.
+///
+/// Returns `None` for any call that does not change files, so the run loop
+/// records a diff exactly for `write_file` and `edit_file`. The body is a small
+/// unified-diff rendering of the change the call requests, derived from the
+/// model's arguments — the only point at which they are available — so it can be
+/// stored (and, for an encrypted session, sealed) up front and marked applied
+/// once the client confirms the edit.
+pub(crate) fn diff_for_tool_call(name: &str, arguments: &Value) -> Option<(String, String)> {
+    let path = arguments.get("path")?.as_str()?.to_string();
+    let body = match name {
+        WRITE_FILE_TOOL => {
+            let content = arguments
+                .get("content")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            format!("--- /dev/null\n+++ {path}\n+{content}")
+        }
+        EDIT_FILE_TOOL => {
+            let old = arguments.get("old").and_then(Value::as_str).unwrap_or("");
+            let new = arguments.get("new").and_then(Value::as_str).unwrap_or("");
+            format!("--- {path}\n+++ {path}\n-{old}\n+{new}")
+        }
+        _ => return None,
+    };
+    Some((path, body))
 }
 
 /// The full set of [`ToolDefinition`]s offered to the model for one turn.
@@ -190,6 +221,29 @@ mod tests {
         config.set("shell", PermissionMode::Deny);
         let tools = offered_tools(&config, &[], &[]);
         assert!(!tools.iter().any(|tool| tool.name == "shell"));
+    }
+
+    #[test]
+    fn should_build_a_diff_for_an_edit_file_call() {
+        let args = json!({ "path": "src/lib.rs", "old": "a", "new": "b" });
+        let (path, body) = diff_for_tool_call("edit_file", &args).expect("edit produces a diff");
+        assert_eq!(path, "src/lib.rs");
+        assert!(body.contains("-a"));
+        assert!(body.contains("+b"));
+    }
+
+    #[test]
+    fn should_build_a_diff_for_a_write_file_call() {
+        let args = json!({ "path": "new.rs", "content": "hello" });
+        let (path, body) = diff_for_tool_call("write_file", &args).expect("write produces a diff");
+        assert_eq!(path, "new.rs");
+        assert!(body.contains("hello"));
+    }
+
+    #[test]
+    fn should_not_build_a_diff_for_a_non_file_tool() {
+        assert!(diff_for_tool_call("shell", &json!({ "command": "ls" })).is_none());
+        assert!(diff_for_tool_call("read_file", &json!({ "path": "x" })).is_none());
     }
 
     #[test]

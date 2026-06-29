@@ -72,10 +72,6 @@ impl Router {
     /// already chosen the provider deterministically, so this is a pure lookup
     /// that prefers a local provider over a remote one of the same id.
     #[must_use]
-    #[allow(
-        dead_code,
-        reason = "consumed by the orchestrator invocation wrapper in a later task"
-    )]
     pub fn provider(&self, id: &ProviderId) -> Option<Arc<dyn Provider>> {
         self.local.get(id).or_else(|| self.remote.get(id)).cloned()
     }

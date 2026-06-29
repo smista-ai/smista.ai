@@ -7,11 +7,6 @@
 //! persists the produced work, writes the next durable phase, and releases the
 //! lock. Routing never depends on an LLM; the orchestrator only feeds the
 //! resolver inputs it recalls from storage and acts on its output.
-#![allow(
-    dead_code,
-    reason = "the orchestrator is mounted on the web execute route in a later task"
-)]
-
 mod cost;
 mod crypto;
 mod error;
@@ -44,10 +39,11 @@ use smista_core::message::{Message, MessageRole};
 use smista_core::model::{Provider, RoutingRequirements};
 use smista_providers::api::RequestMessage;
 use smista_providers::memory::MemoryScope;
+use smista_storage::database::Database as _;
 use smista_storage::database::surreal::SurrealDatabase;
 use smista_storage::entity::{
-    ActiveTurn, ApprovalKind as StorageApprovalKind, PendingWrite, ResumeStep, RunPhase, RunState,
-    ToolCallStatus,
+    ActiveTurn, ApprovalKind as StorageApprovalKind, DiffStatus, PendingWrite, ResumeStep,
+    RunPhase, RunState, ToolCallStatus,
 };
 use smista_storage::surrealdb::RecordId;
 use smista_storage::types::SecretContent;
@@ -55,8 +51,8 @@ use uuid::Uuid;
 
 pub(crate) use self::error::OrchestratorError;
 use self::persist::{
-    persist_approval, persist_context_references, persist_routing_decision, persist_run_input,
-    write_sealed_message, write_sealed_plan, write_sealed_tool_call,
+    persist_approval, persist_run_input, write_sealed_diff, write_sealed_message,
+    write_sealed_plan, write_sealed_tool_call,
 };
 use self::preview::preview_response;
 use self::recall::{Recalled, recall};
@@ -65,6 +61,7 @@ use self::run_input::{
     RunInputBundle, RunInputMeta, rebuild_run_meta, rebuild_workspace, split_execute_request,
 };
 pub(crate) use self::stream::TurnSink;
+use self::trace_emit::{record_approval_event, record_tool_result};
 use self::turn::{
     AwaitingApprovalData, AwaitingToolData, BundleSource, CATALOG_TIMEOUT, CompletedData, TurnCx,
     TurnStep, run_turn, to_resolver_attachments, to_resolver_input, to_resolver_workspace,
@@ -73,6 +70,7 @@ use crate::router::Router;
 use crate::router::resolver::context::{RecalledContext, ResolvedContext};
 use crate::router::resolver::{ResolveArgs, Resolver, RoutingDecision};
 use crate::session::{Sessions, UserSession};
+use crate::trace::TraceContext;
 
 /// Whether a continuation supersedes the in-flight turn instead of being
 /// rejected by it. Only `break` and `inject` supersede; every other
@@ -483,6 +481,33 @@ impl Orchestrator {
     /// written from the client's `sealed` map, and each tool-call row is written
     /// with its client-sealed result. The results are then handed to the next
     /// turn as followups so the model sees them.
+    /// The trace context for a continuation, recovered from the run's latest
+    /// routing decision.
+    ///
+    /// A continuation has no resolved turn in hand — the route was chosen on the
+    /// turn that paused — so the result and approval traces it records take their
+    /// provider/model/task metadata from the last persisted routing decision.
+    /// Returns `None` when none is recorded, so tracing stays best-effort.
+    async fn continuation_trace_context(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> Option<TraceContext> {
+        let state = self
+            .database
+            .get_session_state(user_id, session_id)
+            .await
+            .ok()
+            .flatten()?;
+        let decision = state.routing_decisions.last()?;
+        Some(TraceContext {
+            task_type: decision.task_type,
+            provider: decision.provider.clone(),
+            model: decision.model.clone(),
+            matched_rule: decision.matched_rule.clone(),
+        })
+    }
+
     async fn resume_tool_results(
         &self,
         cx: &ContinuationCx<'_>,
@@ -519,9 +544,27 @@ impl Orchestrator {
         // run-input bundle, deferred at run start, is sealed in place here too.
         if encrypted {
             validate_required_seals(session, pending, &sealed).await?;
-            flush_pending_messages(session, user_id, session_id, pending, &sealed).await?;
+            flush_pending_messages(session, pending, &sealed).await?;
+            write_pending_diff(session, user_id, session_id, pending, &sealed).await?;
             reseal_run_input(session, &sealed).await?;
         }
+
+        // Calls that authored a proposed diff at request time; their diff shares
+        // the call id and is marked applied or rejected once the result arrives.
+        let diff_calls: std::collections::HashSet<&str> = calls
+            .iter()
+            .filter(|wait| wait.records_diff)
+            .map(|wait| wait.call_id.as_str())
+            .collect();
+
+        // Trace context for the result and approval events this continuation
+        // records, recovered from the run's latest routing decision.
+        let tracer = session.tracer();
+        let trace_ctx = self.continuation_trace_context(user_id, session_id).await;
+        let tool_names: HashMap<&str, &str> = calls
+            .iter()
+            .map(|wait| (wait.call_id.as_str(), wait.tool_name.as_str()))
+            .collect();
 
         let mut followups = Vec::with_capacity(results.len());
         for result in results {
@@ -546,8 +589,6 @@ impl Orchestrator {
                 };
                 write_sealed_tool_call(
                     session,
-                    user_id,
-                    session_id,
                     call_uuid,
                     &tool_name,
                     status,
@@ -566,6 +607,34 @@ impl Orchestrator {
                     .await?;
             }
 
+            // A file-changing call's proposed diff is now resolved: a successful
+            // result means the edit applied; a failed one means it did not.
+            if diff_calls.contains(result.call_id.as_str()) {
+                let diff_status = if result.is_error {
+                    DiffStatus::Rejected
+                } else {
+                    DiffStatus::Applied
+                };
+                session.set_diff_status(call_uuid, diff_status).await?;
+                tracing::debug!(
+                    %session_id, %call_uuid, ?diff_status,
+                    "resolved a file-edit diff from its tool result"
+                );
+            }
+
+            // Trace the result, and the folded approval if the client returned one.
+            if let (Some(ctx), Some(tool_name)) =
+                (&trace_ctx, tool_names.get(result.call_id.as_str()))
+            {
+                record_tool_result(
+                    &tracer,
+                    ctx.clone(),
+                    (*tool_name).to_string(),
+                    result.is_error,
+                )
+                .await;
+            }
+
             if let Some(decision) = result.decision {
                 persist_approval(
                     session,
@@ -578,6 +647,17 @@ impl Orchestrator {
                 )
                 .await?;
                 tracing::debug!(%session_id, "recorded a folded tool approval");
+                if let Some(ctx) = &trace_ctx {
+                    record_approval_event(
+                        &tracer,
+                        ctx.clone(),
+                        "tool_call".to_string(),
+                        result.call_id.clone(),
+                        decision,
+                        None,
+                    )
+                    .await;
+                }
             }
 
             followups.push(RequestMessage::ToolResult {
@@ -704,11 +784,12 @@ impl Orchestrator {
             return Err(OrchestratorError::UnexpectedContinuation);
         };
         validate_required_seals(session, pending, &sealed).await?;
-        flush_pending_messages(session, user_id, session_id, pending, &sealed).await?;
+        flush_pending_messages(session, pending, &sealed).await?;
         write_pending_plan(session, user_id, session_id, pending, &sealed).await?;
         // Session memory written in clear during the run is sealed in place; its
         // rows already exist, so the ciphertext overwrites their content.
         reseal_memory(session, &sealed).await?;
+        reseal_traces(session, &sealed).await?;
         // The run-input bundle is sealed in place over its placeholder.
         reseal_run_input(session, &sealed).await?;
         self.release(
@@ -765,6 +846,12 @@ impl Orchestrator {
         };
         let approved = matches!(entry.decision, smista_core::api::ApprovalDecision::Approved);
 
+        // Trace metadata for the approval this continuation records.
+        let tracer = session.tracer();
+        let trace_ctx = self.continuation_trace_context(user_id, session_id).await;
+        let decision = entry.decision;
+        let reason = entry.reason.clone();
+
         match kind {
             StorageApprovalKind::Plan => {
                 let plan_id = plan_id_from_detail(detail)?;
@@ -773,7 +860,7 @@ impl Orchestrator {
                 // recording the decision against the plan.
                 if !pending.is_empty() {
                     validate_required_seals(session, pending, &sealed).await?;
-                    flush_pending_messages(session, user_id, session_id, pending, &sealed).await?;
+                    flush_pending_messages(session, pending, &sealed).await?;
                     write_pending_plan(session, user_id, session_id, pending, &sealed).await?;
                     reseal_run_input(session, &sealed).await?;
                 }
@@ -787,6 +874,17 @@ impl Orchestrator {
                     entry.reason,
                 )
                 .await?;
+                if let Some(ctx) = &trace_ctx {
+                    record_approval_event(
+                        &tracer,
+                        ctx.clone(),
+                        "plan".to_string(),
+                        plan_id.to_string(),
+                        decision,
+                        reason,
+                    )
+                    .await;
+                }
                 let status = if approved {
                     smista_storage::entity::PlanStatus::Approved
                 } else {
@@ -831,6 +929,17 @@ impl Orchestrator {
                     entry.reason,
                 )
                 .await?;
+                if let Some(ctx) = &trace_ctx {
+                    record_approval_event(
+                        &tracer,
+                        ctx.clone(),
+                        "gate".to_string(),
+                        approval_id.clone(),
+                        decision,
+                        reason,
+                    )
+                    .await;
+                }
                 if !approved {
                     tracing::info!(%session_id, "gate rejected; returning the run to idle");
                     self.release(
@@ -1114,10 +1223,6 @@ impl Orchestrator {
         let provider = resolved.routing.provider.clone();
         let model = resolved.routing.model.clone();
 
-        persist_routing_decision(session, user_id, session_id, &resolved.routing).await?;
-        persist_context_references(session, user_id, session_id, &resolved.context.references)
-            .await?;
-
         let encrypted = !deferred.pending.is_empty();
         let (allowed_continuations, to_encrypt) = if encrypted {
             // Session memory the model wrote during the run was stored in clear by
@@ -1126,6 +1231,11 @@ impl Orchestrator {
             let mut to_encrypt = deferred.to_encrypt;
             for (id, plaintext) in clear_context_memory(session).await? {
                 to_encrypt.insert(ContentRef::Memory(id.to_string()), plaintext);
+            }
+            // The deterministic trace was recorded in clear as the run proceeded;
+            // fold it into the same seal so nothing readable is left at rest.
+            for (id, plaintext) in clear_traces(session).await? {
+                to_encrypt.insert(ContentRef::Trace(id.to_string()), plaintext);
             }
             let phase = RunPhase::AwaitingEncrypt {
                 pending: deferred.pending,
@@ -1224,7 +1334,6 @@ impl Orchestrator {
             approval_id,
             detail,
             deferred,
-            ..
         } = data;
         let detail_json = serde_json::to_string(&detail).map_err(|error| {
             OrchestratorError::Internal(format!("approval detail encode: {error}"))
@@ -1315,8 +1424,6 @@ async fn is_encrypted(session: &UserSession) -> Result<bool, OrchestratorError> 
 /// kinds are left to their own writers.
 async fn flush_pending_messages(
     session: &UserSession,
-    user_id: Uuid,
-    session_id: Uuid,
     pending: &[PendingWrite],
     sealed: &BTreeMap<ContentRef, EncryptedPayload>,
 ) -> Result<(), OrchestratorError> {
@@ -1332,17 +1439,7 @@ async fn flush_pending_messages(
             let uuid = Uuid::parse_str(id).map_err(|_| {
                 OrchestratorError::Internal("pending message id is not a uuid".to_string())
             })?;
-            write_sealed_message(
-                session,
-                user_id,
-                session_id,
-                uuid,
-                *role,
-                provider.clone(),
-                model,
-                content,
-            )
-            .await?;
+            write_sealed_message(session, uuid, *role, provider.clone(), model, content).await?;
         }
     }
     Ok(())
@@ -1363,6 +1460,31 @@ async fn write_pending_plan(
                 OrchestratorError::Internal("pending plan id is not a uuid".to_string())
             })?;
             write_sealed_plan(session, user_id, session_id, uuid, content).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Writes the deferred proposed-diff rows of an encrypted pause, sealed by the
+/// client.
+///
+/// A file-changing tool folds its diff body into `to_encrypt` at request time;
+/// this writes each diff row (status `Proposed`) once the ciphertext returns,
+/// keyed by the tool call's id so the result loop can mark it applied.
+async fn write_pending_diff(
+    session: &UserSession,
+    user_id: Uuid,
+    session_id: Uuid,
+    pending: &[PendingWrite],
+    sealed: &BTreeMap<ContentRef, EncryptedPayload>,
+) -> Result<(), OrchestratorError> {
+    for write in pending {
+        if let PendingWrite::Diff { id, path } = write {
+            let content = sealed_content(sealed, &ContentRef::Diff(id.clone()))?;
+            let uuid = Uuid::parse_str(id).map_err(|_| {
+                OrchestratorError::Internal("pending diff id is not a uuid".to_string())
+            })?;
+            write_sealed_diff(session, user_id, session_id, uuid, path.clone(), content).await?;
         }
     }
     Ok(())
@@ -1413,6 +1535,49 @@ async fn reseal_memory(
     Ok(())
 }
 
+/// The trace rows still stored in clear, as `(id, plaintext)`.
+///
+/// The router records its deterministic trace in clear as the run proceeds; an
+/// encrypted run seals these rows before it ends so nothing readable is left at
+/// rest, exactly as it does for session memory.
+async fn clear_traces(session: &UserSession) -> Result<Vec<(Uuid, String)>, OrchestratorError> {
+    let rows = session.list_trace_content().await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|(event, content)| {
+            content
+                .content
+                .as_plaintext()
+                .map(|plaintext| (event.uuid(), plaintext.to_string()))
+        })
+        .collect())
+}
+
+/// Seals the trace rows the client returned, overwriting their content.
+///
+/// A trace row already exists (the router wrote it in clear during the run), so
+/// the ciphertext is written in place, like [`reseal_memory`].
+async fn reseal_traces(
+    session: &UserSession,
+    sealed: &BTreeMap<ContentRef, EncryptedPayload>,
+) -> Result<(), OrchestratorError> {
+    for (reference, payload) in sealed {
+        if let ContentRef::Trace(id) = reference {
+            let uuid = Uuid::parse_str(id).map_err(|_| {
+                OrchestratorError::Internal("sealed trace id is not a uuid".to_string())
+            })?;
+            session
+                .set_content(
+                    "trace_event",
+                    uuid,
+                    SecretContent::Encrypted(crypto::payload_to_envelope(payload)),
+                )
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 /// Seals the run-input bundle the client returned, overwriting its placeholder.
 ///
 /// The run-input content row already exists (the run wrote a placeholder up
@@ -1441,6 +1606,7 @@ fn pending_content_ref(write: &PendingWrite) -> ContentRef {
         PendingWrite::Message { id, .. } => ContentRef::Message(id.clone()),
         PendingWrite::ToolCall { id, .. } => ContentRef::ToolCall(id.clone()),
         PendingWrite::Plan { id } => ContentRef::Plan(id.clone()),
+        PendingWrite::Diff { id, .. } => ContentRef::Diff(id.clone()),
     }
 }
 

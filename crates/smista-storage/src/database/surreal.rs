@@ -1470,6 +1470,50 @@ impl Database for SurrealDatabase {
         ))
     }
 
+    async fn list_session_trace_content(
+        &self,
+        user_id: Uuid,
+        session_id: Uuid,
+    ) -> StorageResult<Vec<(TraceEvent, TraceEventContent)>> {
+        tracing::debug!("listing trace content for user {user_id} in session {session_id}");
+        let session = record_id::<Session, _>(session_id);
+        let user = record_id::<User, _>(user_id);
+
+        let bases: Vec<TraceEvent> = self
+            .0
+            .query(
+                "SELECT * FROM $table WHERE session = $sess \
+                 AND user = $user ORDER BY created_at ASC",
+            )
+            .bind(("table", TraceEvent::table()))
+            .bind(("sess", session.clone()))
+            .bind(("user", user.clone()))
+            .await?
+            .take(0)?;
+
+        // The `_content` payloads share each event's record key; pair them by key.
+        let contents: Vec<TraceEventContent> = self
+            .0
+            .query(
+                "SELECT * FROM $content_table WHERE record::id(id) IN \
+                 (SELECT VALUE record::id(id) FROM $base_table \
+                  WHERE session = $sess AND user = $user)",
+            )
+            .bind(("content_table", TraceEventContent::table()))
+            .bind(("base_table", TraceEvent::table()))
+            .bind(("sess", session))
+            .bind(("user", user))
+            .await?
+            .take(0)?;
+
+        Ok(pair_by_key(
+            bases,
+            &contents,
+            |event| &event.id,
+            |content| &content.id,
+        ))
+    }
+
     async fn forget_context_memory(
         &self,
         user_id: Uuid,

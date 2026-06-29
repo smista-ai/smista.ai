@@ -5,11 +5,6 @@
 //! wire response. The loop reuses the pure [`Resolver`] verbatim: it only feeds
 //! it the recalled, plaintext inputs and acts on its output, so routing never
 //! depends on an LLM.
-#![allow(
-    dead_code,
-    reason = "the turn loop grows tool, approval and decrypt branches in later tasks"
-)]
-
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 
@@ -31,13 +26,17 @@ use crate::orchestrator::error::OrchestratorError;
 use crate::orchestrator::invoke::invoke;
 use crate::orchestrator::mediation::mediate;
 use crate::orchestrator::persist::{
-    persist_plaintext_message, persist_plan_draft, persist_tool_request,
+    persist_context_references, persist_plaintext_message, persist_plan_draft,
+    persist_routing_decision, persist_tool_request,
 };
 use crate::orchestrator::prompt::build_messages;
 use crate::orchestrator::recall::{Recalled, recall};
 use crate::orchestrator::registry::TurnToken;
 use crate::orchestrator::run_input::{RunInputBundle, RunInputMeta, rebuild_workspace};
-use crate::orchestrator::tools::offered_tools;
+use crate::orchestrator::tools::{diff_for_tool_call, offered_tools};
+use crate::orchestrator::trace_emit::{
+    context_of, record_cost_event, record_message_event, record_resolution, record_tool_request,
+};
 use crate::router::Router;
 use crate::router::resolver::{ResolveArgs, ResolvedTurn, Resolver};
 use crate::session::UserSession;
@@ -145,8 +144,6 @@ pub(crate) struct AwaitingToolData {
 pub(crate) struct AwaitingApprovalData {
     /// Identifier the client echoes back with its decision.
     pub(crate) approval_id: String,
-    /// The drafted plan the decision applies to.
-    pub(crate) plan_id: uuid::Uuid,
     /// Non-secret detail re-emitted to the client (the plan reference).
     pub(crate) detail: serde_json::Value,
     /// The deferred content of an encrypted turn (the user message and the plan
@@ -302,6 +299,27 @@ async fn run_turn_inner(
             local_only: cx.meta.local_preferences.local_only,
         })?;
 
+        // Persist this step's routing decision and context references — recorded
+        // for every turn that routes, including ones that pause for tools or a
+        // plan — then trace the same facts (classification, route, context).
+        persist_routing_decision(
+            cx.session,
+            cx.session.user_id(),
+            cx.session.session_id(),
+            &resolved.routing,
+        )
+        .await?;
+        persist_context_references(
+            cx.session,
+            cx.session.user_id(),
+            cx.session.session_id(),
+            &resolved.context.references,
+        )
+        .await?;
+        let tracer = cx.session.tracer();
+        let trace_ctx = context_of(&resolved);
+        record_resolution(&tracer, &resolved).await;
+
         // Record the user message once, stamped with the route serving the run,
         // so it lands in history ahead of any assistant message this run writes.
         // An encrypted run stores nothing now: it defers the row instead.
@@ -315,6 +333,14 @@ async fn run_turn_inner(
                 &bundle.input.text,
             )
             .await?;
+            record_message_event(
+                &tracer,
+                trace_ctx.clone(),
+                MessageRole::User,
+                resolved.routing.provider.clone(),
+                resolved.routing.model.clone(),
+            )
+            .await;
             user_recorded = true;
         }
 
@@ -362,7 +388,6 @@ async fn run_turn_inner(
                 let approval_id = Uuid::now_v7().to_string();
                 return Ok(TurnStep::AwaitingApproval(Box::new(AwaitingApprovalData {
                     approval_id,
-                    plan_id,
                     detail: serde_json::json!({ "plan": plan_id.to_string() }),
                     deferred,
                 })));
@@ -377,6 +402,22 @@ async fn run_turn_inner(
                 &response.content,
             )
             .await?;
+            record_message_event(
+                &tracer,
+                trace_ctx.clone(),
+                MessageRole::Assistant,
+                resolved.routing.provider.clone(),
+                resolved.routing.model.clone(),
+            )
+            .await;
+            record_cost_event(
+                &tracer,
+                trace_ctx.clone(),
+                &usage,
+                resolved.routing.provider.clone(),
+                resolved.routing.model.clone(),
+            )
+            .await;
             return Ok(TurnStep::Completed(Box::new(CompletedData {
                 resolved,
                 content: response.content,
@@ -430,6 +471,23 @@ async fn run_turn_inner(
             &mediated.client,
         )
         .await?;
+        record_message_event(
+            &tracer,
+            trace_ctx.clone(),
+            MessageRole::Assistant,
+            resolved.routing.provider.clone(),
+            resolved.routing.model.clone(),
+        )
+        .await;
+        for client_call in &mediated.client {
+            record_tool_request(
+                &tracer,
+                trace_ctx.clone(),
+                client_call.call.name.clone(),
+                Some(client_call.call.arguments.to_string()),
+            )
+            .await;
+        }
         return Ok(TurnStep::AwaitingTool(Box::new(AwaitingToolData {
             tool_requests,
             calls,
@@ -560,6 +618,25 @@ async fn author_tool_request(
                 id: call_id.clone(),
                 tool_name: client_call.call.name.clone(),
             });
+
+            // A file-changing tool defers its proposed diff like any other
+            // router-authored row: the body is folded for the client to seal and
+            // its metadata recorded as a pending write, keyed by the call's id.
+            let records_diff =
+                match diff_for_tool_call(&client_call.call.name, &client_call.call.arguments) {
+                    Some((path, body)) => {
+                        deferred.pending.push(PendingWrite::Diff {
+                            id: call_id.clone(),
+                            path,
+                        });
+                        deferred
+                            .to_encrypt
+                            .insert(ContentRef::Diff(call_id.clone()), body);
+                        true
+                    }
+                    None => false,
+                };
+
             tool_requests.push(ToolRequest {
                 call_id: call_id.clone(),
                 name: client_call.call.name.clone(),
@@ -568,7 +645,9 @@ async fn author_tool_request(
             });
             calls.push(ToolWait {
                 call_id,
+                tool_name: client_call.call.name.clone(),
                 requires_approval: to_storage_approval(client_call.requires_approval),
+                records_diff,
             });
         }
         Ok((tool_requests, calls))
@@ -598,7 +677,9 @@ async fn author_tool_request(
             .iter()
             .map(|call| ToolWait {
                 call_id: call.call_id.clone(),
+                tool_name: call.name.clone(),
                 requires_approval: to_storage_approval(call.requires_approval),
+                records_diff: call.records_diff,
             })
             .collect();
         Ok((tool_requests, calls))

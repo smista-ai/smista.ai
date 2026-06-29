@@ -50,13 +50,7 @@ impl RequestCredentials {
     }
 
     /// Returns the API key the caller supplied for `provider`, if any.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "read by provider-backed handlers landing in follow-up issues"
-        )
-    )]
+    #[cfg(test)]
     pub(crate) fn get(&self, provider: &Provider) -> Option<&SecretString> {
         self.0.get(provider)
     }

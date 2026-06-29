@@ -253,6 +253,34 @@ fn allow_read_file_request() -> ExecuteRequest {
     request
 }
 
+/// A completion that requests `edit_file` with a concrete path and edit.
+fn edit_file_call_response() -> CompletionResponse {
+    CompletionResponse {
+        content: String::new(),
+        tool_calls: vec![ToolCall {
+            call_id: "edit_file-1".to_string(),
+            name: "edit_file".to_string(),
+            arguments: serde_json::json!({
+                "path": "src/lib.rs",
+                "old": "old line",
+                "new": "new line",
+            }),
+        }],
+        usage: Usage::default(),
+        finish_reason: FinishReason::ToolCalls,
+    }
+}
+
+/// A request that grants `edit_file` without confirmation.
+fn allow_edit_file_request() -> ExecuteRequest {
+    let mut request = sample_execute_request();
+    request
+        .policy
+        .tools
+        .set("edit_file", smista_core::policy::PermissionMode::Allow);
+    request
+}
+
 /// A request that forbids `shell`.
 fn deny_shell_request() -> ExecuteRequest {
     let mut request = sample_execute_request();
@@ -521,6 +549,335 @@ async fn should_resume_after_tool_results_and_complete() {
         .expect("run state present");
     assert_eq!(run_state.phase, RunPhase::Idle);
     assert_eq!(run_state.active, None);
+}
+
+#[tokio::test]
+async fn should_record_trace_events_for_a_completed_turn() {
+    use smista_storage::api::Pagination;
+    use smista_storage::entity::TraceEventType;
+
+    let (orchestrator, user_id, session_id) =
+        orchestrator_with_router(Router::mock_scripted(vec![
+            completed_response(),
+            completed_response(),
+        ]))
+        .await;
+    // Two turns: the second recalls the first turn's messages as context, so a
+    // context-selection trace is produced alongside the always-present events.
+    for _ in 0..2 {
+        orchestrator
+            .execute(
+                user_id,
+                session_id,
+                sample_execute_request(),
+                HashMap::new(),
+            )
+            .await
+            .expect("turn completes");
+    }
+
+    let sessions = Sessions::new(orchestrator.database.clone(), user_id);
+    let session = sessions.open(session_id).await.expect("open session");
+    let trace = session
+        .traces(Pagination::default())
+        .await
+        .expect("traces read")
+        .expect("trace present");
+    let kinds: Vec<TraceEventType> = trace.events.iter().map(|event| event.event_type).collect();
+    for expected in [
+        TraceEventType::Classification,
+        TraceEventType::RoutingDecision,
+        TraceEventType::ContextSelection,
+        TraceEventType::Message,
+        TraceEventType::Cost,
+    ] {
+        assert!(
+            kinds.contains(&expected),
+            "missing trace event {expected:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn should_seal_trace_events_after_an_encrypted_run() {
+    let (orchestrator, user_id, session_id) = encrypted_session().await;
+
+    let r1 = orchestrator
+        .execute(
+            user_id,
+            session_id,
+            sample_execute_request(),
+            HashMap::new(),
+        )
+        .await
+        .expect("turn completes");
+    let to_encrypt = match r1.outcome {
+        TurnOutcome::Completed(turn) => turn.to_encrypt,
+        other => panic!("expected completed, got {other:?}"),
+    };
+    assert!(
+        to_encrypt
+            .keys()
+            .any(|reference| matches!(reference, ContentRef::Trace(_))),
+        "the deterministic trace is folded into the seal, never left in clear"
+    );
+
+    let encrypted: BTreeMap<ContentRef, EncryptedPayload> = to_encrypt
+        .iter()
+        .map(|(reference, plaintext)| (reference.clone(), test_seal(plaintext)))
+        .collect();
+    orchestrator
+        .advance(
+            user_id,
+            session_id,
+            ContinueRequest::Sealed { encrypted },
+            HashMap::new(),
+        )
+        .await
+        .expect("seal completes");
+
+    let sessions = Sessions::new(orchestrator.database.clone(), user_id);
+    let session = sessions.open(session_id).await.expect("open session");
+    let rows = session
+        .list_trace_content()
+        .await
+        .expect("trace content read");
+    assert!(!rows.is_empty(), "the run recorded trace events");
+    assert!(
+        rows.iter()
+            .all(|(_, content)| content.content.is_encrypted()),
+        "every trace row is sealed at rest after an encrypted run"
+    );
+}
+
+#[tokio::test]
+async fn should_record_tool_and_approval_traces_across_a_tool_turn() {
+    use smista_storage::api::Pagination;
+    use smista_storage::entity::TraceEventType;
+
+    let (orchestrator, user_id, session_id) =
+        orchestrator_with_router(Router::mock_scripted(vec![
+            tool_call_response("read_file"),
+            completed_response(),
+        ]))
+        .await;
+    orchestrator
+        .execute(
+            user_id,
+            session_id,
+            sample_execute_request(),
+            HashMap::new(),
+        )
+        .await
+        .expect("turn pauses for an ask tool");
+    let call_id = pending_call_id(&orchestrator, user_id, session_id).await;
+
+    let continuation = ContinueRequest::ToolResults {
+        results: vec![ToolResult {
+            call_id,
+            content: "ok".to_string(),
+            is_error: false,
+            decision: Some(smista_core::api::ApprovalDecision::Approved),
+        }],
+        encrypted: Default::default(),
+    };
+    orchestrator
+        .advance(user_id, session_id, continuation, HashMap::new())
+        .await
+        .expect("run resumes after the tool result");
+
+    let sessions = Sessions::new(orchestrator.database.clone(), user_id);
+    let session = sessions.open(session_id).await.expect("open session");
+    let trace = session
+        .traces(Pagination::default())
+        .await
+        .expect("traces read")
+        .expect("trace present");
+    let kinds: Vec<TraceEventType> = trace.events.iter().map(|event| event.event_type).collect();
+    assert!(
+        kinds.contains(&TraceEventType::ToolCall),
+        "a tool turn records tool-call traces"
+    );
+    assert!(
+        kinds.contains(&TraceEventType::Approval),
+        "a folded tool approval is traced"
+    );
+}
+
+#[tokio::test]
+async fn should_record_a_proposed_diff_when_a_file_editing_tool_is_requested() {
+    let (orchestrator, user_id, session_id) =
+        orchestrator_with_router(Router::mock_scripted(vec![edit_file_call_response()])).await;
+
+    orchestrator
+        .execute(
+            user_id,
+            session_id,
+            allow_edit_file_request(),
+            HashMap::new(),
+        )
+        .await
+        .expect("turn pauses for the edit tool");
+
+    let sessions = Sessions::new(orchestrator.database.clone(), user_id);
+    let session = sessions.open(session_id).await.expect("open session");
+    let state = session
+        .state()
+        .await
+        .expect("state read")
+        .expect("state present");
+
+    assert_eq!(
+        state.diffs.len(),
+        1,
+        "a file-editing tool request records one diff"
+    );
+    assert_eq!(state.diffs[0].path, "src/lib.rs");
+    assert_eq!(
+        state.diffs[0].status,
+        smista_storage::entity::DiffStatus::Proposed
+    );
+}
+
+#[tokio::test]
+async fn should_mark_the_diff_applied_when_the_edit_succeeds() {
+    let (orchestrator, user_id, session_id) =
+        orchestrator_with_router(Router::mock_scripted(vec![
+            edit_file_call_response(),
+            completed_response(),
+        ]))
+        .await;
+
+    orchestrator
+        .execute(
+            user_id,
+            session_id,
+            allow_edit_file_request(),
+            HashMap::new(),
+        )
+        .await
+        .expect("turn pauses for the edit tool");
+    let call_id = pending_call_id(&orchestrator, user_id, session_id).await;
+
+    let continuation = ContinueRequest::ToolResults {
+        results: vec![ToolResult {
+            call_id,
+            content: "edit applied".to_string(),
+            is_error: false,
+            decision: None,
+        }],
+        encrypted: Default::default(),
+    };
+    orchestrator
+        .advance(user_id, session_id, continuation, HashMap::new())
+        .await
+        .expect("run resumes and completes");
+
+    let sessions = Sessions::new(orchestrator.database.clone(), user_id);
+    let session = sessions.open(session_id).await.expect("open session");
+    let state = session
+        .state()
+        .await
+        .expect("state read")
+        .expect("state present");
+
+    assert_eq!(state.diffs.len(), 1, "the edit is recorded as one diff");
+    assert_eq!(
+        state.diffs[0].status,
+        smista_storage::entity::DiffStatus::Applied
+    );
+    assert!(
+        state.diffs[0].applied_at.is_some(),
+        "an applied diff carries an applied_at timestamp"
+    );
+}
+
+#[tokio::test]
+async fn should_seal_and_apply_a_diff_in_an_encrypted_run() {
+    let (orchestrator, user_id, session_id) =
+        encrypted_orchestrator_with_router(Router::mock_scripted(vec![
+            edit_file_call_response(),
+            completed_response(),
+        ]))
+        .await;
+
+    let r1 = orchestrator
+        .execute(
+            user_id,
+            session_id,
+            allow_edit_file_request(),
+            HashMap::new(),
+        )
+        .await
+        .expect("turn pauses for the edit tool");
+    let (tool_requests, to_encrypt) = match r1.outcome {
+        TurnOutcome::AwaitingTool {
+            tool_requests,
+            to_encrypt,
+            ..
+        } => (tool_requests, to_encrypt),
+        other => panic!("expected awaiting_tool, got {other:?}"),
+    };
+    assert!(
+        to_encrypt
+            .keys()
+            .any(|reference| matches!(reference, ContentRef::Diff(_))),
+        "the proposed diff body is folded into the seal, never stored in clear"
+    );
+
+    // The client seals every folded row (the diff included) and answers the tool.
+    let mut encrypted = seal_map(&to_encrypt);
+    let mut results = Vec::with_capacity(tool_requests.len());
+    for request in &tool_requests {
+        encrypted.insert(
+            ContentRef::ToolCall(request.call_id.clone()),
+            test_seal("ok"),
+        );
+        results.push(ToolResult {
+            call_id: request.call_id.clone(),
+            content: "ok".to_string(),
+            is_error: false,
+            decision: None,
+        });
+    }
+    orchestrator
+        .advance(
+            user_id,
+            session_id,
+            ContinueRequest::ToolResults { results, encrypted },
+            HashMap::new(),
+        )
+        .await
+        .expect("run resumes after the sealed tool results");
+
+    let sessions = Sessions::new(orchestrator.database.clone(), user_id);
+    let session = sessions.open(session_id).await.expect("open session");
+    let state = session
+        .state()
+        .await
+        .expect("state read")
+        .expect("state present");
+    assert_eq!(
+        state.diffs.len(),
+        1,
+        "the encrypted edit is recorded as one diff"
+    );
+    assert_eq!(state.diffs[0].path, "src/lib.rs");
+    assert_eq!(
+        state.diffs[0].status,
+        smista_storage::entity::DiffStatus::Applied
+    );
+
+    let diff_id = Uuid::parse_str(&tool_requests[0].call_id).expect("diff id is the call id");
+    let diff_content = session
+        .get_content("session_diff", diff_id)
+        .await
+        .expect("diff content read")
+        .expect("diff content present");
+    assert!(
+        diff_content.is_encrypted(),
+        "the diff body is sealed at rest"
+    );
 }
 
 #[tokio::test]
@@ -926,17 +1283,25 @@ async fn should_request_decrypt_then_seal_on_encrypted_run() {
         .expect("turn completes");
     let to_encrypt = match r2.outcome {
         TurnOutcome::Completed(turn) => {
+            let message_count = turn
+                .to_encrypt
+                .keys()
+                .filter(|reference| matches!(reference, ContentRef::Message(_)))
+                .count();
+            assert_eq!(
+                message_count, 2,
+                "the user and assistant messages are sealed"
+            );
             assert!(
                 turn.to_encrypt
                     .keys()
-                    .all(|reference| matches!(reference, ContentRef::Message(_))),
-                "only messages are sealed"
+                    .any(|reference| matches!(reference, ContentRef::Trace(_))),
+                "the run's trace events are sealed in the same fold"
             );
             turn.to_encrypt
         }
         other => panic!("expected completed, got {other:?}"),
     };
-    assert_eq!(to_encrypt.len(), 2, "user and assistant messages to seal");
     assert!(r2.allowed_continuations.contains(&ContinueKind::Sealed));
 
     // Return the ciphertext; the run writes the sealed rows and idles.

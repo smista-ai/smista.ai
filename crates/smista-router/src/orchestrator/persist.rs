@@ -6,11 +6,6 @@
 //! entity, keying record ids off the session and a fresh message id, and
 //! appends it. Plaintext content is wrapped in [`SecretContent::plaintext`];
 //! sealing for encrypted sessions rides a separate fold.
-#![allow(
-    dead_code,
-    reason = "wired into the orchestrator run loop across later tasks"
-)]
-
 use chrono::Utc;
 use smista_core::api::{ApprovalDecision, ToolApproval};
 use smista_core::intent::TaskIntent;
@@ -20,10 +15,10 @@ use smista_storage::StorageError;
 use smista_storage::database::Database as _;
 use smista_storage::database::surreal::SurrealDatabase;
 use smista_storage::entity::{
-    PlanStatus, Session, SessionApproval, SessionContextReference, SessionMessage,
-    SessionMessageContent, SessionPlan, SessionPlanContent, SessionRoutingDecision,
-    SessionRunInput, SessionRunInputContent, SessionToolCall, SessionToolCallContent, Table,
-    ToolCallStatus, User,
+    DiffStatus, PlanStatus, Session, SessionApproval, SessionContextReference, SessionDiff,
+    SessionDiffContent, SessionMessage, SessionMessageContent, SessionPlan, SessionPlanContent,
+    SessionRoutingDecision, SessionRunInput, SessionRunInputContent, SessionToolCall,
+    SessionToolCallContent, Table, ToolCallStatus, User,
 };
 use smista_storage::surrealdb::RecordId;
 use smista_storage::types::SecretContent;
@@ -31,6 +26,7 @@ use uuid::Uuid;
 
 use crate::orchestrator::mediation::ClientCall;
 use crate::orchestrator::run_input::{RunInputBundle, RunInputMeta};
+use crate::orchestrator::tools::diff_for_tool_call;
 use crate::router::resolver::RoutingDecision;
 use crate::router::resolver::context::{CandidateKind, ContextReference};
 use crate::session::{SessionError, SessionResult, UserSession};
@@ -126,13 +122,13 @@ pub(crate) struct PersistedCall {
     pub(crate) arguments: serde_json::Value,
     /// Whether the user must approve the call before it runs.
     pub(crate) requires_approval: ToolApproval,
+    /// Whether this call authored a proposed `session_diff` (a file-changing
+    /// tool), to be marked applied or rejected once its result arrives.
+    pub(crate) records_diff: bool,
 }
 
 /// The rows a tool-request pause authored, with the calls handed to the client.
 pub(crate) struct PersistedToolRequest {
-    /// References to the router-authored rows (assistant message, tool calls),
-    /// in the order they must be sealed for an encrypted session.
-    pub(crate) authored: Vec<RecordId>,
     /// The client-bound calls, each with its router-assigned identity.
     pub(crate) calls: Vec<PersistedCall>,
 }
@@ -154,7 +150,7 @@ pub(crate) async fn persist_tool_request(
     assistant_text: &str,
     client: &[ClientCall],
 ) -> SessionResult<PersistedToolRequest> {
-    let message_id = persist_plaintext_message(
+    persist_plaintext_message(
         session,
         user_id,
         session_id,
@@ -164,10 +160,6 @@ pub(crate) async fn persist_tool_request(
         assistant_text,
     )
     .await?;
-    let mut authored = vec![RecordId::new(
-        SessionMessage::name(),
-        message_id.to_string(),
-    )];
     let mut calls = Vec::with_capacity(client.len());
     for client_call in client {
         let call_uuid = Uuid::now_v7();
@@ -189,18 +181,59 @@ pub(crate) async fn persist_tool_request(
             error: None,
         };
         session.append_tool_call(tool_call, content).await?;
-        authored.push(RecordId::new(
-            SessionToolCall::name(),
-            call_uuid.to_string(),
-        ));
+
+        // A file-changing tool records its proposed edit now, while the model's
+        // arguments are still in hand; the diff shares the call's id so the
+        // result continuation can mark it applied without a separate reference.
+        let records_diff =
+            match diff_for_tool_call(&client_call.call.name, &client_call.call.arguments) {
+                Some((path, body)) => {
+                    persist_proposed_diff(session, user_id, session_id, call_uuid, path, &body)
+                        .await?;
+                    true
+                }
+                None => false,
+            };
+
         calls.push(PersistedCall {
             call_id: call_uuid.to_string(),
             name: client_call.call.name.clone(),
             arguments: client_call.call.arguments.clone(),
             requires_approval: client_call.requires_approval,
+            records_diff,
         });
     }
-    Ok(PersistedToolRequest { authored, calls })
+    Ok(PersistedToolRequest { calls })
+}
+
+/// Records a file-changing tool call's proposed diff and its plaintext body.
+///
+/// The diff is keyed by the call's id, so the result continuation marks it
+/// applied or rejected by that same id. Sealing for an encrypted session rides
+/// the separate fold, like every other router-authored row.
+pub(crate) async fn persist_proposed_diff(
+    session: &UserSession,
+    user_id: Uuid,
+    session_id: Uuid,
+    id: Uuid,
+    path: String,
+    body: &str,
+) -> SessionResult<()> {
+    let diff = SessionDiff {
+        id: RecordId::new(SessionDiff::name(), id.to_string()),
+        session: RecordId::new(Session::name(), session_id.to_string()),
+        user: RecordId::new(User::name(), user_id.to_string()),
+        path,
+        status: DiffStatus::Proposed,
+        created_at: Utc::now(),
+        applied_at: None,
+    };
+    let content = SessionDiffContent {
+        id: RecordId::new(SessionDiffContent::name(), id.to_string()),
+        content: SecretContent::plaintext(body),
+    };
+    session.append_diff(diff, content).await?;
+    Ok(())
 }
 
 /// Snapshots a draft plan and its body, returning the new plan's id.
@@ -239,17 +272,16 @@ pub(crate) async fn persist_plan_draft(
 /// Used when finalizing an encrypted run: the router stored nothing for the
 /// message up front, so its metadata (recalled from the run's [`PendingWrite`])
 /// and the ciphertext the client returned are written together here.
-#[allow(clippy::too_many_arguments, reason = "a message row's fields are wide")]
 pub(crate) async fn write_sealed_message(
     session: &UserSession,
-    user_id: Uuid,
-    session_id: Uuid,
     id: Uuid,
     role: MessageRole,
     provider: Provider,
     model: &str,
     content: SecretContent,
 ) -> SessionResult<()> {
+    let user_id = session.user_id();
+    let session_id = session.session_id();
     let message = SessionMessage {
         id: RecordId::new(SessionMessage::name(), id.to_string()),
         session: RecordId::new(Session::name(), session_id.to_string()),
@@ -294,26 +326,52 @@ pub(crate) async fn write_sealed_plan(
     Ok(())
 }
 
+/// Writes a proposed diff's metadata and its already-sealed body together.
+///
+/// The router authored the body from the tool arguments and folded it for the
+/// client to seal; this writes the row once the ciphertext returns, keyed by the
+/// tool call's id so the result continuation can mark it applied or rejected.
+pub(crate) async fn write_sealed_diff(
+    session: &UserSession,
+    user_id: Uuid,
+    session_id: Uuid,
+    id: Uuid,
+    path: String,
+    content: SecretContent,
+) -> SessionResult<()> {
+    let diff = SessionDiff {
+        id: RecordId::new(SessionDiff::name(), id.to_string()),
+        session: RecordId::new(Session::name(), session_id.to_string()),
+        user: RecordId::new(User::name(), user_id.to_string()),
+        path,
+        status: DiffStatus::Proposed,
+        created_at: Utc::now(),
+        applied_at: None,
+    };
+    let content = SessionDiffContent {
+        id: RecordId::new(SessionDiffContent::name(), id.to_string()),
+        content,
+    };
+    session.append_diff(diff, content).await?;
+    Ok(())
+}
+
 /// Writes a tool call's metadata and its already-sealed result together.
 ///
 /// The arguments are not sealed under the tool call's own reference — the durable
 /// secret a tool call carries is its `result`, sealed by the client — so the
 /// stored arguments are left empty for an encrypted run; the model's request
 /// rides the sealed assistant message instead.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "a tool-call row's fields are wide"
-)]
 pub(crate) async fn write_sealed_tool_call(
     session: &UserSession,
-    user_id: Uuid,
-    session_id: Uuid,
     id: Uuid,
     tool_name: &str,
     status: ToolCallStatus,
     result: Option<SecretContent>,
     error: Option<SecretContent>,
 ) -> SessionResult<()> {
+    let user_id = session.user_id();
+    let session_id = session.session_id();
     let completed_at =
         matches!(status, ToolCallStatus::Completed | ToolCallStatus::Failed).then(Utc::now);
     let tool_call = SessionToolCall {

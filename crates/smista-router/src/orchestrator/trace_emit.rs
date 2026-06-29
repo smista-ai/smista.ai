@@ -5,19 +5,20 @@
 //! [`Uuid`] so an encrypted session can fold the payload into `to_encrypt`. The
 //! orchestrator builds the typed payloads from the resolved turn and the usage
 //! totals; this module only serializes and records them.
-#![allow(
-    dead_code,
-    reason = "the encrypted-session variants are wired in a later orchestrator task"
-)]
-
+use smista_core::api::ApprovalDecision;
+use smista_core::message::MessageRole;
+use smista_core::model::Provider;
 use smista_core::policy::Classification;
+use smista_core::tool::ToolCallStatus;
 use smista_core::trace::{
     ApprovalPayload, ContextSelectionPayload, CostPayload, MessagePayload, RoutingDecisionPayload,
     ToolCallPayload,
 };
+use smista_core::usage::Usage;
 use smista_storage::types::SecretContent;
 use uuid::Uuid;
 
+use crate::router::resolver::ResolvedTurn;
 use crate::trace::{SerializedPayload, TraceContext, Tracer, TracerResult};
 
 /// Records a classification trace event in a plaintext session.
@@ -102,6 +103,159 @@ pub(crate) async fn trace_cost(
     tracer
         .record_cost(context, SecretContent::plaintext(payload.into_string()))
         .await
+}
+
+/// Builds the per-turn trace context from the resolved turn.
+pub(crate) fn context_of(resolved: &ResolvedTurn) -> TraceContext {
+    TraceContext {
+        task_type: resolved.classification.intent,
+        provider: resolved.routing.provider.clone(),
+        model: resolved.routing.model.clone(),
+        matched_rule: resolved.routing.matched_rule.clone(),
+    }
+}
+
+/// Records the classification, routing and context-selection traces a resolved
+/// turn produces.
+///
+/// Best-effort: a trace write failure is logged and swallowed, never fatal —
+/// the deterministic trace is observability and must not abort the user's turn.
+pub(crate) async fn record_resolution(tracer: &Tracer, resolved: &ResolvedTurn) {
+    let ctx = context_of(resolved);
+
+    if let Err(error) =
+        trace_classification(tracer, ctx.clone(), resolved.classification.clone()).await
+    {
+        tracing::warn!(%error, "failed to record classification trace");
+    }
+
+    let routing = RoutingDecisionPayload {
+        provider: resolved.routing.provider.clone(),
+        model: resolved.routing.model.clone(),
+        matched_rule: resolved.routing.matched_rule.clone(),
+        fallback_used: resolved.routing.fallback_used,
+        override_used: resolved.routing.override_used,
+        reason: resolved.routing.reason.clone(),
+    };
+    if let Err(error) = trace_routing(tracer, ctx.clone(), routing).await {
+        tracing::warn!(%error, "failed to record routing-decision trace");
+    }
+
+    for reference in &resolved.context.references {
+        let payload = ContextSelectionPayload {
+            path: reference
+                .path
+                .as_ref()
+                .map(|path| path.display().to_string()),
+            kind: format!("{:?}", reference.kind),
+            included: reference.included,
+            reason: reference.reason.clone(),
+        };
+        if let Err(error) = trace_context(tracer, ctx.clone(), payload).await {
+            tracing::warn!(%error, "failed to record context-selection trace");
+        }
+    }
+}
+
+/// Records a message trace for a persisted user or assistant message.
+pub(crate) async fn record_message_event(
+    tracer: &Tracer,
+    ctx: TraceContext,
+    role: MessageRole,
+    provider: Provider,
+    model: String,
+) {
+    let payload = MessagePayload {
+        role,
+        provider,
+        model,
+    };
+    if let Err(error) = trace_message(tracer, ctx, payload).await {
+        tracing::warn!(%error, "failed to record message trace");
+    }
+}
+
+/// Records the cost trace for an invocation's usage.
+pub(crate) async fn record_cost_event(
+    tracer: &Tracer,
+    ctx: TraceContext,
+    usage: &Usage,
+    provider: Provider,
+    model: String,
+) {
+    let payload = CostPayload {
+        provider,
+        model,
+        input_tokens: usage.input_tokens.unwrap_or(0),
+        output_tokens: usage.output_tokens.unwrap_or(0),
+        cost: usage.actual_cost.map(|cost| cost.to_string()),
+    };
+    if let Err(error) = trace_cost(tracer, ctx, payload).await {
+        tracing::warn!(%error, "failed to record cost trace");
+    }
+}
+
+/// Records the trace for a tool call the model requested.
+pub(crate) async fn record_tool_request(
+    tracer: &Tracer,
+    ctx: TraceContext,
+    tool_name: String,
+    arguments: Option<String>,
+) {
+    let payload = ToolCallPayload {
+        tool_name,
+        status: ToolCallStatus::Pending,
+        arguments,
+        result: None,
+        error: None,
+    };
+    if let Err(error) = trace_tool_call(tracer, ctx, payload).await {
+        tracing::warn!(%error, "failed to record tool-call request trace");
+    }
+}
+
+/// Records the trace for a tool call's result once the client returns it.
+pub(crate) async fn record_tool_result(
+    tracer: &Tracer,
+    ctx: TraceContext,
+    tool_name: String,
+    is_error: bool,
+) {
+    let status = if is_error {
+        ToolCallStatus::Failed
+    } else {
+        ToolCallStatus::Completed
+    };
+    let payload = ToolCallPayload {
+        tool_name,
+        status,
+        arguments: None,
+        result: None,
+        error: None,
+    };
+    if let Err(error) = trace_tool_call(tracer, ctx, payload).await {
+        tracing::warn!(%error, "failed to record tool-call result trace");
+    }
+}
+
+/// Records the trace for an approval decision, folded or standalone.
+pub(crate) async fn record_approval_event(
+    tracer: &Tracer,
+    ctx: TraceContext,
+    target_type: String,
+    target_id: String,
+    decision: ApprovalDecision,
+    reason: Option<String>,
+) {
+    let payload = ApprovalPayload {
+        target_type,
+        target_id,
+        decision,
+        reason,
+    };
+    if let Err(error) = trace_approval(tracer, ctx, payload).await {
+        tracing::warn!(%error, "failed to record approval trace");
+    }
 }
 
 #[cfg(test)]

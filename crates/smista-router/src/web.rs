@@ -22,7 +22,7 @@
 
 pub(crate) mod error;
 mod middleware;
-#[cfg(feature = "openapi")]
+#[cfg(all(test, feature = "openapi"))]
 mod openapi;
 mod routes;
 mod streaming;

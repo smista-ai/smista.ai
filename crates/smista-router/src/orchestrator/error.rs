@@ -4,11 +4,6 @@
 //! [`OrchestratorError::api_code`] maps each to the stable
 //! [`ApiErrorCode`](smista_core::api::ApiErrorCode) the client matches on, and a
 //! [`From`] conversion turns it into the HTTP [`WebError`].
-#![allow(
-    dead_code,
-    reason = "wired into the orchestrator run loop and web handlers in a later task"
-)]
-
 use smista_core::api::ApiErrorCode;
 use smista_core::error::{ProviderError, ProviderErrorCategory};
 
@@ -24,9 +19,6 @@ pub(crate) enum OrchestratorError {
     /// until it reaches a checkpoint.
     #[error("a turn is already in flight for this session")]
     Busy,
-    /// The required context did not fit the chosen model's window.
-    #[error("the required context exceeds the model's window")]
-    ContextWindowExceeded,
     /// A content reference could not be mapped to a storage row.
     #[error("crypto mapping error: {0}")]
     Crypto(#[from] CryptoMapError),
@@ -37,18 +29,9 @@ pub(crate) enum OrchestratorError {
     /// for logs only and must never carry secrets.
     #[error("internal error: {0}")]
     Internal(String),
-    /// The task needs a capability no usable model offers.
-    #[error("no model offers a required capability: {0}")]
-    MissingCapability(String),
     /// A continuation arrived for a session with no run to advance.
     #[error("no run is in progress for this session")]
     NoActiveRun,
-    /// No routing rule matched and no default route is configured.
-    #[error("no route: {0}")]
-    NoRoute(String),
-    /// An explicit model override is forbidden by policy.
-    #[error("model override not allowed: {0}")]
-    OverrideNotAllowed(String),
     /// A provider rejected or failed the invocation.
     #[error("provider error: {0}")]
     Provider(#[from] ProviderError),
@@ -82,16 +65,12 @@ impl OrchestratorError {
     pub(crate) fn api_code(&self) -> ApiErrorCode {
         match self {
             Self::Busy => ApiErrorCode::RunInFlight,
-            Self::ContextWindowExceeded => ApiErrorCode::ContextWindowExceeded,
             Self::Session(SessionError::NotFound) => ApiErrorCode::SessionNotFound,
             Self::Crypto(_) | Self::Internal(_) | Self::Session(_) | Self::Superseded => {
                 ApiErrorCode::InternalError
             }
             Self::FallbackExhausted => ApiErrorCode::FallbackExhausted,
-            Self::MissingCapability(_) => ApiErrorCode::MissingCapability,
             Self::NoActiveRun | Self::UnexpectedContinuation => ApiErrorCode::InvalidRequest,
-            Self::NoRoute(_) => ApiErrorCode::NoRoute,
-            Self::OverrideNotAllowed(_) => ApiErrorCode::OverrideNotAllowed,
             Self::Provider(error) => provider_api_code(error.category),
             // The resolver owns the canonical mapping for its own failures.
             Self::Resolver(error) => error.api_code(),
@@ -128,18 +107,6 @@ impl From<OrchestratorError> for WebError {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn should_map_no_route_to_api_code() {
-        let error = OrchestratorError::NoRoute("no rule".to_string());
-        assert_eq!(error.api_code(), ApiErrorCode::NoRoute);
-    }
-
-    #[test]
-    fn should_map_override_not_allowed_to_api_code() {
-        let error = OrchestratorError::OverrideNotAllowed("forbidden".to_string());
-        assert_eq!(error.api_code(), ApiErrorCode::OverrideNotAllowed);
-    }
 
     #[test]
     fn should_map_busy_to_run_in_flight() {

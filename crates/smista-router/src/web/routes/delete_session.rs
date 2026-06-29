@@ -123,16 +123,13 @@ mod tests {
     /// delete cascades to it.
     async fn record_context_memory(db: &SurrealDatabase, user_id: Uuid, session_id: Uuid) {
         let memory_id = Uuid::now_v7();
-        Sessions::new(db.clone(), user_id)
-            .open(session_id)
-            .await
-            .expect("failed to open session")
-            .record_context_memory(
-                ContextMemory::new(memory_id, session_id, user_id, Some("topic".to_string())),
-                ContextMemoryContent::new(memory_id, SecretContent::plaintext("fact")),
-            )
-            .await
-            .expect("failed to record context memory");
+        db.record_context_memory(
+            user_id,
+            ContextMemory::new(memory_id, session_id, user_id, Some("topic".to_string())),
+            ContextMemoryContent::new(memory_id, SecretContent::plaintext("fact")),
+        )
+        .await
+        .expect("failed to record context memory");
     }
 
     #[tokio::test]

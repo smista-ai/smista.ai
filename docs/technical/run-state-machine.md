@@ -116,8 +116,12 @@ Standalone approvals are reserved for decisions with **no tool to run** —
 disclosing context to a remote provider, confirming a cost ceiling, and accepting
 or rejecting a generated plan. Those raise `AwaitingApproval`.
 
-A tool call that changes files records the proposed change when the result comes
-back; a later status transition marks that change applied or rejected.
+A tool call that changes files (`write_file`, `edit_file`) records its proposed
+change when the call is requested — the change is known from the model's
+arguments — as a `session_diff` keyed by the call's id. When the result comes
+back, the same id moves the diff to applied (a successful result) or rejected (a
+failed one), folded in with the tool result like the approval. For an encrypted
+session the diff body is sealed by the client, the same way as the tool result.
 
 ## Encrypt and decrypt
 
@@ -135,10 +139,15 @@ metadata and the sealed content together when the ciphertext comes back on the
 next continuation. The user sees the output immediately; only its stored copy
 waits to be sealed. A tool call carries its sealed `result` the same way; the
 client also seals it on the continuation, so the tool-call row's arguments are
-left empty and the model's request rides the sealed assistant message. Session
+left empty and the model's request rides the sealed assistant message. A
+file-changing call also folds its proposed diff body into the same `to_encrypt`
+map — its non-secret path is held in the run state as metadata — and the sealed
+diff row is written alongside the tool call when the ciphertext returns. Session
 memory the model writes during the run is stored in clear by the memory tool, so
 a finishing encrypted run folds those rows into the final `to_encrypt` and seals
-them in place.
+them in place. The deterministic trace the router records during the run is
+handled the same way: its rows are written in clear as the run proceeds and
+folded into the finishing seal, so no trace payload is left readable at rest.
 
 **Decrypt is its own step.** To build a prompt the router must read stored
 ciphertext, and it cannot proceed without the plaintext, so this is a real pause:
