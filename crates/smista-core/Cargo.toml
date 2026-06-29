@@ -22,6 +22,7 @@ dirs = { workspace = true }
 globset = { workspace = true }
 http = { workspace = true }
 rust_decimal = { workspace = true, features = ["serde-with-str", "std"] }
+secrecy = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 surrealdb-types = { workspace = true, optional = true }

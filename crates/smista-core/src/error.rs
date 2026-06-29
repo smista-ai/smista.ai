@@ -81,6 +81,10 @@ pub enum AuthError {
 /// implementations of the core domain types when given an unrecognized value.
 #[derive(Debug, thiserror::Error, PartialEq, Eq, Clone)]
 pub enum ParseError {
+    /// An API key was not in the expected `sk-smista-api01-<user-id>-<secret>`
+    /// form. The malformed value is never embedded, since it may carry a secret.
+    #[error("invalid API key")]
+    InvalidApiKey,
     /// A content reference was not in the expected `kind:id` form, or named an
     /// unknown content kind.
     #[error("invalid content reference: {0}")]
@@ -91,6 +95,10 @@ pub enum ParseError {
     /// An OpenAI-compatible instance name contained unsupported characters.
     #[error("invalid provider instance name: {0}")]
     InvalidProviderName(String),
+    /// A session token was not in the expected `<token-id>-<secret>` form. The
+    /// malformed value is never embedded, since it carries a secret.
+    #[error("invalid session token")]
+    InvalidSessionToken,
     /// A reasoning effort name was not recognized.
     #[error("unknown effort: {0}")]
     UnknownEffort(String),

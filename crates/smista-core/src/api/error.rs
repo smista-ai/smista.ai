@@ -345,9 +345,11 @@ fn map_capability(error: &CapabilityError) -> ApiErrorResponse {
 fn map_parse(error: &ParseError) -> ApiErrorResponse {
     let message = error.to_string();
     let code = match error {
+        ParseError::InvalidApiKey => ApiErrorCode::InvalidApiKey,
         ParseError::InvalidContentRef(_) => ApiErrorCode::InvalidRequest,
         ParseError::InvalidModelReference(_) => ApiErrorCode::InvalidModelReference,
         ParseError::InvalidProviderName(_) => ApiErrorCode::InvalidProviderName,
+        ParseError::InvalidSessionToken => ApiErrorCode::InvalidToken,
         ParseError::UnknownEffort(_) => ApiErrorCode::UnknownEffort,
         ParseError::UnknownIntent(_) => ApiErrorCode::UnknownIntent,
         ParseError::UnknownProvider(_) => ApiErrorCode::UnknownProvider,
@@ -584,6 +586,19 @@ mod tests {
         )));
         assert_eq!(response.status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(response.body.error.code, "unknown_intent");
+    }
+
+    #[test]
+    fn should_map_credential_parse_errors_to_401() {
+        // A malformed API key or session token is an authentication failure, not
+        // a 422 like the other parse errors.
+        let api_key = ApiErrorResponse::from(CoreError::from(ParseError::InvalidApiKey));
+        assert_eq!(api_key.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(api_key.body.error.code, "invalid_api_key");
+
+        let token = ApiErrorResponse::from(CoreError::from(ParseError::InvalidSessionToken));
+        assert_eq!(token.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(token.body.error.code, "invalid_token");
     }
 
     #[test]

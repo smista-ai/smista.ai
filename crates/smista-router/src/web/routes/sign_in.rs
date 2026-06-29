@@ -18,13 +18,11 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use secrecy::{ExposeSecret as _, SecretString};
 use smista_core::api::{ApiErrorCode, SignInResponse};
+use smista_core::credential::ApiKey;
 
 use crate::web::AppState;
 use crate::web::error::WebError;
 use crate::web::routes::ApiResult;
-
-/// The request header carrying the API key.
-const API_KEY_HEADER: &str = "X-Smista-Api-Key";
 
 /// Handles `POST /api/v1/auth/sign-in`.
 #[cfg_attr(
@@ -46,7 +44,7 @@ pub(crate) async fn sign_in(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> ApiResult<SignInResponse> {
-    let Some(api_key) = headers.get(API_KEY_HEADER) else {
+    let Some(api_key) = headers.get(ApiKey::header_name()) else {
         return Err(WebError::from_code(
             ApiErrorCode::MissingCredentials,
             "The X-Smista-Api-Key header is missing.",

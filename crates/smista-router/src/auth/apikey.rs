@@ -2,11 +2,11 @@
 
 use rand::distr::{Alphanumeric, SampleString};
 use secrecy::{ExposeSecret as _, SecretString};
+use smista_core::credential::ApiKey;
 use uuid::Uuid;
 
 use crate::auth::{AuthenticationResult, AuthenticatorError};
 
-const API_KEY_PREFIX_V1: &str = "sk-smista-api01-";
 const API_KEY_RANDOM_LEN_V1: usize = 96;
 
 /// The [`ApiKeyIssuer`] struct is responsible for generating and parsing API keys for users.
@@ -15,46 +15,34 @@ pub struct ApiKeyIssuer;
 impl ApiKeyIssuer {
     /// Generates a new API key for the user identified by `user_id`.
     ///
-    /// The API key format is:
-    ///
-    /// `sk-smista-api01-<user-id>-<96 alphanumeric>`
-    ///
-    /// where `<user-id>` is the user's UUID in its simple (32 hex digits, no
-    /// hyphens) form and the trailing alphanumeric secret is generated with a
-    /// CSPRNG. Embedding the user id lets the authentication layer identify the
-    /// owner from the key alone, load that user and verify the key against the
-    /// stored hash, without a secondary lookup by hash.
+    /// The trailing alphanumeric secret is generated with a CSPRNG; the rest of
+    /// the key — its versioned prefix and the embedded user id — is assembled by
+    /// [`ApiKey::from_parts`], the shared owner of the format. Embedding the user
+    /// id lets the authentication layer identify the owner from the key alone,
+    /// load that user and verify the key against the stored hash, without a
+    /// secondary lookup by hash.
     pub fn generate_api_key_v1(user_id: &Uuid) -> SecretString {
         let random_string = Self::generate_alphanumeric_len(API_KEY_RANDOM_LEN_V1);
-        let api_key = format!(
-            "{API_KEY_PREFIX_V1}{user_id}-{random_string}",
-            user_id = user_id.simple()
-        );
-
-        SecretString::from(api_key)
+        SecretString::from(ApiKey::from_parts(user_id, &random_string).expose())
     }
 
     /// Parses the user id embedded in a v1 API key.
     ///
+    /// The key's format is validated by [`ApiKey`], the shared owner of the
+    /// format; a malformed key is reported as [`AuthenticatorError::InvalidApiKey`].
+    ///
     /// # Errors
     ///
-    /// Returns an error if the key does not carry the expected v1 prefix, is
-    /// missing its secret segment, or its embedded user id is not a valid UUID.
+    /// Returns [`AuthenticatorError::InvalidApiKey`] if the key does not carry
+    /// the expected v1 prefix, is missing its secret segment, or its embedded
+    /// user id is not a valid UUID.
     pub fn parse_user_id(api_key: &SecretString) -> AuthenticationResult<Uuid> {
-        let body = api_key
+        api_key
             .expose_secret()
-            .strip_prefix(API_KEY_PREFIX_V1)
-            .ok_or(AuthenticatorError::InvalidApiKey)?;
-
-        let (user_id, secret) = body
-            .split_once('-')
-            .ok_or(AuthenticatorError::InvalidApiKey)?;
-
-        if secret.is_empty() {
-            return Err(AuthenticatorError::InvalidApiKey);
-        }
-
-        Uuid::try_parse(user_id).map_err(|_| AuthenticatorError::InvalidApiKey)
+            .parse::<ApiKey>()
+            .map_err(|_| AuthenticatorError::InvalidApiKey)?
+            .user_id()
+            .map_err(|_| AuthenticatorError::InvalidApiKey)
     }
 
     /// Generates a random alphanumeric string of the specified length using a cryptographically secure random number generator (CSPRNG).
@@ -75,9 +63,10 @@ mod tests {
         let api_key = ApiKeyIssuer::generate_api_key_v1(&user_id);
         let api_key = api_key.expose_secret();
 
-        let expected_prefix = format!("{API_KEY_PREFIX_V1}{}-", user_id.simple());
+        let expected_prefix = format!("sk-smista-api01-{}-", user_id.simple());
         assert!(api_key.starts_with(&expected_prefix));
 
+        // The CSPRNG-generated secret is `API_KEY_RANDOM_LEN_V1` alphanumerics.
         let secret = &api_key[expected_prefix.len()..];
         assert_eq!(secret.len(), API_KEY_RANDOM_LEN_V1);
         assert!(secret.chars().all(|c| c.is_ascii_alphanumeric()));
@@ -102,25 +91,13 @@ mod tests {
     }
 
     #[test]
-    fn should_reject_a_key_without_the_v1_prefix() {
+    fn should_reject_a_malformed_key() {
         let api_key = SecretString::from("sk-other-deadbeef-secret");
 
-        assert!(ApiKeyIssuer::parse_user_id(&api_key).is_err());
-    }
-
-    #[test]
-    fn should_reject_a_key_missing_its_secret_segment() {
-        let user_id = Uuid::now_v7();
-        let api_key = SecretString::from(format!("{API_KEY_PREFIX_V1}{}", user_id.simple()));
-
-        assert!(ApiKeyIssuer::parse_user_id(&api_key).is_err());
-    }
-
-    #[test]
-    fn should_reject_a_key_with_an_invalid_user_id() {
-        let api_key = SecretString::from(format!("{API_KEY_PREFIX_V1}not-a-uuid-secret"));
-
-        assert!(ApiKeyIssuer::parse_user_id(&api_key).is_err());
+        assert!(matches!(
+            ApiKeyIssuer::parse_user_id(&api_key),
+            Err(AuthenticatorError::InvalidApiKey)
+        ));
     }
 
     #[test]

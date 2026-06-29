@@ -10,3 +10,12 @@ readme = "README.md"
 repository = { workspace = true }
 rust-version = { workspace = true }
 description = "Async Rust client for the smista-router HTTP JSON API."
+
+[dependencies]
+futures = { workspace = true }
+secrecy = { workspace = true }
+serde_json = { workspace = true }
+smista-core = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }

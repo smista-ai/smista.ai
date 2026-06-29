@@ -8,6 +8,7 @@
 //! `gen_openapi_schema` test serializes the document to `docs/api/openapi.json`,
 //! the artifact `just gen_openapi` regenerates and `just check_openapi` guards.
 
+use smista_core::credential::ApiKey as SmistaApiKey;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
@@ -34,7 +35,7 @@ impl Modify for SecurityAddon {
         components.add_security_scheme(
             "apiKey",
             SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::with_description(
-                "X-Smista-Api-Key",
+                SmistaApiKey::header_name(),
                 "User API key, presented only at sign-in",
             ))),
         );
