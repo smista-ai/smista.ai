@@ -41,6 +41,8 @@ mod client;
 mod config;
 mod credentials;
 mod error;
+#[cfg(test)]
+mod mock;
 
 pub use self::client::Client;
 pub use self::config::RouterClientConfig;
