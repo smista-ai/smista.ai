@@ -14,11 +14,11 @@
 
 The Rust SDK for [smista.ai](https://smista.ai), and the single dependency a
 Rust program reaches for when building on top of it. It bundles the shared
-domain vocabulary and — once it lands — the router client behind one crate, so
-you do not have to wire several internal crates together yourself.
+domain vocabulary and the router client behind one crate, so you do not have to
+wire several internal crates together yourself.
 
 The domain types live under `smista_sdk::core`, re-exported verbatim from
-[`smista-core`](../smista-core). The router client will arrive as
+[`smista-core`](../smista-core). The async router client lives under
 `smista_sdk::client`, re-exported from
 [`smista-router-client`](../smista-router-client).
 
@@ -33,6 +33,21 @@ use smista_sdk::core::policy::PermissionMode;
 
 let mode = PermissionMode::default();
 ```
+
+## Talk to the router
+
+The `Client` trait under `smista_sdk::client` is always available; the default
+`reqwest`-backed `ReqwestClient` ships behind the `reqwest-client` feature:
+
+```sh
+cargo add smista-sdk --features reqwest-client
+```
+
+## Features
+
+| Feature          | Default | Description                                                                  |
+| ---------------- | ------- | ---------------------------------------------------------------------------- |
+| `reqwest-client` | no      | Surfaces `ReqwestClient`, the default `reqwest`-backed client over `rustls`. |
 
 ## Documentation
 

@@ -66,17 +66,23 @@ pub(crate) fn status() -> StatusResponse {
 }
 
 /// Canned body for `POST /api/v1/auth/bootstrap`.
+///
+/// The API key is well-formed (`sk-smista-api01-<user-id>-<secret>`) so a client
+/// that validates it on the way in accepts it.
 pub(crate) fn bootstrap() -> BootstrapResponse {
     BootstrapResponse {
         user_id: "user:abc123".to_owned(),
-        api_key: "sk-smista-api01-example".to_owned(),
+        api_key: format!("sk-smista-api01-{}-examplesecret", Uuid::nil().simple()),
     }
 }
 
 /// Canned body for `POST /api/v1/auth/sign-in`.
+///
+/// The token is well-formed (`<token-id>-<secret>`) so a client that validates
+/// it on the way in accepts it.
 pub(crate) fn sign_in() -> SignInResponse {
     SignInResponse {
-        token: "st_example_token".to_owned(),
+        token: format!("{}-examplesecret", Uuid::nil().simple()),
         expires_at: timestamp(),
     }
 }

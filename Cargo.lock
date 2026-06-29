@@ -4136,6 +4136,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -5098,6 +5099,7 @@ dependencies = [
  "smista-core",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
  "url",
  "uuid",
  "wiremock",
@@ -5108,6 +5110,7 @@ name = "smista-sdk"
 version = "0.0.0"
 dependencies = [
  "smista-core",
+ "smista-router-client",
 ]
 
 [[package]]

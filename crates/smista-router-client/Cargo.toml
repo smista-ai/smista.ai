@@ -11,12 +11,26 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 description = "Async Rust client for the smista-router HTTP JSON API."
 
+[package.metadata.docs.rs]
+# Build docs with every backend so docs.rs renders the reqwest client, and emit
+# the `docsrs` cfg so `#[doc(cfg(...))]` feature badges are shown.
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = []
+reqwest = ["dep:reqwest", "dep:tokio", "dep:tracing"]
+
 [dependencies]
 futures = { workspace = true }
+reqwest = { workspace = true, features = ["http2", "json", "query", "rustls", "stream"], optional = true }
 secrecy = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 smista-core = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync"], optional = true }
+tracing = { workspace = true, optional = true }
 url = { workspace = true }
 uuid = { workspace = true }
 

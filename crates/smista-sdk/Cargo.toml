@@ -9,7 +9,17 @@ license = "MIT"
 readme = "README.md"
 repository = { workspace = true }
 rust-version = { workspace = true }
-description = "Rust SDK facade for smista.ai: a single entry point re-exporting the domain types and (later) the router client."
+description = "Rust SDK facade for smista.ai: a single entry point re-exporting the domain types and the router client."
+
+[package.metadata.docs.rs]
+# Build docs with every backend so docs.rs renders the reqwest client, and emit
+# the `docsrs` cfg so `#[doc(cfg(...))]` feature badges are shown.
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+reqwest-client = ["smista-router-client/reqwest"]
 
 [dependencies]
 smista-core = { workspace = true }
+smista-router-client = { workspace = true }

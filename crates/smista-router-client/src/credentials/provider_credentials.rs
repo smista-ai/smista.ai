@@ -60,18 +60,6 @@ impl ProviderCredentials {
         self.0.insert(provider, secret);
     }
 
-    /// Returns the stored key for `provider`, if any.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "consumed by the concrete HTTP clients that attach the headers (#188)"
-        )
-    )]
-    pub(crate) fn get(&self, provider: &Provider) -> Option<&SecretString> {
-        self.0.get(provider)
-    }
-
     /// Renders the credentials as a map of request header name to exposed key.
     ///
     /// The header name is `X-Smista-Provider-<segment>-Api-Key`, where `segment`
@@ -81,14 +69,7 @@ impl ProviderCredentials {
     /// [`Display`](std::fmt::Display) form is deliberately omitted, since a `:`
     /// cannot appear in a header name and the router matches the instance name
     /// directly.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "consumed by the concrete HTTP clients that attach the headers (#188)"
-        )
-    )]
-    pub(crate) fn headers_map(&self) -> HashMap<String, String> {
+    pub fn headers_map(&self) -> HashMap<String, String> {
         self.0
             .iter()
             .map(|(provider, secret)| {
@@ -155,19 +136,6 @@ mod tests {
             ProviderCredentials::new().with_provider(Provider::Anthropic, secret("super-secret"));
         let rendered = format!("{credentials:?}");
         assert!(!rendered.contains("super-secret"));
-    }
-
-    #[test]
-    fn should_return_a_stored_key_and_none_for_a_missing_one() {
-        let credentials =
-            ProviderCredentials::new().with_provider(Provider::Anthropic, secret("sk-ant"));
-        assert_eq!(
-            credentials
-                .get(&Provider::Anthropic)
-                .map(|s| s.expose_secret()),
-            Some("sk-ant")
-        );
-        assert!(credentials.get(&Provider::OpenAI).is_none());
     }
 
     #[test]
