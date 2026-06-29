@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_playground_url = "https://play.rust-lang.org")]
 #![doc(html_favicon_url = "https://smista.ai/logo-150.png")]
 #![doc(html_logo_url = "https://smista.ai/logo.png")]
@@ -36,6 +37,16 @@
 //!     client.status().await
 //! }
 //! ```
+//!
+//! # Features
+//!
+//! The crate ships no backend by default; the [`Client`] trait and its shared
+//! types compile without any HTTP library. Concrete clients are opt-in:
+//!
+//! - **`reqwest`** *(off by default)* — enables [`ReqwestClient`], the default
+//!   [`reqwest`](https://docs.rs/reqwest)-backed [`Client`] over a `rustls` TLS
+//!   stack. This is the backend `smista-cli` uses; enable it with
+//!   `features = ["reqwest"]`.
 
 mod client;
 mod config;
@@ -45,6 +56,9 @@ mod error;
 mod mock;
 
 pub use self::client::Client;
+#[cfg(feature = "reqwest")]
+#[cfg_attr(docsrs, doc(cfg(feature = "reqwest")))]
+pub use self::client::ReqwestClient;
 pub use self::config::RouterClientConfig;
 pub use self::credentials::{ApiKey, ProviderCredentials, SessionToken};
 pub use self::error::{Result, RouterClientError};

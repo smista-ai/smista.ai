@@ -18,9 +18,6 @@
 //!
 //! Both types wrap a [`SecretString`], so the secret never appears in a `Debug`
 //! rendering and is read out only through the explicit `expose` accessor.
-//! Construction with [`ApiKey::new`]/[`SessionToken::new`] or `From<SecretString>`
-//! is unchecked, for credentials a caller already trusts; parsing untrusted input
-//! goes through [`FromStr`], which validates the structure.
 
 use std::str::FromStr;
 
@@ -62,16 +59,6 @@ impl ApiKey {
         )))
     }
 
-    /// Wraps an already-trusted secret as an API key without validating it.
-    ///
-    /// Use [`FromStr`] instead to parse and validate untrusted input.
-    pub fn new<S>(secret: S) -> Self
-    where
-        S: Into<SecretString>,
-    {
-        Self(secret.into())
-    }
-
     /// Exposes the raw key so it can be placed in a request header.
     ///
     /// The returned string is the secret in the clear; never log or persist it.
@@ -94,12 +81,6 @@ impl ApiKey {
     /// Returns the name of the request header that carries the API key.
     pub const fn header_name() -> &'static str {
         API_KEY_HEADER
-    }
-}
-
-impl From<SecretString> for ApiKey {
-    fn from(secret: SecretString) -> Self {
-        Self(secret)
     }
 }
 
@@ -145,16 +126,6 @@ impl SessionToken {
         )))
     }
 
-    /// Wraps an already-trusted secret as a session token without validating it.
-    ///
-    /// Use [`FromStr`] instead to parse and validate untrusted input.
-    pub fn new<S>(secret: S) -> Self
-    where
-        S: Into<SecretString>,
-    {
-        Self(secret.into())
-    }
-
     /// Exposes the raw token so it can be placed in a request header.
     ///
     /// The returned string is the secret in the clear; never log or persist it.
@@ -172,12 +143,6 @@ impl SessionToken {
     /// [`FromStr`] rejects such values up front.
     pub fn token_id(&self) -> Result<Uuid, ParseError> {
         parse_session_token_id(self.expose())
-    }
-}
-
-impl From<SecretString> for SessionToken {
-    fn from(secret: SecretString) -> Self {
-        Self(secret)
     }
 }
 
@@ -284,15 +249,6 @@ mod tests {
             raw.parse::<ApiKey>().unwrap_err(),
             ParseError::InvalidApiKey
         );
-    }
-
-    #[test]
-    fn should_keep_an_unchecked_api_key_verbatim() {
-        // `new` does not validate, so a malformed value is wrapped as-is and
-        // only surfaces as an error when the embedded id is read.
-        let key = ApiKey::new("not-a-key");
-        assert_eq!(key.expose(), "not-a-key");
-        assert_eq!(key.user_id().unwrap_err(), ParseError::InvalidApiKey);
     }
 
     #[test]

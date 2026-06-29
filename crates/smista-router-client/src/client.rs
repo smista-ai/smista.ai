@@ -1,5 +1,8 @@
 //! The [`Client`] trait: one method per `smista-router` endpoint.
 
+#[cfg(feature = "reqwest")]
+mod reqwest;
+
 use std::future::Future;
 
 use futures::stream::BoxStream;
@@ -12,6 +15,9 @@ use smista_core::api::{
 };
 use uuid::Uuid;
 
+#[cfg(feature = "reqwest")]
+#[cfg_attr(docsrs, doc(cfg(feature = "reqwest")))]
+pub use self::reqwest::ReqwestClient;
 use crate::error::Result;
 
 /// An async client for the `smista-router` HTTP JSON API.

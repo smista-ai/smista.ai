@@ -47,9 +47,21 @@ pub enum RouterClientError {
         /// Optional machine-readable context; never carries secrets.
         details: Option<serde_json::Value>,
     },
+    /// Failed to build client
+    #[error("failed to build client: {0}")]
+    ClientBuild(String),
     /// A response body could not be decoded into its expected type.
     #[error("failed to decode response body: {0}")]
-    Decode(#[from] serde_json::Error),
+    Decode(String),
+    /// Invalid Api Key
+    #[error("invalid API key")]
+    InvalidApiKey,
+    /// Invalid Session Token
+    #[error("invalid session token")]
+    InvalidSessionToken,
+    /// Request builder error
+    #[error("failed to build request: {0}")]
+    RequestBuild(String),
     /// An authenticated method was called before the client held a session
     /// token. Call `sign_in` (or `bootstrap` then `sign_in`) first.
     #[error("client is not authenticated; sign in first")]
@@ -159,7 +171,7 @@ mod tests {
     fn should_convert_a_decode_failure() {
         let decode = serde_json::from_str::<smista_core::api::StatusResponse>("not json")
             .expect_err("malformed JSON should not decode");
-        let error = RouterClientError::from(decode);
+        let error = RouterClientError::Decode(decode.to_string());
         assert!(matches!(error, RouterClientError::Decode(_)));
         assert!(
             error

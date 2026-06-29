@@ -8,15 +8,15 @@ fmt args="":
 fmt_check args="":
     dprint check {{ args }}
 
-# Run clippy on the workspace
+# Run clippy on the workspace (incl. the off-by-default reqwest client backend)
 [group('code_check')]
 clippy args="":
-    cargo clippy --workspace --all-targets {{ args }}
+    cargo clippy --workspace --all-targets --features smista-sdk/reqwest-client {{ args }}
 
 # Build the crate documentation, denying warnings
 [group('code_check')]
 doc args="":
-    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps {{ args }}
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --features smista-sdk/reqwest-client {{ args }}
 
 # Check dependencies for advisories, licenses, bans and sources (cargo-deny)
 [group('code_check')]
