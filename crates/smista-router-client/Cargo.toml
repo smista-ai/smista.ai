@@ -19,3 +19,11 @@ smista-core = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock = { workspace = true }
