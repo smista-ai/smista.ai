@@ -17,6 +17,7 @@
 //!
 //! let request = CreateSessionRequest {
 //!     title: "Refactor auth".to_string(),
+//!     scope: None,
 //!     key_id: None,
 //! };
 //! let json = serde_json::to_string(&request).unwrap();
@@ -41,6 +42,10 @@ pub struct SessionSummary {
     pub id: Uuid,
     /// Human-readable session title.
     pub title: Option<String>,
+    /// Opaque scope the session belongs to, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub scope: Option<String>,
     /// Whether the session's content is end-to-end encrypted.
     pub encrypted: bool,
     /// Key fingerprint of the per-session key, if the session is encrypted.
@@ -113,6 +118,10 @@ pub struct SessionDetail {
     pub id: Uuid,
     /// Human-readable session title.
     pub title: String,
+    /// Opaque scope the session belongs to, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub scope: Option<String>,
     /// Whether the session's content is end-to-end encrypted.
     pub encrypted: bool,
     /// When the session was created.
@@ -139,6 +148,14 @@ pub struct SessionDetail {
 pub struct CreateSessionRequest {
     /// Title for the new session.
     pub title: String,
+    /// Opaque scope the session belongs to.
+    ///
+    /// An arbitrary grouping key the router stores and matches verbatim; the CLI
+    /// sets it from the working directory so sessions can later be listed per
+    /// project. Omit it for a session with no scope, such as a plain chat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub scope: Option<String>,
     /// Fingerprint of the per-session key; its presence makes the session
     /// end-to-end encrypted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -226,6 +243,7 @@ mod tests {
         SessionSummary {
             id: Uuid::nil(),
             title: Some("Refactor auth middleware".to_string()),
+            scope: None,
             encrypted: false,
             key_id: None,
             created_at: timestamp(),
@@ -238,6 +256,7 @@ mod tests {
         SessionSummary {
             id: Uuid::nil(),
             title: Some("Refactor auth middleware".to_string()),
+            scope: None,
             encrypted: true,
             key_id: Some("kf_ab12".to_string()),
             created_at: timestamp(),
@@ -281,6 +300,7 @@ mod tests {
         let detail = SessionDetail {
             id: Uuid::nil(),
             title: "Refactor auth middleware".to_string(),
+            scope: None,
             encrypted: false,
             created_at: timestamp(),
             updated_at: timestamp(),
@@ -385,12 +405,36 @@ mod tests {
     fn should_serialize_create_request() {
         let request = CreateSessionRequest {
             title: "Refactor auth".to_string(),
+            scope: None,
             key_id: None,
         };
         assert_eq!(
             serde_json::to_string(&request).unwrap(),
             r#"{"title":"Refactor auth"}"#
         );
+    }
+
+    #[test]
+    fn should_serialize_create_request_with_its_scope() {
+        let request = CreateSessionRequest {
+            title: "Refactor auth".to_string(),
+            scope: Some("/home/dev/project".to_string()),
+            key_id: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&request).unwrap(),
+            r#"{"title":"Refactor auth","scope":"/home/dev/project"}"#
+        );
+    }
+
+    #[test]
+    fn should_carry_the_scope_on_a_summary() {
+        let summary = SessionSummary {
+            scope: Some("/home/dev/project".to_string()),
+            ..summary()
+        };
+        let value = serde_json::to_value(&summary).unwrap();
+        assert_eq!(value["scope"], "/home/dev/project");
     }
 
     #[test]
@@ -403,6 +447,7 @@ mod tests {
     fn should_serialize_encrypted_create_request_with_key_id() {
         let request = CreateSessionRequest {
             title: "secret".to_string(),
+            scope: None,
             key_id: Some("kf_ab12".to_string()),
         };
         assert_eq!(

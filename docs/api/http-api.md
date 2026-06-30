@@ -197,7 +197,7 @@ To list a user's sessions, use `GET /api/v1/sessions`.
 
 ```http
 POST   /api/v1/sessions                  # create (title required)
-GET    /api/v1/sessions                  # list every session, including archived
+GET    /api/v1/sessions                  # list/filter every session, archived included
 GET    /api/v1/sessions/{session_id}     # fetch / resume
 PUT    /api/v1/sessions/{session_id}     # update title or archive
 DELETE /api/v1/sessions/{session_id}     # delete
@@ -216,7 +216,13 @@ POST /api/v1/sessions
 { "title": "Refactor auth middleware" }
 ```
 
-A `title` is required; omitting it returns `422`. To make the session
+A `title` is required; omitting it returns `422`. You may also send a `scope`:
+an opaque grouping key the router stores and matches verbatim, so you can later
+list only the sessions that share it. The CLI sets it from your working
+directory to group sessions by project, but it can be any string a client
+chooses; omit it for a session with no scope.
+
+To make the session
 end-to-end encrypted, send a `key_id` — the fingerprint of the per-session key
 your client holds. A session is encrypted when, and only when, a `key_id` is
 present, so there is no separate `encrypted` flag to keep in step with it:
@@ -252,8 +258,9 @@ GET /api/v1/sessions
 
 Returns every session that belongs to you, archived ones included, each as a
 summary and ordered most recently updated first. A summary's `title` may be
-`null` for a session that has none, and an encrypted summary carries its
-`key_id` while a plaintext one omits the field:
+`null` for a session that has none, a summary carries its `scope` when the
+session has one, and an encrypted summary carries its `key_id` while a plaintext
+one omits the field:
 
 ```json
 {
@@ -261,6 +268,7 @@ summary and ordered most recently updated first. A summary's `title` may be
     {
       "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
       "title": "Refactor auth middleware",
+      "scope": "/home/dev/project",
       "encrypted": false,
       "created_at": "2026-05-25T09:00:00Z",
       "updated_at": "2026-05-25T09:30:00Z",
@@ -268,6 +276,14 @@ summary and ordered most recently updated first. A summary's `title` may be
     }
   ]
 }
+```
+
+Narrow the listing with two optional query parameters, which combine: `scope`
+matches a session's scope exactly, and `title` matches sessions whose title
+contains it, case-insensitively. With neither set, every session is returned.
+
+```http
+GET /api/v1/sessions?scope=/home/dev/project&title=auth
 ```
 
 ### Fetch a session

@@ -98,7 +98,7 @@ const STREAM_READ_CHUNK: usize = 8 * 1024;
 /// // Bootstrap mints and stores the API key, sign-in stores the session token.
 /// client.bootstrap().await?;
 /// client.sign_in().await?;
-/// let sessions = client.list_sessions().await?;
+/// let sessions = client.list_sessions(None, None).await?;
 /// # let _ = sessions;
 /// # Ok(())
 /// # }
@@ -521,8 +521,23 @@ impl Client for IsahcClient {
         self.send(json_request(builder, &req)?).await
     }
 
-    async fn list_sessions(&self) -> Result<ListSessionsResponse> {
-        let url = self.url("/api/v1/sessions")?;
+    async fn list_sessions(
+        &self,
+        scope: Option<String>,
+        title: Option<String>,
+    ) -> Result<ListSessionsResponse> {
+        let mut url = self.url("/api/v1/sessions")?;
+        // Omitted filters fall back to the router's defaults; only touch the query
+        // string when at least one filter is set, to avoid a trailing `?`.
+        if scope.is_some() || title.is_some() {
+            let mut pairs = url.query_pairs_mut();
+            if let Some(scope) = scope {
+                pairs.append_pair("scope", &scope);
+            }
+            if let Some(title) = title {
+                pairs.append_pair("title", &title);
+            }
+        }
         let builder = self.authorize(Request::get(url.as_str()))?;
         self.send(empty_request(builder)?).await
     }
@@ -741,7 +756,7 @@ mod tests {
         let client = client_for(&router);
 
         let error = client
-            .list_sessions()
+            .list_sessions(None, None)
             .await
             .expect_err("a call without a token is rejected");
         assert!(matches!(error, RouterClientError::NotAuthenticated));
@@ -772,7 +787,7 @@ mod tests {
         let client = signed_in_client(&router).await;
 
         client
-            .list_sessions()
+            .list_sessions(None, None)
             .await
             .expect("an authenticated call succeeds");
         let requests = received(&router).await;
@@ -791,7 +806,7 @@ mod tests {
 
         // With the token cleared, the next authenticated call short-circuits.
         let error = client
-            .list_sessions()
+            .list_sessions(None, None)
             .await
             .expect_err("the token was cleared");
         assert!(matches!(error, RouterClientError::NotAuthenticated));
@@ -806,7 +821,7 @@ mod tests {
         // Signing in on one handle is visible through the other.
         client.sign_in().await.expect("sign-in succeeds");
         clone
-            .list_sessions()
+            .list_sessions(None, None)
             .await
             .expect("the clone sees the shared token");
     }
@@ -838,7 +853,7 @@ mod tests {
         let client = signed_in_client(&router).await;
 
         let error = client
-            .list_sessions()
+            .list_sessions(None, None)
             .await
             .expect_err("the error body maps to an Api error");
         let RouterClientError::Api { status, code, .. } = error else {
@@ -860,7 +875,7 @@ mod tests {
         let client = signed_in_client(&router).await;
 
         let error = client
-            .list_sessions()
+            .list_sessions(None, None)
             .await
             .expect_err("a malformed body fails to decode");
         assert!(matches!(error, RouterClientError::Decode(_)));
@@ -948,6 +963,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_send_scope_and_title_as_query_parameters_for_list_sessions() {
+        let router = MockRouter::start().await;
+        let client = signed_in_client(&router).await;
+
+        client
+            .list_sessions(
+                Some("/home/me/project".to_string()),
+                Some("auth".to_string()),
+            )
+            .await
+            .expect("list_sessions succeeds");
+        let requests = received(&router).await;
+        let query = requests
+            .iter()
+            .find(|request| request.url.path().ends_with("/sessions"))
+            .and_then(|request| request.url.query())
+            .expect("the list request carries a query string");
+        assert!(query.contains("scope="));
+        assert!(query.contains("title=auth"));
+    }
+
+    #[tokio::test]
     async fn should_never_place_credentials_in_the_query_string() {
         let router = MockRouter::start().await;
         let client = client_for(&router).with_provider_credentials(
@@ -984,6 +1021,7 @@ mod tests {
             client
                 .create_session(smista_core::api::CreateSessionRequest {
                     title: "t".to_string(),
+                    scope: None,
                     key_id: None,
                 })
                 .await
@@ -991,7 +1029,10 @@ mod tests {
             defaults::create_session()
         );
         assert_eq!(
-            client.list_sessions().await.expect("list_sessions"),
+            client
+                .list_sessions(None, None)
+                .await
+                .expect("list_sessions"),
             defaults::list_sessions()
         );
         assert_eq!(

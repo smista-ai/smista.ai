@@ -62,7 +62,8 @@ async fn main() -> smista_sdk::client::Result<()> {
     // Exchange the held API key for a session token the client keeps.
     client.sign_in().await?;
 
-    let sessions = client.list_sessions().await?;
+    // Pass `(None, None)` to list everything, or a scope/title to filter.
+    let sessions = client.list_sessions(None, None).await?;
     println!("you have {} session(s)", sessions.sessions.len());
 
     client.sign_out().await?;
@@ -103,7 +104,8 @@ fn main() -> smista_sdk::client::Result<()> {
         client.bootstrap().await?;
         client.sign_in().await?;
 
-        let sessions = client.list_sessions().await?;
+        // Pass `(None, None)` to list everything, or a scope/title to filter.
+        let sessions = client.list_sessions(None, None).await?;
         println!("you have {} session(s)", sessions.sessions.len());
 
         client.sign_out().await

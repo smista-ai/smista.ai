@@ -144,6 +144,7 @@ pub(crate) async fn get_session(
     let detail = SessionDetail {
         id: session_id,
         title: session.title.unwrap_or_default(),
+        scope: session.scope,
         encrypted: session.encrypted,
         created_at: session.created_at,
         updated_at: session.updated_at,
@@ -202,6 +203,7 @@ mod tests {
                 session_id,
                 user_id,
                 Some(title.to_string()),
+                None,
                 key_id,
             ))
             .await

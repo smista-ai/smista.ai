@@ -119,6 +119,7 @@ mod tests {
                 session_id,
                 user_id,
                 Some(title.to_string()),
+                None,
                 key_id,
             ))
             .await

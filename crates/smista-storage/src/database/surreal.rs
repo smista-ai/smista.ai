@@ -599,6 +599,47 @@ impl Database for SurrealDatabase {
             .map_err(StorageError::from)
     }
 
+    async fn search_sessions(
+        &self,
+        user_id: Uuid,
+        scope: Option<String>,
+        title: Option<String>,
+    ) -> StorageResult<Vec<Session>> {
+        tracing::debug!(
+            "searching sessions for user {user_id}; scope filter: {}, title filter: {}",
+            scope.is_some(),
+            title.is_some()
+        );
+
+        // The filter clauses are appended only for the criteria that are set, so
+        // an unset filter never constrains the result and the parameters stay
+        // bound to user input rather than interpolated into the query.
+        let mut query = String::from("SELECT * FROM $table WHERE user = $user");
+        if scope.is_some() {
+            query.push_str(" AND scope = $scope");
+        }
+        if title.is_some() {
+            query.push_str(
+                " AND string::contains(string::lowercase(title), string::lowercase($title))",
+            );
+        }
+        query.push_str(" ORDER BY updated_at DESC");
+
+        let mut request = self
+            .0
+            .query(query)
+            .bind(("table", Session::table()))
+            .bind(("user", record_id::<User, _>(user_id)));
+        if let Some(scope) = scope {
+            request = request.bind(("scope", scope));
+        }
+        if let Some(title) = title {
+            request = request.bind(("title", title));
+        }
+
+        request.await?.take(0).map_err(StorageError::from)
+    }
+
     async fn update_session(&self, user_id: Uuid, session: Session) -> StorageResult<Session> {
         tracing::debug!("updating session for user {user_id}");
         let user = record_id::<User, _>(user_id);

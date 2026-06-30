@@ -159,6 +159,18 @@ describe('SmistaClient', () => {
     expect(request?.url.searchParams.get('offset')).toBe('5');
   });
 
+  it('sends scope and title as query parameters for sessions', async () => {
+    const router = new MockRouter();
+    const client = await signedInClient(router);
+
+    await client.listSessions('/work/api', 'refactor');
+    const request = router.requests.find(
+      (recorded) => recorded.url.pathname === '/api/v1/sessions',
+    );
+    expect(request?.url.searchParams.get('scope')).toBe('/work/api');
+    expect(request?.url.searchParams.get('title')).toBe('refactor');
+  });
+
   it('never places a credential in the query string', async () => {
     const router = new MockRouter();
     const client = new SmistaClient({

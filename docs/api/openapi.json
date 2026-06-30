@@ -259,6 +259,26 @@
         ],
         "summary": "Handles `GET /api/v1/sessions`.",
         "operationId": "listSessions",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "Restrict to sessions in this exact scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "title",
+            "in": "query",
+            "description": "Restrict to sessions whose title contains this substring",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of sessions",
@@ -1894,6 +1914,13 @@
             "type": "string",
             "description": "Title for the new session."
           },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque scope the session belongs to.\n\nAn arbitrary grouping key the router stores and matches verbatim; the CLI\nsets it from the working directory so sessions can later be listed per\nproject. Omit it for a session with no scope, such as a plain chat."
+          },
           "key_id": {
             "type": [
               "string",
@@ -3102,6 +3129,13 @@
             "type": "string",
             "description": "Human-readable session title."
           },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque scope the session belongs to, if any."
+          },
           "encrypted": {
             "type": "boolean",
             "description": "Whether the session's content is end-to-end encrypted."
@@ -3190,6 +3224,13 @@
               "null"
             ],
             "description": "Human-readable session title."
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque scope the session belongs to, if any."
           },
           "encrypted": {
             "type": "boolean",

@@ -162,6 +162,7 @@ mod tests {
             id: RecordId::new(Session::name(), id.to_string()),
             user: RecordId::new(User::name(), user_id.to_string()),
             title: Some("session".to_string()),
+            scope: None,
             encrypted,
             key_id: encrypted.then(|| "kf_test".to_string()),
             created_at: Utc::now(),

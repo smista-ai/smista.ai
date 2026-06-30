@@ -95,6 +95,7 @@ mod tests {
                 user_id,
                 Some(title.to_string()),
                 None,
+                None,
             ))
             .await
             .expect("failed to create session");

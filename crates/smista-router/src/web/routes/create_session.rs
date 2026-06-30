@@ -50,6 +50,7 @@ pub(crate) async fn create_session(
         Uuid::now_v7(),
         user.user_id,
         Some(request.title),
+        request.scope,
         request.key_id,
     );
 
@@ -88,6 +89,7 @@ pub(crate) async fn create_session(
     let summary = SessionSummary {
         id: user_session.session_id(),
         title: session.title,
+        scope: session.scope,
         encrypted: session.encrypted,
         key_id: session.key_id,
         created_at: session.created_at,
@@ -199,6 +201,34 @@ mod tests {
             .expect("created session was not persisted");
         assert!(stored.encrypted);
         assert_eq!(stored.key_id, Some("kf_ab12".to_string()));
+    }
+
+    #[tokio::test]
+    async fn should_persist_the_session_scope() {
+        let (router, token, user_id, db) = authenticated_router_with_database().await;
+
+        let (status, body) = send(
+            router,
+            post_json_with_token(
+                "/api/v1/sessions",
+                &token,
+                &json!({ "title": "scoped", "scope": "/work/api" }),
+            ),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::CREATED);
+        // The created summary echoes the scope the request supplied.
+        assert_eq!(body["session"]["scope"], "/work/api");
+
+        let session_id =
+            Uuid::parse_str(body["session"]["id"].as_str().expect("id missing")).expect("bad uuid");
+        let stored = db
+            .get_session(user_id, session_id)
+            .await
+            .expect("failed to read session")
+            .expect("created session was not persisted");
+        assert_eq!(stored.scope, Some("/work/api".to_string()));
     }
 
     #[tokio::test]

@@ -14,6 +14,14 @@ export type CreateSessionRequest = {
  */
 title: string, 
 /**
+ * Opaque scope the session belongs to.
+ *
+ * An arbitrary grouping key the router stores and matches verbatim; the CLI
+ * sets it from the working directory so sessions can later be listed per
+ * project. Omit it for a session with no scope, such as a plain chat.
+ */
+scope?: string, 
+/**
  * Fingerprint of the per-session key; its presence makes the session
  * end-to-end encrypted.
  */

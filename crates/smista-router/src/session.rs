@@ -92,17 +92,23 @@ impl Sessions {
         Ok(self.handle(session_id))
     }
 
-    /// Lists the user's sessions, most recently updated first.
+    /// Searches the user's sessions, most recently updated first.
     ///
-    /// Archived sessions are included; the caller decides whether to surface
-    /// them.
+    /// `scope` matches the session scope exactly and `title` matches a
+    /// case-insensitive substring of the title; each filter left `None` is not
+    /// applied, so both `None` lists every session. Archived sessions are
+    /// included; the caller decides whether to surface them.
     ///
     /// # Errors
     ///
     /// Returns [`SessionError`] if the sessions cannot be read.
-    pub async fn list(&self) -> SessionResult<Vec<Session>> {
+    pub async fn search(
+        &self,
+        scope: Option<String>,
+        title: Option<String>,
+    ) -> SessionResult<Vec<Session>> {
         self.database
-            .list_sessions(self.user_id)
+            .search_sessions(self.user_id, scope, title)
             .await
             .map_err(SessionError::Database)
     }
@@ -642,6 +648,7 @@ mod tests {
             id: RecordId::new(Session::name(), id.to_string()),
             user: RecordId::new(User::name(), user_id.to_string()),
             title: Some("session".to_string()),
+            scope: None,
             encrypted: false,
             key_id: None,
             created_at: Utc::now(),
@@ -692,7 +699,10 @@ mod tests {
             RecordId::new(Session::name(), session_id.to_string())
         );
 
-        let listed = sessions.list().await.expect("failed to list sessions");
+        let listed = sessions
+            .search(None, None)
+            .await
+            .expect("failed to list sessions");
         assert_eq!(listed.len(), 1);
 
         let fetched = sessions
