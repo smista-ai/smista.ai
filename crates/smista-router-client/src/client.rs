@@ -1,5 +1,7 @@
 //! The [`Client`] trait: one method per `smista-router` endpoint.
 
+#[cfg(feature = "isahc")]
+mod isahc;
 #[cfg(feature = "reqwest")]
 mod reqwest;
 #[cfg(feature = "ureq")]
@@ -17,6 +19,9 @@ use smista_core::api::{
 };
 use uuid::Uuid;
 
+#[cfg(feature = "isahc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "isahc")))]
+pub use self::isahc::IsahcClient;
 #[cfg(feature = "reqwest")]
 #[cfg_attr(docsrs, doc(cfg(feature = "reqwest")))]
 pub use self::reqwest::ReqwestClient;

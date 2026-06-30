@@ -9,8 +9,10 @@
 //! depending on `smista-router-client` directly.
 //!
 //! The trait alone pulls in no HTTP library. The
-//! [`reqwest`](https://docs.rs/reqwest)-backed (async) [`ReqwestClient`] is opt-in
-//! behind the crate's `reqwest-client` feature, and the
+//! [`reqwest`](https://docs.rs/reqwest)-backed (async, Tokio) [`ReqwestClient`] is
+//! opt-in behind the crate's `reqwest-client` feature, the
+//! [`isahc`](https://docs.rs/isahc)-backed (async, runtime-agnostic)
+//! [`IsahcClient`] behind the `isahc-client` feature, and the
 //! [`ureq`](https://docs.rs/ureq)-backed (blocking) [`UreqClient`] behind the
 //! `ureq-client` feature; each forwards to the matching `smista-router-client`
 //! backend.
@@ -28,6 +30,10 @@
 //!
 //! [`smista-router-client`]: https://docs.rs/smista-router-client
 
+#[cfg(feature = "isahc-client")]
+#[cfg_attr(docsrs, doc(cfg(feature = "isahc-client")))]
+#[doc(inline)]
+pub use smista_router_client::IsahcClient;
 #[cfg(feature = "reqwest-client")]
 #[cfg_attr(docsrs, doc(cfg(feature = "reqwest-client")))]
 #[doc(inline)]

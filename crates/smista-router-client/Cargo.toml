@@ -19,12 +19,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
+isahc = ["dep:isahc", "dep:tracing"]
 reqwest = ["dep:reqwest", "dep:tokio", "dep:tracing"]
 ureq = ["dep:tracing", "dep:ureq"]
 
 [dependencies]
 futures = { workspace = true }
-reqwest = { workspace = true, features = ["http2", "json", "query", "rustls", "stream"], optional = true }
+isahc = { workspace = true, features = ["json", "log", "static-curl", "rustls-tls", "tls"], optional = true }
+reqwest = { workspace = true, features = ["json", "query", "rustls", "stream"], optional = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
