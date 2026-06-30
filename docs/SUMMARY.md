@@ -22,6 +22,7 @@
 
 - [HTTP API](api/http-api.md)
 - [Rust SDK](sdk/rust-sdk.md)
+- [TypeScript SDK](sdk/typescript-sdk.md)
 
 # Technical
 
