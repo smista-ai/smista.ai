@@ -8,10 +8,12 @@
 //! [`core`](crate::core) through the single `smista-sdk` dependency, instead of
 //! depending on `smista-router-client` directly.
 //!
-//! The trait alone pulls in no HTTP library. The default
-//! [`reqwest`](https://docs.rs/reqwest)-backed [`ReqwestClient`] is opt-in behind
-//! the crate's `reqwest-client` feature, which forwards to
-//! `smista-router-client/reqwest`.
+//! The trait alone pulls in no HTTP library. The
+//! [`reqwest`](https://docs.rs/reqwest)-backed (async) [`ReqwestClient`] is opt-in
+//! behind the crate's `reqwest-client` feature, and the
+//! [`ureq`](https://docs.rs/ureq)-backed (blocking) [`UreqClient`] behind the
+//! `ureq-client` feature; each forwards to the matching `smista-router-client`
+//! backend.
 //!
 //! # Examples
 //!
@@ -30,6 +32,10 @@
 #[cfg_attr(docsrs, doc(cfg(feature = "reqwest-client")))]
 #[doc(inline)]
 pub use smista_router_client::ReqwestClient;
+#[cfg(feature = "ureq-client")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ureq-client")))]
+#[doc(inline)]
+pub use smista_router_client::UreqClient;
 #[doc(inline)]
 pub use smista_router_client::{
     ApiKey, Client, ProviderCredentials, Result, RouterClientConfig, RouterClientError,

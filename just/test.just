@@ -5,7 +5,7 @@ test_all: test integration_test test_sdk
 # Run the Rust workspace tests, excluding the integration test crates
 [group('test')]
 test test_name="":
-  cargo test --workspace --exclude storage-integration-tests --exclude provider-integration-tests --features smista-sdk/reqwest-client {{ test_name }}
+  cargo test --workspace --exclude storage-integration-tests --exclude provider-integration-tests --features smista-sdk/reqwest-client,smista-sdk/ureq-client,smista-router-client/reqwest,smista-router-client/ureq {{ test_name }}
 
 # Run the container-backed storage integration tests (requires a running Docker daemon)
 [group('test')]
@@ -29,4 +29,4 @@ test_crate crate test_name="":
 # Generate an LCOV code coverage report for the Rust workspace (requires cargo-llvm-cov)
 [group('test')]
 coverage output="lcov.info":
-  cargo llvm-cov --workspace --exclude storage-integration-tests --exclude provider-integration-tests --features smista-sdk/reqwest-client --lcov --output-path {{ output }}
+  cargo llvm-cov --workspace --exclude storage-integration-tests --exclude provider-integration-tests --features smista-sdk/reqwest-client,smista-sdk/ureq-client,smista-router-client/reqwest,smista-router-client/ureq --lcov --output-path {{ output }}

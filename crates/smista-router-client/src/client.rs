@@ -2,6 +2,8 @@
 
 #[cfg(feature = "reqwest")]
 mod reqwest;
+#[cfg(feature = "ureq")]
+mod ureq;
 
 use std::future::Future;
 
@@ -18,6 +20,9 @@ use uuid::Uuid;
 #[cfg(feature = "reqwest")]
 #[cfg_attr(docsrs, doc(cfg(feature = "reqwest")))]
 pub use self::reqwest::ReqwestClient;
+#[cfg(feature = "ureq")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ureq")))]
+pub use self::ureq::UreqClient;
 use crate::error::Result;
 
 /// An async client for the `smista-router` HTTP JSON API.

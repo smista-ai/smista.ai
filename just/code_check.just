@@ -11,12 +11,12 @@ fmt_check args="":
 # Run clippy on the workspace (incl. the off-by-default reqwest client backend)
 [group('code_check')]
 clippy args="":
-    cargo clippy --workspace --all-targets --features smista-sdk/reqwest-client {{ args }}
+    cargo clippy --workspace --all-targets --features smista-sdk/reqwest-client,smista-sdk/ureq-client,smista-router-client/reqwest,smista-router-client/ureq {{ args }}
 
 # Build the crate documentation, denying warnings
 [group('code_check')]
 doc args="":
-    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --features smista-sdk/reqwest-client {{ args }}
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --features smista-sdk/reqwest-client,smista-sdk/ureq-client,smista-router-client/reqwest,smista-router-client/ureq {{ args }}
 
 # Check dependencies for advisories, licenses, bans and sources (cargo-deny)
 [group('code_check')]

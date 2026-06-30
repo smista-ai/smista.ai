@@ -19,6 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 reqwest-client = ["smista-router-client/reqwest"]
+ureq-client = ["smista-router-client/ureq"]
 
 [dependencies]
 smista-core = { workspace = true }

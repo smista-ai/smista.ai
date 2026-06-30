@@ -20,6 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = []
 reqwest = ["dep:reqwest", "dep:tokio", "dep:tracing"]
+ureq = ["dep:tracing", "dep:ureq"]
 
 [dependencies]
 futures = { workspace = true }
@@ -31,6 +32,7 @@ smista-core = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"], optional = true }
 tracing = { workspace = true, optional = true }
+ureq = { workspace = true, features = ["gzip", "json", "rustls"], optional = true }
 url = { workspace = true }
 uuid = { workspace = true }
 
