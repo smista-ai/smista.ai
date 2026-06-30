@@ -226,8 +226,16 @@ export class SmistaClient implements ISmistaClient {
     );
   }
 
-  async listSessions(): Promise<ListSessionsResponse> {
-    return this.send('GET', this.url('/api/v1/sessions'), this.authedHeaders());
+  async listSessions(scope?: string, title?: string): Promise<ListSessionsResponse> {
+    // Omitted filters are left off the query, so the router lists every session.
+    const url = this.url('/api/v1/sessions');
+    if (scope !== undefined) {
+      url.searchParams.set('scope', scope);
+    }
+    if (title !== undefined) {
+      url.searchParams.set('title', title);
+    }
+    return this.send('GET', url, this.authedHeaders());
   }
 
   async getSession(id: string): Promise<GetSessionResponse> {

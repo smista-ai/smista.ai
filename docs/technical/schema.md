@@ -275,6 +275,7 @@ user, who is the only identity allowed to access it.
 | `id`          | UUIDv7           | Globally unique session id (record id).             |
 | `user`        | user reference   | Owning user.                                        |
 | `title`       | string, option   | Human-readable session title.                       |
+| `scope`       | string, option   | Opaque grouping key the session belongs to.         |
 | `encrypted`   | bool             | Whether the session's content is encrypted.         |
 | `key_id`      | string, option   | Fingerprint of the per-session key, when encrypted. |
 | `created_at`  | datetime         | When the session was created.                       |
@@ -286,6 +287,12 @@ flipping it would orphan content the router cannot re-key. When `true`, every
 paired `_content` row in the session stores a sealed payload and `key_id` names
 the per-session key that sealed it. The key itself never reaches storage. See
 [End-to-end encryption](./e2e_encryption.md).
+
+`scope` is an opaque grouping key the router stores and matches verbatim without
+interpreting it. The CLI sets it from the working directory so sessions can be
+listed per project; another client may scope by repository or workspace id. It
+is kept in clear even for an encrypted session so that listings can filter on
+it.
 
 ### session_message
 

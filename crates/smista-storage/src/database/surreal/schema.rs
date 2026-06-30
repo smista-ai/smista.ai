@@ -74,6 +74,7 @@ DEFINE FIELD IF NOT EXISTS revoked_at ON TABLE auth_token TYPE option<datetime>;
 -- session
 DEFINE FIELD IF NOT EXISTS user ON TABLE session TYPE record<user> ASSERT record::exists($value);
 DEFINE FIELD IF NOT EXISTS title ON TABLE session TYPE option<string>;
+DEFINE FIELD IF NOT EXISTS scope ON TABLE session TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS encrypted ON TABLE session TYPE bool;
 DEFINE FIELD IF NOT EXISTS key_id ON TABLE session TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS created_at ON TABLE session TYPE datetime;

@@ -65,8 +65,12 @@ export interface ISmistaClient {
   /** Calls `POST /api/v1/sessions` to create a session. */
   createSession(req: CreateSessionRequest): Promise<CreateSessionResponse>;
 
-  /** Calls `GET /api/v1/sessions` to list the authenticated user's sessions. */
-  listSessions(): Promise<ListSessionsResponse>;
+  /**
+   * Calls `GET /api/v1/sessions` to list the authenticated user's sessions,
+   * optionally filtered by `scope` (exact match) and `title` (case-insensitive
+   * substring). Each filter is omitted from the query when not given.
+   */
+  listSessions(scope?: string, title?: string): Promise<ListSessionsResponse>;
 
   /** Calls `GET /api/v1/sessions/{id}` to fetch a full session. */
   getSession(id: string): Promise<GetSessionResponse>;

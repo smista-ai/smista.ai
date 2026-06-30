@@ -115,6 +115,7 @@ pub fn session(id: RecordId, user: RecordId) -> Session {
         id,
         user,
         title: None,
+        scope: None,
         encrypted: false,
         key_id: None,
         created_at: Utc::now(),

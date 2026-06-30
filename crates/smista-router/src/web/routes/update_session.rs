@@ -126,6 +126,7 @@ pub(crate) async fn update_session(
     let summary = SessionSummary {
         id: session_id,
         title: updated.title,
+        scope: updated.scope,
         encrypted: updated.encrypted,
         key_id: updated.key_id,
         created_at: updated.created_at,
@@ -163,6 +164,7 @@ mod tests {
                 session_id,
                 user_id,
                 Some(title.to_string()),
+                None,
                 None,
             ))
             .await

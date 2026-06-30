@@ -128,14 +128,21 @@ pub trait Client: Send + Sync + 'static {
         req: CreateSessionRequest,
     ) -> impl Future<Output = Result<CreateSessionResponse>> + Send;
 
-    /// Calls `GET /api/v1/sessions` to list the authenticated user's sessions.
+    /// Calls `GET /api/v1/sessions` to list the authenticated user's sessions,
+    /// optionally narrowed by `scope` and `title` (each defaulting on the router
+    /// when `None`): `scope` filters by exact match and `title` by
+    /// case-insensitive substring.
     ///
     /// # Errors
     ///
     /// Returns a [`RouterClientError`](crate::RouterClientError) —
     /// `NotAuthenticated` if no token is held, or a transport, status or decode
     /// failure.
-    fn list_sessions(&self) -> impl Future<Output = Result<ListSessionsResponse>> + Send;
+    fn list_sessions(
+        &self,
+        scope: Option<String>,
+        title: Option<String>,
+    ) -> impl Future<Output = Result<ListSessionsResponse>> + Send;
 
     /// Calls `GET /api/v1/sessions/{id}` to fetch a full session.
     ///
@@ -347,7 +354,11 @@ mod tests {
             Err(RouterClientError::NotAuthenticated)
         }
 
-        async fn list_sessions(&self) -> Result<ListSessionsResponse> {
+        async fn list_sessions(
+            &self,
+            _scope: Option<String>,
+            _title: Option<String>,
+        ) -> Result<ListSessionsResponse> {
             Err(RouterClientError::NotAuthenticated)
         }
 
@@ -437,7 +448,7 @@ mod tests {
 
         // Every method's future must be `Send` so it can cross threads.
         assert_send(&client.status());
-        assert_send(&client.list_sessions());
+        assert_send(&client.list_sessions(None, None));
         assert_send(&client.execute(Uuid::nil(), dummy_execute()));
         assert_send(&client.stream_execute(Uuid::nil(), dummy_execute()));
 
@@ -460,10 +471,11 @@ mod tests {
             let _ = client
                 .create_session(CreateSessionRequest {
                     title: "t".to_string(),
+                    scope: None,
                     key_id: None,
                 })
                 .await;
-            let _ = client.list_sessions().await;
+            let _ = client.list_sessions(None, None).await;
             let _ = client.get_session(Uuid::nil()).await;
             let _ = client
                 .update_session(Uuid::nil(), UpdateSessionRequest::default())
@@ -490,7 +502,7 @@ mod tests {
     #[test]
     fn should_report_not_authenticated_for_protected_calls() {
         let client = MockClient;
-        let error = futures::executor::block_on(client.list_sessions())
+        let error = futures::executor::block_on(client.list_sessions(None, None))
             .expect_err("the mock reports an unauthenticated state");
         assert!(matches!(error, RouterClientError::NotAuthenticated));
     }

@@ -295,6 +295,7 @@ mod tests {
             id: RecordId::new(Session::name(), session_id.to_string()),
             user: RecordId::new(User::name(), user_id.to_string()),
             title: None,
+            scope: None,
             encrypted: false,
             key_id: None,
             created_at: Utc::now(),

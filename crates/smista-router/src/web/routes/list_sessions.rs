@@ -7,7 +7,7 @@
 //! Protected endpoint: the [`authenticate`](crate::web) middleware resolves the
 //! owner from the bearer token, and only that user's sessions are listed.
 
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::{Extension, Json};
 use smista_core::api::{ApiErrorCode, ListSessionsResponse, SessionSummary};
@@ -16,6 +16,19 @@ use crate::session::Sessions;
 use crate::web::error::WebError;
 use crate::web::routes::ApiResult;
 use crate::web::{AppState, AuthenticatedUser};
+
+/// Optional filters for `GET /api/v1/sessions`.
+///
+/// Both filters are optional and combine: `scope` matches the session scope
+/// exactly, `title` matches a case-insensitive substring of the title. With
+/// neither set, every session is listed.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub(crate) struct ListSessionsParams {
+    /// Restrict the listing to sessions in this exact scope.
+    scope: Option<String>,
+    /// Restrict the listing to sessions whose title contains this substring.
+    title: Option<String>,
+}
 
 /// Handles `GET /api/v1/sessions`.
 #[cfg_attr(
@@ -26,6 +39,10 @@ use crate::web::{AppState, AuthenticatedUser};
         operation_id = "listSessions",
         tag = "sessions",
         security(("bearer" = [])),
+        params(
+            ("scope" = Option<String>, Query, description = "Restrict to sessions in this exact scope"),
+            ("title" = Option<String>, Query, description = "Restrict to sessions whose title contains this substring")
+        ),
         responses(
             (status = 200, description = "List of sessions", body = smista_core::api::ListSessionsResponse),
             (status = 401, description = "Missing or invalid token", body = smista_core::api::ApiError)
@@ -35,15 +52,17 @@ use crate::web::{AppState, AuthenticatedUser};
 pub(crate) async fn list_sessions(
     State(state): State<AppState>,
     Extension(user): Extension<AuthenticatedUser>,
+    Query(params): Query<ListSessionsParams>,
 ) -> ApiResult<ListSessionsResponse> {
     let sessions = Sessions::new(state.database.clone(), user.user_id);
 
-    let list = match sessions.list().await {
+    let list = match sessions.search(params.scope, params.title).await {
         Ok(sessions) => sessions
             .into_iter()
             .map(|session| SessionSummary {
                 id: session.uuid(),
                 title: session.title,
+                scope: session.scope,
                 encrypted: session.encrypted,
                 key_id: session.key_id,
                 created_at: session.created_at,
@@ -91,11 +110,18 @@ mod tests {
         db: &SurrealDatabase,
         user_id: Uuid,
         title: &str,
+        scope: Option<&str>,
         key_id: Option<String>,
         updated_at: DateTime<Utc>,
     ) -> Uuid {
         let session_id = Uuid::now_v7();
-        let mut session = Session::new(session_id, user_id, Some(title.to_string()), key_id);
+        let mut session = Session::new(
+            session_id,
+            user_id,
+            Some(title.to_string()),
+            scope.map(str::to_string),
+            key_id,
+        );
         session.updated_at = updated_at;
         Sessions::new(db.clone(), user_id)
             .create(session)
@@ -109,8 +135,9 @@ mod tests {
         let (router, token, user_id, db) = authenticated_router_with_database().await;
         let now = Utc::now();
         // The older session is created first but must be listed last.
-        let older = create_session_at(&db, user_id, "older", None, now - Duration::hours(1)).await;
-        let newer = create_session_at(&db, user_id, "newer", None, now).await;
+        let older =
+            create_session_at(&db, user_id, "older", None, None, now - Duration::hours(1)).await;
+        let newer = create_session_at(&db, user_id, "newer", None, None, now).await;
 
         let (status, body) = send(router, get_with_token("/api/v1/sessions", &token)).await;
 
@@ -127,7 +154,7 @@ mod tests {
     #[tokio::test]
     async fn should_include_archived_sessions() {
         let (router, token, user_id, db) = authenticated_router_with_database().await;
-        let session_id = create_session_at(&db, user_id, "archived", None, Utc::now()).await;
+        let session_id = create_session_at(&db, user_id, "archived", None, None, Utc::now()).await;
         Sessions::new(db.clone(), user_id)
             .open(session_id)
             .await
@@ -147,6 +174,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_filter_sessions_by_scope_and_title() {
+        let (router, token, user_id, db) = authenticated_router_with_database().await;
+        let now = Utc::now();
+        create_session_at(&db, user_id, "Refactor auth", Some("/work/api"), None, now).await;
+        create_session_at(
+            &db,
+            user_id,
+            "Refactor ui",
+            Some("/work/web"),
+            None,
+            now - Duration::hours(1),
+        )
+        .await;
+        create_session_at(
+            &db,
+            user_id,
+            "Docs",
+            Some("/work/api"),
+            None,
+            now - Duration::hours(2),
+        )
+        .await;
+
+        // The scope filter narrows the listing to one project.
+        let (status, body) = send(
+            router.clone(),
+            get_with_token("/api/v1/sessions?scope=/work/api", &token),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let sessions = body["sessions"].as_array().expect("sessions missing");
+        assert_eq!(sessions.len(), 2);
+        assert!(sessions.iter().all(|s| s["scope"] == "/work/api"));
+
+        // Scope and title combine to a single session.
+        let (status, body) = send(
+            router,
+            get_with_token("/api/v1/sessions?scope=/work/api&title=refactor", &token),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let sessions = body["sessions"].as_array().expect("sessions missing");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0]["title"], "Refactor auth");
+    }
+
+    #[tokio::test]
     async fn should_return_an_empty_list_for_a_user_with_no_sessions() {
         let (router, token, _user_id, _db) = authenticated_router_with_database().await;
 
@@ -160,8 +234,16 @@ mod tests {
     async fn should_report_the_key_id_only_for_an_encrypted_session() {
         let (router, token, user_id, db) = authenticated_router_with_database().await;
         let now = Utc::now();
-        create_session_at(&db, user_id, "secret", Some("kf_ab12".to_string()), now).await;
-        create_session_at(&db, user_id, "plain", None, now - Duration::hours(1)).await;
+        create_session_at(
+            &db,
+            user_id,
+            "secret",
+            None,
+            Some("kf_ab12".to_string()),
+            now,
+        )
+        .await;
+        create_session_at(&db, user_id, "plain", None, None, now - Duration::hours(1)).await;
 
         let (status, body) = send(router, get_with_token("/api/v1/sessions", &token)).await;
 
@@ -191,7 +273,7 @@ mod tests {
         })
         .await
         .expect("failed to create other user");
-        create_session_at(&db, other_id, "not yours", None, Utc::now()).await;
+        create_session_at(&db, other_id, "not yours", None, None, Utc::now()).await;
 
         let (status, body) = send(router, get_with_token("/api/v1/sessions", &token)).await;
 

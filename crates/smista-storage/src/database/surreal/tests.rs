@@ -270,6 +270,7 @@ fn session_for(id: Uuid, user_id: Uuid) -> Session {
         id: record_id::<Session, _>(id),
         user: record_id::<User, _>(user_id),
         title: Some("session".to_string()),
+        scope: None,
         encrypted: false,
         key_id: None,
         created_at: Utc::now(),
@@ -709,6 +710,95 @@ async fn should_list_only_owned_sessions() {
     assert_eq!(owned.len(), 2);
     assert!(owned.iter().all(|s| s.user == record_id::<User, _>(owner)));
     let _ = first;
+}
+
+#[tokio::test]
+async fn should_search_sessions_by_scope_and_title() {
+    let db = memory_db().await;
+    let owner = Uuid::now_v7();
+    db.create_user(user(owner))
+        .await
+        .expect("failed to create user");
+
+    let make = |title: &str, scope: Option<&str>| {
+        let mut session = session_for(Uuid::now_v7(), owner);
+        session.title = Some(title.to_string());
+        session.scope = scope.map(str::to_string);
+        session
+    };
+    db.create_session(make("Refactor auth", Some("/work/api")))
+        .await
+        .expect("failed to create session");
+    db.create_session(make("Refactor ui", Some("/work/web")))
+        .await
+        .expect("failed to create session");
+    db.create_session(make("Docs", Some("/work/api")))
+        .await
+        .expect("failed to create session");
+
+    // An exact scope filter returns only sessions in that scope.
+    let by_scope = db
+        .search_sessions(owner, Some("/work/api".to_string()), None)
+        .await
+        .expect("failed to search by scope");
+    assert_eq!(by_scope.len(), 2);
+    assert!(
+        by_scope
+            .iter()
+            .all(|s| s.scope.as_deref() == Some("/work/api"))
+    );
+
+    // A title filter matches case-insensitively on a substring.
+    let by_title = db
+        .search_sessions(owner, None, Some("refactor".to_string()))
+        .await
+        .expect("failed to search by title");
+    assert_eq!(by_title.len(), 2);
+
+    // The two filters combine, narrowing to the single matching session.
+    let both = db
+        .search_sessions(
+            owner,
+            Some("/work/api".to_string()),
+            Some("refactor".to_string()),
+        )
+        .await
+        .expect("failed to search by scope and title");
+    assert_eq!(both.len(), 1);
+    assert_eq!(both[0].title.as_deref(), Some("Refactor auth"));
+
+    // With neither filter set, every session is returned.
+    let all = db
+        .search_sessions(owner, None, None)
+        .await
+        .expect("failed to search without filters");
+    assert_eq!(all.len(), 3);
+}
+
+#[tokio::test]
+async fn should_not_search_sessions_of_another_user() {
+    let db = memory_db().await;
+    let owner = Uuid::now_v7();
+    let intruder = Uuid::now_v7();
+    db.create_user(user(owner))
+        .await
+        .expect("failed to create owner");
+    db.create_user(user(intruder))
+        .await
+        .expect("failed to create intruder");
+
+    let mut session = session_for(Uuid::now_v7(), owner);
+    session.scope = Some("/private".to_string());
+    db.create_session(session)
+        .await
+        .expect("failed to create session");
+
+    // The intruder shares the scope value but owns no session, so none match.
+    let found = db
+        .search_sessions(intruder, Some("/private".to_string()), None)
+        .await
+        .expect("failed to search sessions");
+    assert!(found.is_empty(), "session disclosed to a non-owner");
 }
 
 #[tokio::test]
@@ -1653,6 +1743,7 @@ fn session_with(
         id: record_id::<Session, _>(id),
         user: record_id::<User, _>(user_id),
         title: Some("session".to_string()),
+        scope: None,
         encrypted: false,
         key_id: None,
         created_at: Utc::now(),

@@ -125,6 +125,19 @@ pub trait Database: Send + Sync {
         user_id: Uuid,
     ) -> impl Future<Output = StorageResult<Vec<Session>>> + Send;
 
+    /// Searches the sessions owned by `user_id`, most recently updated first.
+    ///
+    /// `scope` matches the session scope exactly; `title` matches sessions whose
+    /// title contains it, case-insensitively. Each filter left `None` is not
+    /// applied, so passing both `None` returns every session like
+    /// [`list_sessions`](Self::list_sessions).
+    fn search_sessions(
+        &self,
+        user_id: Uuid,
+        scope: Option<String>,
+        title: Option<String>,
+    ) -> impl Future<Output = StorageResult<Vec<Session>>> + Send;
+
     /// Updates a session owned by `user_id` and returns the stored row.
     fn update_session(
         &self,

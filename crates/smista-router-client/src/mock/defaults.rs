@@ -40,6 +40,7 @@ fn session_summary() -> SessionSummary {
     SessionSummary {
         id: Uuid::nil(),
         title: Some("Refactor auth middleware".to_owned()),
+        scope: None,
         encrypted: false,
         key_id: None,
         created_at: timestamp(),
@@ -119,6 +120,7 @@ pub(crate) fn get_session() -> GetSessionResponse {
         session: SessionDetail {
             id: Uuid::nil(),
             title: "Refactor auth middleware".to_owned(),
+            scope: None,
             encrypted: false,
             created_at: timestamp(),
             updated_at: timestamp(),

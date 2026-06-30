@@ -233,6 +233,7 @@ mod tests {
             id: RecordId::new(Session::name(), id.to_string()),
             user: RecordId::new(User::name(), user_id.to_string()),
             title: Some("session".to_string()),
+            scope: None,
             encrypted: key_id.is_some(),
             key_id,
             created_at: chrono::Utc::now(),

@@ -13,6 +13,10 @@ id: string,
  */
 title: string | null, 
 /**
+ * Opaque scope the session belongs to, if any.
+ */
+scope?: string, 
+/**
  * Whether the session's content is end-to-end encrypted.
  */
 encrypted: boolean, 
