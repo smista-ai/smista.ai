@@ -18,6 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
+isahc-client = ["smista-router-client/isahc"]
 reqwest-client = ["smista-router-client/reqwest"]
 ureq-client = ["smista-router-client/ureq"]
 

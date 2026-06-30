@@ -42,6 +42,7 @@ dirs = "6"
 futures = "0.3"
 globset = "0.4"
 http = "1"
+isahc = { version = "2", default-features = false }
 opentelemetry = "0.32"
 opentelemetry-otlp = "0.32"
 opentelemetry_sdk = "0.32"

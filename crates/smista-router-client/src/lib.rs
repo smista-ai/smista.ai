@@ -8,8 +8,9 @@
 //!
 //! Exposes a `SmistaRouterClient` trait covering every router endpoint —
 //! authentication, sessions, execution, streaming, route preview, approvals,
-//! traces, providers/models and usage — plus `reqwest`-backed (async) and
-//! `ureq`-backed (blocking) implementations.
+//! traces, providers/models and usage — plus `reqwest`-backed (async, Tokio),
+//! `isahc`-backed (async, runtime-agnostic) and `ureq`-backed (blocking)
+//! implementations.
 //! The CLI and other Rust frontends depend on this instead of calling the API
 //! by hand; routing logic stays in the router.
 //!
@@ -45,12 +46,16 @@
 //! types compile without any HTTP library. Concrete clients are opt-in, and a
 //! frontend enables exactly the one it wants:
 //!
-//! | name      | description                                                                                                                    | default |
-//! |-----------|--------------------------------------------------------------------------------------------------------------------------------|---------|
-//! | `reqwest` | Enable [`ReqwestClient`], the async [`reqwest`](https://docs.rs/reqwest)-backed [`Client`] over a `rustls` TLS stack.          |         |
-//! | `ureq`    | Enable [`UreqClient`], the blocking [`ureq`](https://docs.rs/ureq)-backed [`Client`] over a `rustls` TLS stack.                |         |
+//! | name      | description                                                                                                                       | default |
+//! |-----------|-----------------------------------------------------------------------------------------------------------------------------------|---------|
+//! | `isahc`   | Enable [`IsahcClient`], the runtime-agnostic async [`isahc`](https://docs.rs/isahc)-backed [`Client`] over a `rustls` TLS stack.   |         |
+//! | `reqwest` | Enable [`ReqwestClient`], the async [`reqwest`](https://docs.rs/reqwest)-backed [`Client`] over a `rustls` TLS stack.              |         |
+//! | `ureq`    | Enable [`UreqClient`], the blocking [`ureq`](https://docs.rs/ureq)-backed [`Client`] over a `rustls` TLS stack.                    |         |
 //!
-//! `ReqwestClient` is `async` end to end and is the backend `smista-cli` uses.
+//! `ReqwestClient` is `async` end to end and needs a `tokio` reactor; it is the
+//! backend `smista-cli` uses. `IsahcClient` is also `async` but runtime-agnostic:
+//! `isahc` drives I/O on its own agent thread, so its `Send` futures resolve on
+//! any executor without a `tokio` reactor — see the [type docs](IsahcClient).
 //! `UreqClient` is synchronous: its [`Client`] methods are `async` but block
 //! internally, so they run on any executor without a `tokio` reactor — see the
 //! [type docs](UreqClient) for how to drive it from a work-stealing runtime.
@@ -63,6 +68,9 @@ mod error;
 mod mock;
 
 pub use self::client::Client;
+#[cfg(feature = "isahc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "isahc")))]
+pub use self::client::IsahcClient;
 #[cfg(feature = "reqwest")]
 #[cfg_attr(docsrs, doc(cfg(feature = "reqwest")))]
 pub use self::client::ReqwestClient;
