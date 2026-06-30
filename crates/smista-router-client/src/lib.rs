@@ -8,7 +8,8 @@
 //!
 //! Exposes a `SmistaRouterClient` trait covering every router endpoint —
 //! authentication, sessions, execution, streaming, route preview, approvals,
-//! traces, providers/models and usage — plus a `reqwest`-backed implementation.
+//! traces, providers/models and usage — plus `reqwest`-backed (async) and
+//! `ureq`-backed (blocking) implementations.
 //! The CLI and other Rust frontends depend on this instead of calling the API
 //! by hand; routing logic stays in the router.
 //!
@@ -38,15 +39,21 @@
 //! }
 //! ```
 //!
-//! # Features
+//! # Feature flags
 //!
 //! The crate ships no backend by default; the [`Client`] trait and its shared
-//! types compile without any HTTP library. Concrete clients are opt-in:
+//! types compile without any HTTP library. Concrete clients are opt-in, and a
+//! frontend enables exactly the one it wants:
 //!
-//! - **`reqwest`** *(off by default)* — enables [`ReqwestClient`], the default
-//!   [`reqwest`](https://docs.rs/reqwest)-backed [`Client`] over a `rustls` TLS
-//!   stack. This is the backend `smista-cli` uses; enable it with
-//!   `features = ["reqwest"]`.
+//! | name      | description                                                                                                                    | default |
+//! |-----------|--------------------------------------------------------------------------------------------------------------------------------|---------|
+//! | `reqwest` | Enable [`ReqwestClient`], the async [`reqwest`](https://docs.rs/reqwest)-backed [`Client`] over a `rustls` TLS stack.          |         |
+//! | `ureq`    | Enable [`UreqClient`], the blocking [`ureq`](https://docs.rs/ureq)-backed [`Client`] over a `rustls` TLS stack.                |         |
+//!
+//! `ReqwestClient` is `async` end to end and is the backend `smista-cli` uses.
+//! `UreqClient` is synchronous: its [`Client`] methods are `async` but block
+//! internally, so they run on any executor without a `tokio` reactor — see the
+//! [type docs](UreqClient) for how to drive it from a work-stealing runtime.
 
 mod client;
 mod config;
@@ -59,6 +66,9 @@ pub use self::client::Client;
 #[cfg(feature = "reqwest")]
 #[cfg_attr(docsrs, doc(cfg(feature = "reqwest")))]
 pub use self::client::ReqwestClient;
+#[cfg(feature = "ureq")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ureq")))]
+pub use self::client::UreqClient;
 pub use self::config::RouterClientConfig;
 pub use self::credentials::{ApiKey, ProviderCredentials, SessionToken};
 pub use self::error::{Result, RouterClientError};

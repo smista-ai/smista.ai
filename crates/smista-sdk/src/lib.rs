@@ -25,14 +25,16 @@
 //! the router and other internal binaries can depend on it without pulling in a
 //! client.
 //!
-//! # Features
+//! # Feature flags
 //!
-//! - **`reqwest-client`** *(off by default)* — surfaces
-//!   [`client::ReqwestClient`], the default
-//!   [`reqwest`](https://docs.rs/reqwest)-backed [`Client`](client::Client) over
-//!   a `rustls` TLS stack, by enabling `smista-router-client/reqwest`. Without
-//!   it, [`client`] still exposes the backend-agnostic trait and its shared
-//!   types. Enable it with `features = ["reqwest-client"]`.
+//! No backend is enabled by default; [`client`] always exposes the
+//! backend-agnostic [`Client`](client::Client) trait and its shared types, and a
+//! consumer enables exactly the concrete client it wants:
+//!
+//! | name             | description                                                                                                                                          | default |
+//! |------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+//! | `reqwest-client` | Surface [`client::ReqwestClient`], the async [`reqwest`](https://docs.rs/reqwest)-backed client, by enabling `smista-router-client/reqwest`.          |         |
+//! | `ureq-client`    | Surface [`client::UreqClient`], the blocking [`ureq`](https://docs.rs/ureq)-backed client, by enabling `smista-router-client/ureq`.                   |         |
 
 pub mod client;
 
