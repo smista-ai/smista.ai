@@ -4,7 +4,7 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "lib": ["es2023"],
-    "types": [],
+    "types": ["node"],
     "moduleDetection": "force",
     "strict": true,
     "noUncheckedIndexedAccess": true,
