@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{Context as _, bail};
+use smista_router::config::{RouterConfig, ValidationReport};
 use tokio_util::sync::CancellationToken;
 
 use self::pidfile::Pidfile;
@@ -77,7 +78,7 @@ pub fn stop(args: StopArgs) -> anyhow::Result<()> {
 
     let pid = pidfile::read(&pidfile_path)?;
     if process::terminate(pid) {
-        println!("asked smista router (pid {pid}) to stop");
+        println!("smista router (pid {pid}) stopped.");
         Ok(())
     } else {
         bail!("could not stop the router (pid {pid}); it may have already exited");
@@ -107,18 +108,8 @@ async fn run_foreground(
 
     let _pidfile = Pidfile::acquire(pidfile_path)?;
 
-    let config_path = args
-        .config
-        .clone()
-        .or_else(smista_router::config::paths::router_toml)
-        .context("no router configuration file could be resolved; specify one with --config")?;
-    let mut config = smista_router::config::load(&config_path)
-        .with_context(|| format!("failed to load router config {}", config_path.display()))?;
-
-    // Fold the command-line OpenTelemetry overrides over the file settings, then
-    // validate the merged result so command-line values are checked too.
-    config.opentelemetry = args.resolve_opentelemetry(config.opentelemetry.clone());
-    let report = smista_router::config::validate::validate(&config);
+    // load and validate config
+    let (config, report) = load_and_validate_configuration(args)?;
     if !report.is_ok() {
         bail!(
             "router configuration is invalid:\n{report}",
@@ -129,6 +120,7 @@ async fn run_foreground(
     // Install logging (and OpenTelemetry export when enabled) before starting the
     // router, then surface any validation warnings now that a subscriber is set.
     let _telemetry = log::init(log_filter, log_file, Some(&config.opentelemetry))?;
+
     for warning in report.warnings() {
         tracing::warn!("configuration warning: {}", warning.to_human());
     }
@@ -160,6 +152,18 @@ async fn run_foreground(
 fn daemonize(args: &RouterArgs, log_file: Option<&Path>, log_filter: &str) -> anyhow::Result<()> {
     let exe = std::env::current_exe().context("failed to resolve the smista executable path")?;
     let mut command = Command::new(exe);
+
+    // load and validate config
+    let report = load_and_validate_configuration(args)?.1;
+    if !report.is_ok() {
+        bail!(
+            "router configuration is invalid:\n{report}",
+            report = report.to_human()
+        );
+    }
+    for warning in report.warnings() {
+        tracing::warn!("configuration warning: {}", warning.to_human());
+    }
 
     // Global logging flags come before the subcommand; the child re-parses them
     // and configures logging itself.
@@ -214,6 +218,30 @@ fn daemonize(args: &RouterArgs, log_file: Option<&Path>, log_filter: &str) -> an
         pid = child.id()
     );
     Ok(())
+}
+
+/// Loads the router configuration from the file specified by `--config` or
+/// the default location, folds in the command-line OpenTelemetry overrides, and
+/// computes the validation report.
+///
+/// This function doesn't check error or warning validation.
+fn load_and_validate_configuration(
+    args: &RouterArgs,
+) -> anyhow::Result<(RouterConfig, ValidationReport)> {
+    let config_path = args
+        .config
+        .clone()
+        .or_else(smista_router::config::paths::router_toml)
+        .context("no router configuration file could be resolved; specify one with --config")?;
+    let mut config = smista_router::config::load(&config_path)
+        .with_context(|| format!("failed to load router config {}", config_path.display()))?;
+
+    // Fold the command-line OpenTelemetry overrides over the file settings, then
+    // validate the merged result so command-line values are checked too.
+    config.opentelemetry = args.resolve_opentelemetry(config.opentelemetry.clone());
+    let report = smista_router::config::validate::validate(&config);
+
+    Ok((config, report))
 }
 
 /// Detaches `command` from the launching process group on Unix.
