@@ -39,7 +39,7 @@ pub fn validate(merged: &Config, layers: &[(ConfigLayer, Config)]) -> Validation
     tracing::debug!(
         validation.error_count = report.errors().len(),
         validation.warning_count = report.warnings().len(),
-        "validation complete: {{validation.error_count}} errors, {{validation.warning_count}} warnings"
+        "validation complete"
     );
     report
 }
@@ -48,6 +48,31 @@ pub fn validate(merged: &Config, layers: &[(ConfigLayer, Config)]) -> Validation
 mod tests {
     use super::*;
     use crate::config::parse;
+
+    #[test]
+    fn should_validate_minimal_authored_config_clean() {
+        // A CLI config is user-authored: it must name a provider and a default
+        // route. With only those present, every other field takes its default
+        // and the merged configuration validates clean.
+        let merged = parse(
+            r#"
+            [providers.openai]
+            type = "openai"
+
+            [routing.default]
+            model = "openai/gpt-5.5-mini"
+            "#,
+            "test",
+        )
+        .unwrap();
+        let layers = vec![(ConfigLayer::Project, merged.clone())];
+        let report = validate(&merged, &layers);
+        assert!(
+            report.is_ok(),
+            "minimal authored CLI config must validate clean: {:?}",
+            report.errors()
+        );
+    }
 
     #[test]
     fn should_pass_complete_valid_fixture() {

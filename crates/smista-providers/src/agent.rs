@@ -119,7 +119,7 @@ where
         tracing::debug!(
             model.provider = %provider,
             model.name = %model,
-            "loading preamble from memory storage for {{model.provider}}/{{model.name}}"
+            "loading preamble from memory storage"
         );
         let memory_preamble =
             load_memories_preamble(storage.as_ref(), scope, provider.clone(), &model).await?;
@@ -131,7 +131,7 @@ where
         tracing::debug!(
             model.provider = %provider,
             model.name = %model,
-            "creating agent for {{model.provider}}/{{model.name}}"
+            "creating agent"
         );
         let mut builder = completion_model
             .agent(model.clone())
@@ -169,7 +169,7 @@ where
         tracing::debug!(
             model.provider = %provider,
             model.name = %model,
-            "agent for {{model.provider}}/{{model.name}} created successfully"
+            "agent created successfully"
         );
 
         Ok(Self {
@@ -201,7 +201,7 @@ where
             model.name = %self.descriptor.model,
             request.messages = messages.len(),
             request.tools = tools.len(),
-            "starting completion with {{request.messages}} messages and {{request.tools}} tools"
+            "starting completion"
         );
 
         let mut history: Vec<RigMessage> = messages.into_iter().map(into_rig_message).collect();
@@ -257,7 +257,7 @@ where
                     response.tool_calls = tool_calls.len(),
                     usage.input_tokens = usage.input_tokens,
                     usage.output_tokens = usage.output_tokens,
-                    "completion finished with {{response.tool_calls}} tool calls to mediate"
+                    "completion finished with tool calls to mediate"
                 );
                 return Ok(CompletionResponse {
                     finish_reason: finish_reason(&response.raw_response, !tool_calls.is_empty()),
@@ -273,7 +273,7 @@ where
                 model.provider = %self.descriptor.provider,
                 model.name = %self.descriptor.model,
                 turn.tool_calls = tool_calls.len(),
-                "executing {{turn.tool_calls}} agent-internal tool calls"
+                "executing agent-internal tool calls"
             );
             let mut results = Vec::with_capacity(tool_calls.len());
             for call in &tool_calls {
@@ -335,7 +335,7 @@ where
             model.name = %self.descriptor.model,
             request.messages = messages.len(),
             request.tools = tools.len(),
-            "starting streaming completion with {{request.messages}} messages and {{request.tools}} tools"
+            "starting streaming completion"
         );
 
         let mut history: Vec<RigMessage> = messages.into_iter().map(into_rig_message).collect();
@@ -436,7 +436,7 @@ where
             model.provider = %self.descriptor.provider,
             model.name = %self.descriptor.model,
             tool.name = %call.function.name,
-            "executing internal tool call `{{tool.name}}`"
+            "executing internal tool call"
         );
         let output = self
             .agent
@@ -695,7 +695,7 @@ where
                 model.provider = %provider,
                 model.name = %model,
                 tool.name = %call.name,
-                "model requested tool call `{{tool.name}}`"
+                "model requested tool call"
             );
             Some(Ok(StreamEvent::ToolCallRequested {
                 call_id: call.call_id,
@@ -835,7 +835,7 @@ where
                 model.provider = %provider,
                 model.name = %model,
                 memory.records = memories.len(),
-                "loaded {{memory.records}} memory records from storage"
+                "loaded memory records from storage"
             );
             Ok(memories)
         }

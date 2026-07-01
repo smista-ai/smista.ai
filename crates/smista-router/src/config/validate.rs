@@ -34,12 +34,12 @@ pub fn validate(config: &RouterConfig) -> ValidationReport {
     tracing::debug!(
         validation.errors = report.errors().len(),
         validation.warnings = report.warnings().len(),
-        "router config validation complete: {{validation.errors}} errors, {{validation.warnings}} warnings"
+        "router config validation complete"
     );
     if !report.is_ok() {
         tracing::warn!(
             validation.errors = report.errors().len(),
-            "router config is invalid: {{validation.errors}} errors found"
+            "router config is invalid"
         );
     }
 
@@ -50,6 +50,34 @@ pub fn validate(config: &RouterConfig) -> ValidationReport {
 mod tests {
     use super::*;
     use crate::config::parse;
+
+    #[test]
+    fn should_validate_default_config_clean() {
+        let report = validate(&RouterConfig::default());
+        assert!(
+            report.is_ok(),
+            "default router config must validate clean: {:?}",
+            report.errors()
+        );
+    }
+
+    #[test]
+    fn should_flag_embedded_storage_when_default_path_is_cleared() {
+        // The default embedded path is what keeps the default config valid;
+        // clearing it must make validation fail with a missing-storage error.
+        let mut config = RouterConfig::default();
+        config.storage.path = None;
+
+        let report = validate(&config);
+
+        assert!(!report.is_ok());
+        assert!(
+            report
+                .errors()
+                .iter()
+                .any(|error| error.code == ValidationCode::MissingStorageConfig)
+        );
+    }
 
     #[test]
     fn should_collect_multiple_errors_in_one_pass() {

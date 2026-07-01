@@ -32,7 +32,7 @@ fn check_fallbacks(
             tracing::warn!(
                 routing.model = %model,
                 routing.location = %location,
-                "route lists its own model as a fallback at {{routing.location}}"
+                "route lists its own model as a fallback"
             );
             report.push(ValidationError {
                 code: ValidationCode::InvalidFallback,
@@ -45,7 +45,7 @@ fn check_fallbacks(
             tracing::warn!(
                 routing.fallback = %fallback,
                 routing.location = %location,
-                "duplicate fallback {{routing.fallback}} at {{routing.location}}"
+                "duplicate fallback"
             );
             report.push(ValidationError {
                 code: ValidationCode::InvalidFallback,
@@ -88,7 +88,7 @@ pub fn check_routing_structure(config: &Config, report: &mut ValidationReport) {
             tracing::warn!(
                 routing.rule = %rule.name,
                 routing.location = %format!("routing.rules[{index}].name"),
-                "duplicate routing rule name {{routing.rule}}"
+                "duplicate routing rule name"
             );
             report.push(ValidationError {
                 code: ValidationCode::DuplicateRule,
@@ -141,7 +141,7 @@ pub fn check_rule_ambiguity(config: &Config, report: &mut ValidationReport) {
                     routing.rule_a = %rule_i.name,
                     routing.rule_b = %rule_j.name,
                     routing.priority = rule_i.priority,
-                    "ambiguous rule pair {{routing.rule_a}} and {{routing.rule_b}} share priority and specificity"
+                    "ambiguous rule pair shares priority and specificity"
                 );
                 report.push(ValidationError {
                     code: ValidationCode::RuleAmbiguity,

@@ -63,7 +63,7 @@ impl ToolsConfig {
         tracing::debug!(
             tools.base = self.permissions.len(),
             tools.over = over.permissions.len(),
-            "narrowing {{tools.base}} base permissions with {{tools.over}} overrides"
+            "narrowing base permissions with overrides"
         );
         for (tool, &requested) in &over.permissions {
             if let Some(&base) = self.permissions.get(tool)
@@ -73,7 +73,7 @@ impl ToolsConfig {
                     tool.name = %tool,
                     tool.base = %base,
                     tool.requested = %requested,
-                    "override loosens permission for {{tool.name}}; rejecting"
+                    "override loosens permission; rejecting"
                 );
                 return Err(PolicyError::PermissionExpansion {
                     base,

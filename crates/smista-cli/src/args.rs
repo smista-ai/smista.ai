@@ -27,7 +27,7 @@ pub struct Args {
         global = true,
         long = "log-filter",
         env = "SMISTA_ROUTER_LOG_FILTER",
-        default_value = "info"
+        default_value = "off"
     )]
     pub log_filter: String,
 }
@@ -135,7 +135,7 @@ mod tests {
         let args = Args::parse_from(["smista", "start"]);
 
         assert!(args.log_file.is_none());
-        assert_eq!(args.log_filter, "info");
+        assert_eq!(args.log_filter, "off");
         let Command::Start(start) = args.command else {
             panic!("expected the start command");
         };

@@ -21,7 +21,7 @@ pub fn check_providers(config: &RouterConfig, report: &mut ValidationReport) {
         if ignores_base_url && provider_config.base_url.is_some() {
             tracing::warn!(
                 provider.id = %provider_id,
-                "base_url set for built-in provider {{provider.id}} has no effect"
+                "base_url set for built-in provider has no effect"
             );
             report.push(ValidationError {
                 code: ValidationCode::IgnoredProviderBaseUrl,

@@ -41,7 +41,7 @@ where
         otel.endpoint = %config.endpoint,
         otel.service_name = %config.service_name,
         otel.sample_ratio = config.sample_ratio,
-        "configuring OpenTelemetry trace export to {{otel.endpoint}}"
+        "configuring OpenTelemetry trace export"
     );
 
     let exporter = build_exporter(config)?;

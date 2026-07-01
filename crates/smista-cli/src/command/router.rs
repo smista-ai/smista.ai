@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{Context as _, bail};
+use smista_router::config::{RouterConfig, ValidationReport};
 use tokio_util::sync::CancellationToken;
 
 use self::pidfile::Pidfile;
@@ -77,7 +78,7 @@ pub fn stop(args: StopArgs) -> anyhow::Result<()> {
 
     let pid = pidfile::read(&pidfile_path)?;
     if process::terminate(pid) {
-        println!("asked smista router (pid {pid}) to stop");
+        println!("smista router (pid {pid}) stopped.");
         Ok(())
     } else {
         bail!("could not stop the router (pid {pid}); it may have already exited");
@@ -107,18 +108,8 @@ async fn run_foreground(
 
     let _pidfile = Pidfile::acquire(pidfile_path)?;
 
-    let config_path = args
-        .config
-        .clone()
-        .or_else(smista_router::config::paths::router_toml)
-        .context("no router configuration file could be resolved; specify one with --config")?;
-    let mut config = smista_router::config::load(&config_path)
-        .with_context(|| format!("failed to load router config {}", config_path.display()))?;
-
-    // Fold the command-line OpenTelemetry overrides over the file settings, then
-    // validate the merged result so command-line values are checked too.
-    config.opentelemetry = args.resolve_opentelemetry(config.opentelemetry.clone());
-    let report = smista_router::config::validate::validate(&config);
+    // load and validate config
+    let (config, report) = load_and_validate_configuration(args)?;
     if !report.is_ok() {
         bail!(
             "router configuration is invalid:\n{report}",
@@ -129,6 +120,7 @@ async fn run_foreground(
     // Install logging (and OpenTelemetry export when enabled) before starting the
     // router, then surface any validation warnings now that a subscriber is set.
     let _telemetry = log::init(log_filter, log_file, Some(&config.opentelemetry))?;
+
     for warning in report.warnings() {
         tracing::warn!("configuration warning: {}", warning.to_human());
     }
@@ -160,6 +152,18 @@ async fn run_foreground(
 fn daemonize(args: &RouterArgs, log_file: Option<&Path>, log_filter: &str) -> anyhow::Result<()> {
     let exe = std::env::current_exe().context("failed to resolve the smista executable path")?;
     let mut command = Command::new(exe);
+
+    // load and validate config
+    let report = load_and_validate_configuration(args)?.1;
+    if !report.is_ok() {
+        bail!(
+            "router configuration is invalid:\n{report}",
+            report = report.to_human()
+        );
+    }
+    for warning in report.warnings() {
+        tracing::warn!("configuration warning: {}", warning.to_human());
+    }
 
     // Global logging flags come before the subcommand; the child re-parses them
     // and configures logging itself.
@@ -216,6 +220,30 @@ fn daemonize(args: &RouterArgs, log_file: Option<&Path>, log_filter: &str) -> an
     Ok(())
 }
 
+/// Loads the router configuration from the file specified by `--config` or
+/// the default location, folds in the command-line OpenTelemetry overrides, and
+/// computes the validation report.
+///
+/// This function doesn't check error or warning validation.
+fn load_and_validate_configuration(
+    args: &RouterArgs,
+) -> anyhow::Result<(RouterConfig, ValidationReport)> {
+    let config_path = args
+        .config
+        .clone()
+        .or_else(smista_router::config::paths::router_toml)
+        .context("no router configuration file could be resolved; specify one with --config")?;
+    let mut config = smista_router::config::load(&config_path)
+        .with_context(|| format!("failed to load router config {}", config_path.display()))?;
+
+    // Fold the command-line OpenTelemetry overrides over the file settings, then
+    // validate the merged result so command-line values are checked too.
+    config.opentelemetry = args.resolve_opentelemetry(config.opentelemetry.clone());
+    let report = smista_router::config::validate::validate(&config);
+
+    Ok((config, report))
+}
+
 /// Detaches `command` from the launching process group on Unix.
 #[cfg(unix)]
 fn detach(command: &mut Command) {
@@ -236,4 +264,95 @@ fn detach(command: &mut Command) {
     /// Start the child in its own process group.
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser as _;
+
+    use super::*;
+    use crate::args::{Args, Command as CliCommand};
+
+    /// Parses `smista start ...` argv into its [`RouterArgs`].
+    fn router_args(argv: &[&str]) -> RouterArgs {
+        let CliCommand::Start(start) = Args::parse_from(argv).command else {
+            panic!("expected the start command");
+        };
+        start
+    }
+
+    #[test]
+    fn should_load_and_validate_a_valid_config_file() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let db = dir.path().join("db");
+        let config_path = dir.path().join("router.toml");
+        std::fs::write(
+            &config_path,
+            format!(
+                "[router.storage]\nmode = \"embedded\"\npath = \"{}\"\n",
+                db.display().to_string().replace('\\', "\\\\")
+            ),
+        )
+        .expect("failed to write config file");
+
+        let args = router_args(&[
+            "smista",
+            "start",
+            "--config",
+            config_path.to_str().expect("non-UTF-8 path"),
+        ]);
+
+        let (config, report) =
+            load_and_validate_configuration(&args).expect("configuration failed to load");
+
+        assert!(report.is_ok(), "unexpected findings: {:?}", report.errors());
+        assert_eq!(config.storage.path.as_deref(), Some(db.as_path()));
+    }
+
+    #[test]
+    fn should_report_validation_errors_without_failing_to_load() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let config_path = dir.path().join("router.toml");
+        // Remote storage without a URL is invalid, but loading still succeeds:
+        // validation findings are reported, not returned as a load error.
+        std::fs::write(&config_path, "[router.storage]\nmode = \"remote\"\n")
+            .expect("failed to write config file");
+
+        let args = router_args(&[
+            "smista",
+            "start",
+            "--config",
+            config_path.to_str().expect("non-UTF-8 path"),
+        ]);
+
+        let (_config, report) =
+            load_and_validate_configuration(&args).expect("configuration failed to load");
+
+        assert!(!report.is_ok());
+    }
+
+    #[test]
+    fn should_fold_command_line_opentelemetry_over_the_file() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let config_path = dir.path().join("router.toml");
+        // An empty file leaves every setting at its default; OpenTelemetry is
+        // disabled by default, so the command line must turn it on.
+        std::fs::write(&config_path, "").expect("failed to write config file");
+
+        let args = router_args(&[
+            "smista",
+            "start",
+            "--config",
+            config_path.to_str().expect("non-UTF-8 path"),
+            "--otel",
+            "--otel-endpoint",
+            "http://collector:4317",
+        ]);
+
+        let (config, _report) =
+            load_and_validate_configuration(&args).expect("configuration failed to load");
+
+        assert!(config.opentelemetry.enabled);
+        assert_eq!(config.opentelemetry.endpoint, "http://collector:4317");
+    }
 }

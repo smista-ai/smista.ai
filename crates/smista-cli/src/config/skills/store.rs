@@ -37,7 +37,7 @@ impl SkillStore {
         tracing::debug!(
             skills.count = store.skills.len(),
             skills.warnings = store.warnings.len(),
-            "skill discovery complete: discovered {{skills.count}} skills"
+            "skill discovery complete"
         );
         store
     }
@@ -45,7 +45,7 @@ impl SkillStore {
     /// Reads `path`'s immediate subdirectories as skills, skipping any name that
     /// is already known (preserving earlier-root precedence and avoiding IO).
     fn ingest(&mut self, path: &Path) {
-        tracing::trace!(skills.root = %path.display(), "ingesting skills root {{skills.root}}");
+        tracing::trace!(skills.root = %path.display(), "ingesting skills root");
         let Ok(entries) = std::fs::read_dir(path) else {
             // A missing or unreadable skills root simply contributes nothing.
             tracing::trace!(skills.root = %path.display(), "skills root is absent or unreadable");
@@ -78,7 +78,7 @@ impl SkillStore {
             tracing::warn!(
                 skill.name = %name,
                 skill.dir = %dir.display(),
-                "skill directory {{skill.name}} has no SKILL.md; ignoring"
+                "skill directory has no SKILL.md; ignoring"
             );
             self.warnings.push(SkillWarning::MissingSkillFile { dir });
             return;
@@ -90,7 +90,7 @@ impl SkillStore {
                 tracing::warn!(
                     skill.name = %name,
                     skill.dir = %dir.display(),
-                    "skill {{skill.name}} has no YAML front matter; ignoring"
+                    "skill has no YAML front matter; ignoring"
                 );
                 self.warnings.push(SkillWarning::InvalidFrontMatter {
                     dir,
@@ -107,7 +107,7 @@ impl SkillStore {
                     skill.name = %name,
                     skill.dir = %dir.display(),
                     error.message = %source,
-                    "skill {{skill.name}} has invalid front matter; ignoring"
+                    "skill has invalid front matter; ignoring"
                 );
                 self.warnings.push(SkillWarning::InvalidFrontMatter {
                     dir,
@@ -124,7 +124,7 @@ impl SkillStore {
                 skill.name = %name,
                 skill.declared = %declared,
                 skill.dir = %dir.display(),
-                "skill front matter name {{skill.declared}} differs from directory name {{skill.name}}"
+                "skill front matter name differs from directory name"
             );
             self.warnings.push(SkillWarning::NameMismatch {
                 dir: dir.clone(),
@@ -137,7 +137,7 @@ impl SkillStore {
             tracing::warn!(
                 skill.name = %name,
                 skill.dir = %dir.display(),
-                "skill {{skill.name}} is missing a description"
+                "skill is missing a description"
             );
             self.warnings
                 .push(SkillWarning::MissingDescription { dir: dir.clone() });
@@ -146,7 +146,7 @@ impl SkillStore {
         tracing::debug!(
             skill.name = %name,
             skill.dir = %dir.display(),
-            "discovered skill {{skill.name}}"
+            "discovered skill"
         );
         self.skills.insert(name, SkillEntry::new(dir, description));
     }
@@ -164,7 +164,7 @@ impl SkillStore {
     /// discovered, [`SkillError::Io`] when the descriptor cannot be read, or
     /// [`SkillError::Parse`] when its front matter is not valid YAML.
     pub fn load(&self, name: &str) -> Result<Skill, SkillError> {
-        tracing::debug!(skill.name = %name, "loading skill {{skill.name}}");
+        tracing::debug!(skill.name = %name, "loading skill");
         let entry = self.skills.get(name).ok_or_else(|| SkillError::NotFound {
             name: name.to_string(),
         })?;

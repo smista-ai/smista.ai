@@ -32,7 +32,7 @@ pub fn check_limits(config: &RouterConfig, report: &mut ValidationReport) {
         if value == 0 {
             tracing::warn!(
                 limits.field = %field,
-                "timeout {{limits.field}} is zero"
+                "timeout is zero"
             );
             report.push(ValidationError {
                 code: ValidationCode::InvalidTimeout,
@@ -44,7 +44,7 @@ pub fn check_limits(config: &RouterConfig, report: &mut ValidationReport) {
             tracing::warn!(
                 limits.field = %field,
                 limits.value = value,
-                "timeout {{limits.field}} of {{limits.value}}ms is absurdly large"
+                "timeout is absurdly large"
             );
             report.push(ValidationError {
                 code: ValidationCode::ExcessiveTimeout,
@@ -71,7 +71,7 @@ pub fn check_limits(config: &RouterConfig, report: &mut ValidationReport) {
         if value == 0 {
             tracing::warn!(
                 limits.field = %field,
-                "size limit {{limits.field}} is zero"
+                "size limit is zero"
             );
             report.push(ValidationError {
                 code: ValidationCode::InvalidLimit,

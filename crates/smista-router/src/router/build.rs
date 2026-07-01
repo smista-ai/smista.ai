@@ -72,7 +72,7 @@ impl Router {
         tracing::info!(
             local_count = router.local.len(),
             remote_count = router.remote.len(),
-            "router initialized with {{local_count}} local and {{remote_count}} remote providers"
+            "router initialized"
         );
         Ok(router)
     }
@@ -170,7 +170,7 @@ impl Router {
             provider.id = %provider_id,
             provider.local = is_local,
             provider.base_url = %base_url,
-            "adding OpenAI-compatible provider {{provider.id}} at {{provider.base_url}}"
+            "adding OpenAI-compatible provider"
         );
         let provider = OpenAICompatProvider::new(
             provider_id.clone(),

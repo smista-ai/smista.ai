@@ -27,7 +27,7 @@ pub fn check_globs(config: &Config, report: &mut ValidationReport) {
             .sum::<usize>();
     tracing::trace!(
         globs.pattern_count = pattern_count,
-        "checking {{globs.pattern_count}} glob patterns"
+        "checking glob patterns"
     );
     for (field, patterns) in lists {
         for (index, pattern) in patterns.iter().enumerate() {
@@ -37,7 +37,7 @@ pub fn check_globs(config: &Config, report: &mut ValidationReport) {
                     globs.pattern = %pattern,
                     globs.location = %location,
                     error.message = %err,
-                    "invalid glob pattern at {{globs.location}}"
+                    "invalid glob pattern"
                 );
                 report.push(ValidationError {
                     code: ValidationCode::InvalidGlob,
@@ -56,7 +56,7 @@ pub fn check_globs(config: &Config, report: &mut ValidationReport) {
                     globs.pattern = %pattern,
                     globs.location = %location,
                     error.message = %err,
-                    "invalid glob pattern at {{globs.location}}"
+                    "invalid glob pattern"
                 );
                 report.push(ValidationError {
                     code: ValidationCode::InvalidGlob,

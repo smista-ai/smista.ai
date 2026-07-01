@@ -252,6 +252,8 @@ pub enum StorageMode {
     /// Embedded, on-disk database.
     #[default]
     Embedded,
+    /// Memory-only database.
+    Memory,
     /// Remote database server.
     Remote,
 }
@@ -269,6 +271,10 @@ pub struct StorageConfig {
     /// Deployment mode.
     pub mode: StorageMode,
     /// Database file path (embedded mode).
+    ///
+    /// Defaults to the embedded database directory under the global config dir
+    /// (see [`db_path`](crate::config::paths::db_path)). `None` only when that
+    /// directory cannot be resolved.
     pub path: Option<PathBuf>,
     /// Database URL (remote mode).
     pub url: Option<Url>,
@@ -287,8 +293,8 @@ impl Default for StorageConfig {
     fn default() -> Self {
         Self {
             engine: StorageEngine::default(),
-            mode: StorageMode::default(),
-            path: None,
+            mode: StorageMode::Embedded,
+            path: crate::config::paths::db_path(),
             url: None,
             username: None,
             password: None,
@@ -710,6 +716,14 @@ mod tests {
         let toml = toml::to_string(&config).unwrap();
         assert!(!toml.contains("password"));
         assert!(!toml.contains("s3cret"));
+    }
+
+    #[test]
+    fn should_default_storage_path_to_global_db_path() {
+        assert_eq!(
+            StorageConfig::default().path,
+            crate::config::paths::db_path()
+        );
     }
 
     #[test]

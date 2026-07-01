@@ -46,7 +46,7 @@ impl SurrealBackend {
     /// data directory cannot be created.
     pub(super) async fn prepare(&self) -> crate::StorageResult<()> {
         if let Self::Embedded { db_dir } = self {
-            tracing::debug!(db.path = %db_dir.display(), "creating embedded SurrealDB directory {{db.path}}");
+            tracing::debug!(db.path = %db_dir.display(), "creating embedded SurrealDB directory");
             tokio::fs::create_dir_all(db_dir).await?;
         }
         Ok(())

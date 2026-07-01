@@ -7,7 +7,7 @@ use crate::config::model::{RouterConfig, StorageMode};
 pub fn check_storage(config: &RouterConfig, report: &mut ValidationReport) {
     tracing::trace!(
         storage.mode = ?config.storage.mode,
-        "checking router storage in {{storage.mode}} mode"
+        "checking router storage"
     );
     match config.storage.mode {
         StorageMode::Embedded if config.storage.path.is_none() => {

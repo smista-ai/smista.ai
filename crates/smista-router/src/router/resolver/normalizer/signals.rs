@@ -79,7 +79,7 @@ pub(super) fn paths_match(globs: &[String], paths: &[PathBuf]) -> bool {
         let Ok(glob) = Glob::new(pattern) else {
             tracing::warn!(
                 glob.pattern = %pattern,
-                "invalid routing glob {{glob.pattern}}; treating as no match"
+                "invalid routing glob; treating as no match"
             );
             return false;
         };

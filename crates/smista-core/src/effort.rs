@@ -89,7 +89,7 @@ impl FromStr for Effort {
             "high" => Ok(Self::High),
             "xhigh" => Ok(Self::Xhigh),
             other => {
-                tracing::warn!(effort.value = %other, "unknown reasoning effort {{effort.value}}");
+                tracing::warn!(effort.value = %other, "unknown reasoning effort");
                 Err(ParseError::UnknownEffort(other.to_string()).into())
             }
         }

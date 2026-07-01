@@ -139,7 +139,7 @@ impl ModelDescriptor {
         tracing::debug!(
             model.provider = %self.provider,
             model.name = %self.model,
-            "checking whether {{model.provider}}/{{model.name}} can handle requirements"
+            "checking whether model can handle requirements"
         );
         if let Some(missing) = requirements
             .required()
@@ -149,7 +149,7 @@ impl ModelDescriptor {
                 model.provider = %self.provider,
                 model.name = %self.model,
                 capability.missing = %missing,
-                "{{model.provider}}/{{model.name}} lacks required capability {{capability.missing}}"
+                "model lacks required capability"
             );
             return Err(CapabilityError::MissingCapability(missing));
         }
@@ -162,7 +162,7 @@ impl ModelDescriptor {
                 model.name = %self.model,
                 model.estimated_tokens = estimated_tokens,
                 model.max_context_tokens = self.max_context_tokens,
-                "{{model.estimated_tokens}} tokens exceed context window of {{model.max_context_tokens}}"
+                "estimated tokens exceed context window"
             );
             return Err(CapabilityError::ContextWindowExceeded {
                 estimated_tokens,
