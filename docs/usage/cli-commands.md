@@ -4,6 +4,7 @@
   - [From your shell](#from-your-shell)
     - [Running the router](#running-the-router)
     - [Global flags](#global-flags)
+    - [Credential storage](#credential-storage)
     - [Version and help](#version-and-help)
   - [Interactive slash commands](#interactive-slash-commands)
     - [Session](#session)
@@ -66,6 +67,18 @@ and each has an environment-variable equivalent.
 
 ```sh
 smista --log-filter debug start --foreground
+```
+
+### Credential storage
+
+The main interactive `smista` command stores API keys and provider credentials
+in the operating-system keyring when it is available. If the keyring cannot be
+used, the CLI falls back to file-backed storage.
+
+Pass `--enforce-keyring` to make startup fail instead of falling back:
+
+```sh
+smista --enforce-keyring
 ```
 
 ### Version and help

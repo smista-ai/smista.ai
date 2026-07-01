@@ -19,6 +19,7 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 globset = { workspace = true }
+keyring-core = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true, features = ["grpc-tonic", "http-proto", "reqwest-client"] }
 opentelemetry_sdk = { workspace = true }
@@ -35,6 +36,15 @@ tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
 yaml_serde = { workspace = true }
+
+[target."cfg(target_os = \"linux\")".dependencies]
+zbus-secret-service-keyring-store = { workspace = true, features = ["crypto-rust"] }
+
+[target."cfg(target_os = \"macos\")".dependencies]
+apple-native-keyring-store = { workspace = true, features = ["keychain"] }
+
+[target."cfg(target_family = \"windows\")".dependencies]
+windows-native-keyring-store = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

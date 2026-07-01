@@ -22,8 +22,9 @@ Routing, policy evaluation, context selection, and tool mediation belong to
 - Update docs for any user-facing behavior change, including config, CLI
   commands, APIs, providers, and workflows.
 - Add or update focused tests when behavior changes.
-- Use `just` recipes for builds, checks, tests, docs, and publishing. If a
-  task has no recipe, add one instead of running an ad hoc command.
+- Use `just` recipes for builds, checks, tests, docs, and publishing. Do not
+  invoke the underlying `cargo` or `npm` commands directly when a recipe exists.
+  If a task has no recipe, add one instead of running an ad hoc command.
 - Never log, print, trace, persist, or expose API keys, provider credentials,
   or auth tokens. Use `secrecy` for sensitive values and redact before
   persistence.
@@ -112,18 +113,22 @@ Tasks are driven by [`just`](https://just.systems). Run `just` to list recipes.
 
 ```sh
 # Build
-just build_all
-just build_crates
+just build_all          # crates + SDK
+just build_crates       # cargo build --workspace
 
-# Checks
-just check_code
-just test_all
+# Format (dprint: Markdown, TOML, YAML, Rust via nightly rustfmt)
+just fmt                # format every supported file in place
+just fmt_check          # check formatting without writing
 
-# SDK
-just sdk_check
-just sdk_test
+# Checks (what CI runs)
+just check_code         # dprint check, clippy -D warnings, SDK lint + typecheck
+just test_all           # cargo test --workspace + SDK vitest
 
-# Publish
+# SDK (all npm scripts are exposed as `sdk_*` recipes)
+just sdk_check          # biome ci
+just sdk_test           # vitest
+
+# Publish (crates in dependency order with retry, then SDK)
 just publish_all
 
 # Docs

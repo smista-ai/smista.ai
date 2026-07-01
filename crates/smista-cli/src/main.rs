@@ -15,6 +15,7 @@
 mod args;
 mod command;
 mod config;
+mod credentials;
 mod log;
 mod signal;
 mod telemetry;
