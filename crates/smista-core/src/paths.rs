@@ -6,7 +6,10 @@
 //! filesystem IO; they only compute locations.
 //!
 //! The global configuration directory differs by platform, matching the
-//! specification: `~/.config/smista` on POSIX and `~/.smista` on Windows.
+//! specification: `~/.config/smista` on Linux and macOS, and `~/.smista` on
+//! Windows. macOS is forced to `~/.config` on purpose: `dirs::config_dir()`
+//! there resolves to `~/Library/Application Support`, which is not what the
+//! specification wants.
 
 use std::path::{Path, PathBuf};
 
@@ -16,11 +19,16 @@ const SMISTA_DIR: &str = ".smista";
 const APP_DIR: &str = "smista";
 /// Cross-tool agents directory under the home directory.
 const AGENTS_DIR: &str = ".agents";
+/// POSIX-style config directory name, joined under the home directory on macOS.
+const MACOS_CONFIG_DIR: &str = ".config";
 
 /// Returns the global configuration directory, or `None` if the home or
 /// platform config directory cannot be determined.
 ///
-/// - POSIX: `~/.config/smista` (the platform config directory plus `smista`).
+/// - Linux/BSD: `$XDG_CONFIG_HOME/smista`, or `~/.config/smista` when unset.
+/// - macOS: `~/.config/smista`. The platform default from `dirs::config_dir()`
+///   is `~/Library/Application Support`, so it is overridden to follow the
+///   POSIX convention.
 /// - Windows: `~/.smista` (the home directory plus `.smista`).
 ///
 /// # Examples
@@ -35,6 +43,10 @@ const AGENTS_DIR: &str = ".agents";
 pub fn global_config_dir() -> Option<PathBuf> {
     if cfg!(windows) {
         dirs::home_dir().map(|home| home.join(SMISTA_DIR))
+    } else if cfg!(target_os = "macos") {
+        // `dirs::config_dir()` on macOS is `~/Library/Application Support`;
+        // anchor at `~/.config/smista` instead to match the POSIX convention.
+        dirs::home_dir().map(|home| home.join(MACOS_CONFIG_DIR).join(APP_DIR))
     } else {
         dirs::config_dir().map(|config| config.join(APP_DIR))
     }
@@ -188,9 +200,25 @@ mod tests {
         if let Some(dir) = global_config_dir() {
             if cfg!(windows) {
                 assert!(dir.ends_with(".smista"));
+            } else if cfg!(target_os = "macos") {
+                assert!(dir.ends_with(".config/smista"));
             } else {
                 assert!(dir.ends_with("smista"));
             }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn should_anchor_macos_global_dir_under_dot_config() {
+        // macOS must follow the POSIX convention (`~/.config/smista`) rather
+        // than the platform default of `~/Library/Application Support`.
+        if let Some(dir) = global_config_dir() {
+            assert!(dir.ends_with("smista"));
+            assert!(
+                dir.parent()
+                    .is_some_and(|parent| parent.ends_with(".config"))
+            );
         }
     }
 
