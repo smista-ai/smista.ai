@@ -5,6 +5,7 @@
     - [Running the router](#running-the-router)
     - [Global flags](#global-flags)
     - [Credential storage](#credential-storage)
+    - [Managing credentials](#managing-credentials)
     - [Version and help](#version-and-help)
   - [Interactive slash commands](#interactive-slash-commands)
     - [Session](#session)
@@ -19,15 +20,16 @@ interactive session where commands are typed as slash commands.
 
 ## From your shell
 
-| Command            | What it does                                                  |
-| ------------------ | ------------------------------------------------------------- |
-| `smista`           | Start an interactive session.                                 |
-| `smista <prompt>`  | Start a session, run the prompt, show the result.             |
-| `smista init`      | Scaffold `.smista/` and `.smista/config.toml` in the project. |
-| `smista start`     | Start the local router. Daemonizes by default.                |
-| `smista stop`      | Stop the local router recorded in the pidfile.                |
-| `smista --version` | Print the CLI version.                                        |
-| `smista --help`    | Show help.                                                    |
+| Command                  | What it does                                                  |
+| ------------------------ | ------------------------------------------------------------- |
+| `smista`                 | Start an interactive session.                                 |
+| `smista <prompt>`        | Start a session, run the prompt, show the result.             |
+| `smista init`            | Scaffold `.smista/` and `.smista/config.toml` in the project. |
+| `smista credentials ...` | Add, check, or remove provider API keys.                      |
+| `smista start`           | Start the local router. Daemonizes by default.                |
+| `smista stop`            | Stop the local router recorded in the pidfile.                |
+| `smista --version`       | Print the CLI version.                                        |
+| `smista --help`          | Show help.                                                    |
 
 A one-shot prompt is just a shortcut: it starts a session, sends the prompt
 through the active routing policy, displays the response, and persists the
@@ -79,6 +81,49 @@ Pass `--enforce-keyring` to make startup fail instead of falling back:
 
 ```sh
 smista --enforce-keyring
+```
+
+### Managing credentials
+
+Use `smista credentials` to store, check, and remove provider API keys without
+putting the secret value in `config.toml`.
+
+```sh
+smista credentials add openai sk-...
+smista credentials check openai
+smista credentials remove openai
+```
+
+Credentials are stored in the project-local scope by default. Add `--global`
+before the credentials subcommand to store or remove the global credential
+instead:
+
+```sh
+smista credentials --global add anthropic sk-ant-...
+smista credentials --global remove anthropic
+```
+
+| Command                                       | Aliases        | What it does                                   |
+| --------------------------------------------- | -------------- | ---------------------------------------------- |
+| `smista credentials add <provider> <api-key>` | `set`          | Store or replace a provider API key.           |
+| `smista credentials check <provider>`         | `get`          | Print whether a provider API key is available. |
+| `smista credentials remove <provider>`        | `delete`, `rm` | Remove a provider API key from the scope.      |
+
+The `<provider>` value must be one of:
+
+| Provider form                   | Use it for                                     |
+| ------------------------------- | ---------------------------------------------- |
+| `anthropic`                     | Anthropic Claude models.                       |
+| `gemini`                        | Google Gemini models.                          |
+| `openai`                        | OpenAI GPT models.                             |
+| `ollama`                        | Ollama models.                                 |
+| `openai-compat:<provider_name>` | A named OpenAI-compatible provider or gateway. |
+
+For OpenAI-compatible providers, replace `<provider_name>` with the configured
+instance name, for example:
+
+```sh
+smista credentials add openai-compat:my-vllm sk-...
 ```
 
 ### Version and help

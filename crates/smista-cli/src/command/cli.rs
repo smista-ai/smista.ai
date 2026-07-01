@@ -2,12 +2,35 @@
 //!
 //! It start the TUI and the smista-router client; it is basically the main user interface for smista.ai
 
-use crate::credentials::CredentialStorage;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use crate::credentials::{CredentialsStorage, ProvidersCredentials};
+
+#[expect(dead_code, reason = "context will be used in the next tasks")]
+pub struct Context {
+    cwd: PathBuf,
+    providers_credentials: Arc<ProvidersCredentials>,
+}
 
 /// Runs smista.ai TUI and smista-router client; base subcommand.
 pub fn run(enforce_keyring: bool) -> anyhow::Result<()> {
-    tracing::debug!("running smista-cli main command");
-    let _credentials = CredentialStorage::new(enforce_keyring)?;
+    let cwd = std::env::current_dir()?;
+    tracing::debug!(
+        "running smista-cli main command; cwd is {cwd}",
+        cwd = cwd.display()
+    );
+    let credentials = Arc::new(CredentialsStorage::new(enforce_keyring)?);
+    tracing::debug!(
+        "credentials storage initialized with backend {backend}",
+        backend = credentials.backend()
+    );
+
+    // build context
+    let _context = Context {
+        providers_credentials: Arc::new(ProvidersCredentials::new(credentials, &cwd)),
+        cwd,
+    };
 
     // TODO: in the future Context will have to hold the E2EE keys storage, the provider credentials storage, and the apikey storage instead
     // TODO: context must also hold the CancellationToken

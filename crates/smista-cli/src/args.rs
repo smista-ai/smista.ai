@@ -1,7 +1,9 @@
-use std::path::PathBuf;
-
+mod credentials;
 mod router;
 
+use std::path::PathBuf;
+
+pub use self::credentials::{CredentialsArgs, CredentialsCommand};
 pub use self::router::{RouterArgs, StopArgs};
 
 /// Top-level `smista` command-line arguments.
@@ -53,6 +55,8 @@ impl Args {
 /// The action a `smista` invocation performs.
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
+    /// Manage credentials for interacting with the LLMs.
+    Credentials(CredentialsArgs),
     /// Start a local router. Daemonizes by default; pass `--foreground` to run
     /// it in the current process.
     Start(RouterArgs),
@@ -221,5 +225,112 @@ mod tests {
 
         assert!(args.command.is_none());
         assert!(args.enforce_keyring);
+    }
+
+    #[test]
+    fn should_parse_credentials_add_command() {
+        let args = Args::parse_from(["smista", "credentials", "add", "openai", "sk-test"]);
+
+        let Some(Command::Credentials(credentials)) = args.command else {
+            panic!("expected the credentials command");
+        };
+        assert!(!credentials.global);
+        assert!(matches!(
+            credentials.command,
+            CredentialsCommand::Add {
+                provider: smista_sdk::core::model::Provider::OpenAI,
+                api_key
+            } if api_key == "sk-test"
+        ));
+    }
+
+    #[test]
+    fn should_parse_credentials_global_flag() {
+        let args = Args::parse_from([
+            "smista",
+            "credentials",
+            "--global",
+            "add",
+            "anthropic",
+            "sk-ant-test",
+        ]);
+
+        let Some(Command::Credentials(credentials)) = args.command else {
+            panic!("expected the credentials command");
+        };
+        assert!(credentials.global);
+        assert!(matches!(
+            credentials.command,
+            CredentialsCommand::Add {
+                provider: smista_sdk::core::model::Provider::Anthropic,
+                api_key
+            } if api_key == "sk-ant-test"
+        ));
+    }
+
+    #[test]
+    fn should_parse_credentials_command_aliases() {
+        let set = Args::parse_from(["smista", "credentials", "set", "gemini", "gm-test"]);
+        let get = Args::parse_from(["smista", "credentials", "get", "gemini"]);
+        let delete = Args::parse_from(["smista", "credentials", "delete", "gemini"]);
+        let rm = Args::parse_from(["smista", "credentials", "rm", "gemini"]);
+
+        assert!(matches!(
+            set.command,
+            Some(Command::Credentials(CredentialsArgs {
+                command: CredentialsCommand::Add {
+                    provider: smista_sdk::core::model::Provider::Gemini,
+                    ..
+                },
+                ..
+            }))
+        ));
+        assert!(matches!(
+            get.command,
+            Some(Command::Credentials(CredentialsArgs {
+                command: CredentialsCommand::Check {
+                    provider: smista_sdk::core::model::Provider::Gemini
+                },
+                ..
+            }))
+        ));
+        assert!(matches!(
+            delete.command,
+            Some(Command::Credentials(CredentialsArgs {
+                command: CredentialsCommand::Remove {
+                    provider: smista_sdk::core::model::Provider::Gemini
+                },
+                ..
+            }))
+        ));
+        assert!(matches!(
+            rm.command,
+            Some(Command::Credentials(CredentialsArgs {
+                command: CredentialsCommand::Remove {
+                    provider: smista_sdk::core::model::Provider::Gemini
+                },
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn should_parse_openai_compatible_credentials_provider() {
+        let args = Args::parse_from(["smista", "credentials", "check", "openai-compat:my-vllm"]);
+
+        let Some(Command::Credentials(credentials)) = args.command else {
+            panic!("expected the credentials command");
+        };
+        assert!(matches!(
+            credentials.command,
+            CredentialsCommand::Check {
+                provider: smista_sdk::core::model::Provider::OpenAICompatible(name)
+            } if name == "my-vllm"
+        ));
+    }
+
+    #[test]
+    fn should_reject_unknown_credentials_provider() {
+        assert!(Args::try_parse_from(["smista", "credentials", "check", "cohere"]).is_err());
     }
 }

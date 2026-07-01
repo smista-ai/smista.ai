@@ -1,0 +1,42 @@
+//! `smista credentials` arguments.
+
+use smista_sdk::core::model::Provider;
+
+/// Arguments for `smista credentials`.
+///
+/// The command stores, checks or removes one provider credential in either the
+/// project-local credential scope or the global scope selected by `--global`.
+#[derive(Debug, clap::Args)]
+pub struct CredentialsArgs {
+    /// Credential operation to perform.
+    #[clap(subcommand)]
+    pub command: CredentialsCommand,
+    /// Whether to store the credentials in the global configuration file (default: false).
+    #[clap(short = 'g', long = "global")]
+    pub global: bool,
+}
+
+/// The action a `smista credentials` invocation performs.
+#[derive(Debug, clap::Subcommand)]
+pub enum CredentialsCommand {
+    /// Add or replace credentials for a provider.
+    #[clap(name = "add", alias = "set")]
+    Add {
+        /// Provider to add credentials for.
+        provider: Provider,
+        /// API key to store for the provider.
+        api_key: String,
+    },
+    /// Check whether credentials for a provider are present.
+    #[clap(name = "check", alias = "get")]
+    Check {
+        /// Provider to check credentials for.
+        provider: Provider,
+    },
+    /// Remove credentials for a provider.
+    #[clap(name = "remove", alias = "delete", alias = "rm")]
+    Remove {
+        /// Provider to remove credentials for.
+        provider: Provider,
+    },
+}
