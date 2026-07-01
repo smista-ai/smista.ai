@@ -22,6 +22,14 @@ pub enum StorageError {
 /// In case extension is needed, we have to change the [`Database`](smista_storage::database::Database) trait to use `async_trait` to allow v-table.
 pub async fn build_storage(config: &StorageConfig) -> Result<SurrealDatabase, StorageError> {
     let options = match config.mode {
+        StorageMode::Memory => {
+            tracing::debug!("Using in-memory SurrealDB storage");
+            SurrealOptions {
+                namespace: config.namespace.clone(),
+                db: config.database.clone(),
+                backend: SurrealBackend::Memory,
+            }
+        }
         StorageMode::Embedded => {
             let path = config
                 .path

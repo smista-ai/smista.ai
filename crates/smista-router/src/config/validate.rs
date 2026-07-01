@@ -52,6 +52,16 @@ mod tests {
     use crate::config::parse;
 
     #[test]
+    fn should_validate_default_config_clean() {
+        let report = validate(&RouterConfig::default());
+        assert!(
+            report.is_ok(),
+            "default router config must validate clean: {:?}",
+            report.errors()
+        );
+    }
+
+    #[test]
     fn should_collect_multiple_errors_in_one_pass() {
         let config = parse(
             "[router]\nport = 0\n\n[router.storage]\nmode = \"remote\"\n",
