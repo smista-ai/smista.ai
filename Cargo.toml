@@ -33,6 +33,7 @@ description = "Local-first agent and CLI that deterministically routes each phas
 
 [workspace.dependencies]
 anyhow = "1"
+apple-native-keyring-store = { version = "1", default-features = false }
 argon2 = { version = "0.5", default-features = false }
 async-trait = "0.1"
 axum = { version = "0.8", default-features = false }
@@ -43,6 +44,7 @@ futures = "0.3"
 globset = "0.4"
 http = "1"
 isahc = { version = "2", default-features = false }
+keyring-core = { version = "1", default-features = false }
 opentelemetry = "0.32"
 opentelemetry-otlp = "0.32"
 opentelemetry_sdk = "0.32"
@@ -82,8 +84,10 @@ ureq = { version = "3", default-features = false }
 url = "2"
 utoipa = "5"
 uuid = "1"
+windows-native-keyring-store = { version = "1", default-features = false }
 wiremock = "0.6"
 yaml_serde = "0.10"
+zbus-secret-service-keyring-store = { version = "1", default-features = false }
 
 [profile.release]
 lto = true

@@ -13,7 +13,13 @@ pub use self::router::{RouterArgs, StopArgs};
 pub struct Args {
     /// The subcommand to run.
     #[clap(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
+    /// Require the operating-system keyring for credential storage.
+    ///
+    /// By default, the CLI falls back to file-backed storage when the keyring is
+    /// unavailable.
+    #[clap(long = "enforce-keyring")]
+    pub enforce_keyring: bool,
     /// Set log file path. If not set, logs will be printed to stdout. Can also be set via the `SMISTA_ROUTER_LOG_FILE` environment variable.
     #[clap(
         short = 'L',
@@ -40,7 +46,7 @@ impl Args {
     /// to initialize rather than being set up up front.
     #[must_use]
     pub fn is_foreground_start(&self) -> bool {
-        matches!(&self.command, Command::Start(args) if args.foreground)
+        matches!(&self.command, Some(Command::Start(args)) if args.foreground)
     }
 }
 
@@ -64,7 +70,7 @@ mod tests {
     use super::*;
 
     fn start_args(argv: &[&str]) -> RouterArgs {
-        let Command::Start(start) = Args::parse_from(argv).command else {
+        let Some(Command::Start(start)) = Args::parse_from(argv).command else {
             panic!("expected the start command");
         };
         start
@@ -137,7 +143,8 @@ mod tests {
 
         assert!(args.log_file.is_none());
         assert_eq!(args.log_filter, "off");
-        let Command::Start(start) = args.command else {
+        assert!(!args.enforce_keyring);
+        let Some(Command::Start(start)) = args.command else {
             panic!("expected the start command");
         };
         assert!(start.config.is_none());
@@ -161,7 +168,7 @@ mod tests {
             Some(Path::new("/var/log/smista.log"))
         );
         assert_eq!(args.log_filter, "debug");
-        assert!(matches!(args.command, Command::Start(_)));
+        assert!(matches!(args.command, Some(Command::Start(_))));
     }
 
     #[test]
@@ -176,7 +183,7 @@ mod tests {
             "--foreground",
         ]);
 
-        let Command::Start(start) = args.command else {
+        let Some(Command::Start(start)) = args.command else {
             panic!("expected the start command");
         };
         assert_eq!(
@@ -199,7 +206,7 @@ mod tests {
             "/run/user/1000/smista/router.pid",
         ]);
 
-        let Command::Stop(stop) = args.command else {
+        let Some(Command::Stop(stop)) = args.command else {
             panic!("expected the stop command");
         };
         assert_eq!(
@@ -209,7 +216,10 @@ mod tests {
     }
 
     #[test]
-    fn should_require_a_subcommand() {
-        assert!(Args::try_parse_from(["smista"]).is_err());
+    fn should_parse_main_command_flags_without_a_subcommand() {
+        let args = Args::parse_from(["smista", "--enforce-keyring"]);
+
+        assert!(args.command.is_none());
+        assert!(args.enforce_keyring);
     }
 }

@@ -19,13 +19,14 @@ const SMISTA_DIR: &str = ".smista";
 const APP_DIR: &str = "smista";
 /// Cross-tool agents directory under the home directory.
 const AGENTS_DIR: &str = ".agents";
-/// POSIX-style config directory name, joined under the home directory on macOS.
-const MACOS_CONFIG_DIR: &str = ".config";
+/// POSIX-style config directory name, joined under the home directory on macOS
+/// and Linux.
+const POSIX_CONFIG_DIR: &str = ".config";
 
 /// Returns the global configuration directory, or `None` if the home or
 /// platform config directory cannot be determined.
 ///
-/// - Linux/BSD: `$XDG_CONFIG_HOME/smista`, or `~/.config/smista` when unset.
+/// - Linux/BSD: `~/.config/smista`.
 /// - macOS: `~/.config/smista`. The platform default from `dirs::config_dir()`
 ///   is `~/Library/Application Support`, so it is overridden to follow the
 ///   POSIX convention.
@@ -43,12 +44,8 @@ const MACOS_CONFIG_DIR: &str = ".config";
 pub fn global_config_dir() -> Option<PathBuf> {
     if cfg!(windows) {
         dirs::home_dir().map(|home| home.join(SMISTA_DIR))
-    } else if cfg!(target_os = "macos") {
-        // `dirs::config_dir()` on macOS is `~/Library/Application Support`;
-        // anchor at `~/.config/smista` instead to match the POSIX convention.
-        dirs::home_dir().map(|home| home.join(MACOS_CONFIG_DIR).join(APP_DIR))
     } else {
-        dirs::config_dir().map(|config| config.join(APP_DIR))
+        dirs::home_dir().map(|home| home.join(POSIX_CONFIG_DIR).join(APP_DIR))
     }
 }
 
@@ -78,26 +75,6 @@ pub fn runtime_dir() -> PathBuf {
     dirs::runtime_dir()
         .unwrap_or_else(std::env::temp_dir)
         .join(APP_DIR)
-}
-
-/// Returns the home `.smista` directory: `~/.smista`, or `None` if the home
-/// directory cannot be determined.
-///
-/// Unlike [`global_config_dir`], this is the home `.smista` directory on every
-/// platform. The specification anchors the global secrets file (`~/.smista/secrets`)
-/// here rather than under the POSIX config directory.
-///
-/// # Examples
-///
-/// ```
-/// use smista_core::paths::home_smista_dir;
-///
-/// // Present on any platform with a resolvable home directory.
-/// let _ = home_smista_dir();
-/// ```
-#[must_use]
-pub fn home_smista_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(SMISTA_DIR))
 }
 
 /// Returns the home `.agents` directory: `~/.agents`, or `None` if the home
@@ -174,13 +151,6 @@ mod tests {
     }
 
     #[test]
-    fn should_place_home_smista_dir_under_home() {
-        if let Some(dir) = home_smista_dir() {
-            assert!(dir.ends_with(".smista"));
-        }
-    }
-
-    #[test]
     fn should_place_home_agents_dir_under_home() {
         if let Some(dir) = home_agents_dir() {
             assert!(dir.ends_with(".agents"));
@@ -195,30 +165,32 @@ mod tests {
 
     #[test]
     fn should_place_global_dir_under_a_known_root() {
-        // The exact root depends on the host, but when resolvable the directory
-        // must end with the platform-appropriate suffix.
         if let Some(dir) = global_config_dir() {
             if cfg!(windows) {
                 assert!(dir.ends_with(".smista"));
-            } else if cfg!(target_os = "macos") {
-                assert!(dir.ends_with(".config/smista"));
             } else {
-                assert!(dir.ends_with("smista"));
+                assert!(dir.ends_with(".config/smista"));
             }
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(not(windows))]
     #[test]
-    fn should_anchor_macos_global_dir_under_dot_config() {
-        // macOS must follow the POSIX convention (`~/.config/smista`) rather
-        // than the platform default of `~/Library/Application Support`.
+    fn should_anchor_global_dir_under_dot_config() {
         if let Some(dir) = global_config_dir() {
             assert!(dir.ends_with("smista"));
             assert!(
                 dir.parent()
                     .is_some_and(|parent| parent.ends_with(".config"))
             );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn should_anchor_windows_global_dir_under_dot_smista() {
+        if let Some(dir) = global_config_dir() {
+            assert!(dir.ends_with(".smista"));
         }
     }
 

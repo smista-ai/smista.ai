@@ -6,8 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use smista_sdk::core::paths::{
-    global_config_dir, home_agents_dir, home_smista_dir, project_agents_dir, project_dir,
-    runtime_dir,
+    global_config_dir, home_agents_dir, project_agents_dir, project_dir, runtime_dir,
 };
 
 /// Configuration file name within a configuration directory.
@@ -53,15 +52,14 @@ pub fn secrets_file(cwd: &Path) -> PathBuf {
     project_dir(cwd).join(SECRETS_FILE)
 }
 
-/// Returns the global secrets file path: `~/.smista/secrets`, if the home
-/// directory resolves.
+/// Returns the global secrets file path, if the global config directory
+/// resolves.
 ///
-/// Per the specification the global secrets file lives under the home `.smista`
-/// directory on every platform, independent of the platform config directory
-/// used for `config.toml`.
+/// The secrets file lives beside global CLI configuration under
+/// [`global_config_dir`].
 #[must_use]
 pub fn global_secrets_file() -> Option<PathBuf> {
-    home_smista_dir().map(|dir| dir.join(SECRETS_FILE))
+    global_config_dir().map(|dir| dir.join(SECRETS_FILE))
 }
 
 /// Returns the project skills directory: `<cwd>/.agents/skills`.
@@ -118,9 +116,10 @@ mod tests {
     }
 
     #[test]
-    fn should_build_global_secrets_under_home_smista() {
-        if let Some(path) = global_secrets_file() {
-            assert!(path.ends_with(Path::new(".smista").join("secrets")));
+    fn should_build_global_secrets_under_global_config_dir() {
+        if let (Some(config_dir), Some(secrets_file)) = (global_config_dir(), global_secrets_file())
+        {
+            assert_eq!(secrets_file, config_dir.join("secrets"));
         }
     }
 

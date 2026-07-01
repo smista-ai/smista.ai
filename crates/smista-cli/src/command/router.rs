@@ -275,7 +275,7 @@ mod tests {
 
     /// Parses `smista start ...` argv into its [`RouterArgs`].
     fn router_args(argv: &[&str]) -> RouterArgs {
-        let CliCommand::Start(start) = Args::parse_from(argv).command else {
+        let Some(CliCommand::Start(start)) = Args::parse_from(argv).command else {
             panic!("expected the start command");
         };
         start

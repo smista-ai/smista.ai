@@ -3,7 +3,8 @@
 //! Each `smista` subcommand maps to a handler. The process-management commands
 //! that start and stop a local router live under [`router`].
 
-pub mod router;
+mod cli;
+mod router;
 
 use crate::args::{Args, Command};
 
@@ -18,12 +19,14 @@ use crate::args::{Args, Command};
 pub async fn run(args: Args) -> anyhow::Result<()> {
     let Args {
         command,
+        enforce_keyring,
         log_file,
         log_filter,
         ..
     } = args;
     match command {
-        Command::Start(start) => router::start(start, log_file.as_deref(), &log_filter).await,
-        Command::Stop(stop) => router::stop(stop),
+        Some(Command::Start(start)) => router::start(start, log_file.as_deref(), &log_filter).await,
+        Some(Command::Stop(stop)) => router::stop(stop),
+        None => cli::run(enforce_keyring),
     }
 }

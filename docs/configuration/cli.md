@@ -405,16 +405,17 @@ highest to lowest precedence:
 
 1. An environment variable named `NAME` (e.g. set `OPENAI_API_KEY` in your
    shell).
-2. The `.smista/secrets` file. The project file (`.smista/secrets` in the
-   current directory) overrides the global file (`~/.smista/secrets`).
+2. The project secrets file (`.smista/secrets` in the current directory).
+3. The global secrets file (`~/.config/smista/secrets` on Linux and macOS,
+   `%USERPROFILE%\.smista\secrets` on Windows).
 
 The first source that provides the key wins. A reference that resolves nowhere
 is an error, and the message names the missing key and the field that referenced
 it — never a secret value.
 
-The `.smista/secrets` file uses a dotenv-style format: one `NAME=value` pair per
-line, without quotes. Lines starting with `#` are comments. Keep this file out
-of version control.
+Secrets files use a dotenv-style format: one `NAME=value` pair per line, without
+quotes. Lines starting with `#` are comments. Keep project secrets files out of
+version control.
 
 ```dotenv
 # .smista/secrets
@@ -477,11 +478,11 @@ no_network = false
 
 ## Where configuration lives
 
-| Layer            | Location                             | Scope                  |
-| ---------------- | ------------------------------------ | ---------------------- |
-| Global (POSIX)   | `~/.config/smista/config.toml`       | All projects           |
-| Global (Windows) | `C:\Users\$USER\.smista\config.toml` | All projects           |
-| Project          | `.smista/config.toml`                | The current repository |
+| Layer                | Location                            | Scope                  |
+| -------------------- | ----------------------------------- | ---------------------- |
+| Global (Linux/macOS) | `~/.config/smista/config.toml`      | All projects           |
+| Global (Windows)     | `%USERPROFILE%\.smista\config.toml` | All projects           |
+| Project              | `.smista/config.toml`               | The current repository |
 
 Run `smista init` to scaffold `.smista/config.toml` in a project. Project
 configuration is safe to commit when it contains no secrets, so a team shares
