@@ -9,6 +9,7 @@ pub use self::router::{RouterArgs, StopArgs};
 /// A subcommand selects the action to run; the logging flags are global, so
 /// they may appear before or after the subcommand.
 #[derive(Debug, clap::Parser)]
+#[command(version)]
 pub struct Args {
     /// The subcommand to run.
     #[clap(subcommand)]

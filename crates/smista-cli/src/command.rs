@@ -20,6 +20,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         command,
         log_file,
         log_filter,
+        ..
     } = args;
     match command {
         Command::Start(start) => router::start(start, log_file.as_deref(), &log_filter).await,
