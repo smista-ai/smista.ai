@@ -14,7 +14,7 @@ const DB_DIR: &str = "db";
 pub fn router_toml() -> Option<PathBuf> {
     match global_config_dir().map(|dir| dir.join(ROUTER_FILE)) {
         Some(path) => {
-            tracing::debug!(config.path = %path.display(), "resolved router.toml path {{config.path}}");
+            tracing::debug!(config.path = %path.display(), "resolved router.toml path");
             Some(path)
         }
         None => {
@@ -29,7 +29,7 @@ pub fn router_toml() -> Option<PathBuf> {
 pub fn db_path() -> Option<PathBuf> {
     match global_config_dir().map(|dir| dir.join(DB_DIR)) {
         Some(path) => {
-            tracing::debug!(db.path = %path.display(), "resolved embedded database path {{db.path}}");
+            tracing::debug!(db.path = %path.display(), "resolved embedded database path");
             Some(path)
         }
         None => {

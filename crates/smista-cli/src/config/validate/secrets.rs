@@ -10,7 +10,7 @@ use crate::config::Config;
 pub fn check_inline_secrets(config: &Config, report: &mut ValidationReport) {
     tracing::trace!(
         secrets.provider_count = config.providers.len(),
-        "checking {{secrets.provider_count}} providers for inline secrets"
+        "checking providers for inline secrets"
     );
     for (provider, provider_config) in &config.providers {
         let Some(api_key) = &provider_config.api_key else {
@@ -21,7 +21,7 @@ pub fn check_inline_secrets(config: &Config, report: &mut ValidationReport) {
             // echoed.
             tracing::warn!(
                 secrets.provider = %provider,
-                "provider {{secrets.provider}} has an inline literal api_key"
+                "provider has an inline literal api_key"
             );
             report.push(ValidationError {
                 code: ValidationCode::InlineSecret,

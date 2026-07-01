@@ -67,7 +67,7 @@ impl SecretRef {
             tracing::warn!("secret placeholder has an empty key name; ignoring");
             return None;
         }
-        tracing::trace!(secret.key = %inner, "parsed secret reference for key {{secret.key}}");
+        tracing::trace!(secret.key = %inner, "parsed secret reference");
         Some(Self(inner.to_string()))
     }
 

@@ -48,18 +48,18 @@ impl SurrealDatabase {
         options.backend.prepare().await?;
 
         let endpoint = options.backend.endpoint();
-        tracing::debug!(db.endpoint = %endpoint, "connecting to SurrealDB at {{db.endpoint}}");
+        tracing::debug!(db.endpoint = %endpoint, "connecting to SurrealDB");
 
         let db = surrealdb::engine::any::connect(&endpoint).await?;
         db.use_ns(&options.namespace).use_db(&options.db).await?;
         tracing::debug!(
             db.namespace = %options.namespace,
             db.name = %options.db,
-            "using namespace {{db.namespace}} and database {{db.name}}"
+            "selecting namespace and database"
         );
 
         if let Some((username, password)) = options.backend.credentials() {
-            tracing::debug!(db.username = %username, "signing in to SurrealDB as {{db.username}}");
+            tracing::debug!(db.username = %username, "signing in to SurrealDB");
             db.signin(Namespace {
                 namespace: options.namespace,
                 username: username.to_string(),

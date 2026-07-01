@@ -39,7 +39,7 @@ pub fn validate(merged: &Config, layers: &[(ConfigLayer, Config)]) -> Validation
     tracing::debug!(
         validation.error_count = report.errors().len(),
         validation.warning_count = report.warnings().len(),
-        "validation complete: {{validation.error_count}} errors, {{validation.warning_count}} warnings"
+        "validation complete"
     );
     report
 }

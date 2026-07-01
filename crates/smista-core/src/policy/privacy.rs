@@ -64,7 +64,7 @@ impl PrivacyPolicy {
                 tracing::warn!(
                     privacy.path = %path.display(),
                     error.message = %source,
-                    "invalid privacy glob; failing closed and restricting {{privacy.path}}"
+                    "invalid privacy glob; failing closed and restricting path"
                 );
                 true
             }
@@ -72,7 +72,7 @@ impl PrivacyPolicy {
         tracing::debug!(
             privacy.path = %path.display(),
             privacy.restricted = restricted,
-            "remote restriction check for {{privacy.path}}: restricted={{privacy.restricted}}"
+            "remote restriction check for path"
         );
         restricted
     }

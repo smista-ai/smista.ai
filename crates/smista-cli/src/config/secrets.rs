@@ -77,7 +77,7 @@ impl SecretResolver {
             tracing::trace!(
                 secrets.path = %global.display(),
                 secrets.key_count = values.len(),
-                "loaded {{secrets.key_count}} keys from global secrets file"
+                "loaded keys from global secrets file"
             );
             file_values.extend(values);
         }
@@ -86,13 +86,13 @@ impl SecretResolver {
         tracing::trace!(
             secrets.path = %project.display(),
             secrets.key_count = project_values.len(),
-            "loaded {{secrets.key_count}} keys from project secrets file"
+            "loaded keys from project secrets file"
         );
         file_values.extend(project_values);
         tracing::debug!(
             secrets.file_count = file_count,
             secrets.key_count = file_values.len(),
-            "secret resolver ready with {{secrets.key_count}} keys"
+            "secret resolver ready"
         );
         Ok(Self { file_values })
     }
@@ -110,18 +110,18 @@ impl SecretResolver {
     ///
     /// Returns [`SecretError::Unresolved`] if no source provides the key.
     pub fn resolve(&self, reference: &SecretRef) -> Result<SecretString, SecretError> {
-        tracing::trace!(secrets.key = %reference.key(), "resolving secret {{secrets.key}}");
+        tracing::trace!(secrets.key = %reference.key(), "resolving secret");
         if let Ok(value) = std::env::var(reference.key()) {
-            tracing::trace!(secrets.key = %reference.key(), "resolved {{secrets.key}} from environment");
+            tracing::trace!(secrets.key = %reference.key(), "resolved secret from environment");
             return Ok(SecretString::from(value));
         }
         if let Some(value) = self.file_values.get(reference.key()) {
-            tracing::trace!(secrets.key = %reference.key(), "resolved {{secrets.key}} from secrets file");
+            tracing::trace!(secrets.key = %reference.key(), "resolved secret from secrets file");
             return Ok(SecretString::from(value.clone()));
         }
         tracing::error!(
             secrets.key = %reference.key(),
-            "secret reference {{secrets.key}} could not be resolved from any source"
+            "secret reference could not be resolved from any source"
         );
         Err(SecretError::Unresolved(reference.key().to_string()))
     }
@@ -140,7 +140,7 @@ impl SecretResolver {
             Some(reference) => {
                 tracing::trace!(
                     secrets.key = %reference.key(),
-                    "config value is a secret reference to {{secrets.key}}"
+                    "config value is a secret reference"
                 );
                 self.resolve(&reference)
             }
@@ -156,13 +156,13 @@ impl SecretResolver {
 /// Reads and parses a dotenv-style secrets file, returning an empty map when the
 /// file is absent.
 fn read_dotenv(path: &Path) -> Result<HashMap<String, String>, SecretError> {
-    tracing::trace!(secrets.path = %path.display(), "reading secrets file {{secrets.path}}");
+    tracing::trace!(secrets.path = %path.display(), "reading secrets file");
     match std::fs::read_to_string(path) {
         Ok(contents) => parse_dotenv(&contents, path),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             tracing::warn!(
                 secrets.path = %path.display(),
-                "secrets file {{secrets.path}} is absent; contributing no keys"
+                "secrets file is absent; contributing no keys"
             );
             Ok(HashMap::new())
         }
@@ -170,7 +170,7 @@ fn read_dotenv(path: &Path) -> Result<HashMap<String, String>, SecretError> {
             tracing::error!(
                 secrets.path = %path.display(),
                 error.message = %source,
-                "failed to read secrets file {{secrets.path}}"
+                "failed to read secrets file"
             );
             Err(SecretError::Io {
                 path: path.display().to_string(),
@@ -189,7 +189,7 @@ fn parse_dotenv(contents: &str, path: &Path) -> Result<HashMap<String, String>, 
     tracing::trace!(
         secrets.path = %path.display(),
         secrets.line_count = contents.lines().count(),
-        "parsing secrets file {{secrets.path}} ({{secrets.line_count}} lines)"
+        "parsing secrets file"
     );
     let mut values = HashMap::new();
     for (index, raw_line) in contents.lines().enumerate() {
@@ -203,7 +203,7 @@ fn parse_dotenv(contents: &str, path: &Path) -> Result<HashMap<String, String>, 
             tracing::error!(
                 secrets.path = %path.display(),
                 secrets.line = index + 1,
-                "malformed secrets line {{secrets.line}} in {{secrets.path}}; expected NAME=value"
+                "malformed secrets line; expected NAME=value"
             );
             return Err(SecretError::Parse {
                 path: path.display().to_string(),

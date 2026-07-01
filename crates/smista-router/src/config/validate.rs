@@ -34,12 +34,12 @@ pub fn validate(config: &RouterConfig) -> ValidationReport {
     tracing::debug!(
         validation.errors = report.errors().len(),
         validation.warnings = report.warnings().len(),
-        "router config validation complete: {{validation.errors}} errors, {{validation.warnings}} warnings"
+        "router config validation complete"
     );
     if !report.is_ok() {
         tracing::warn!(
             validation.errors = report.errors().len(),
-            "router config is invalid: {{validation.errors}} errors found"
+            "router config is invalid"
         );
     }
 

@@ -36,13 +36,13 @@ pub fn parse(contents: &str, path: &str) -> Result<Config, ConfigError> {
     tracing::trace!(
         config.path = %path,
         config.bytes = contents.len(),
-        "parsing config TOML from {{config.path}}"
+        "parsing config TOML"
     );
     toml::from_str(contents).map_err(|source| {
         tracing::error!(
             config.path = %path,
             error.message = %source,
-            "failed to parse config TOML from {{config.path}}"
+            "failed to parse config TOML"
         );
         ConfigError::Parse {
             path: path.to_string(),
@@ -58,13 +58,13 @@ pub fn parse(contents: &str, path: &str) -> Result<Config, ConfigError> {
 /// Returns [`ConfigError::Io`] if the file exists but cannot be read, or
 /// [`ConfigError::Parse`] if it is invalid TOML.
 fn read_layer(path: &Path) -> Result<Config, ConfigError> {
-    tracing::trace!(config.path = %path.display(), "reading config layer from {{config.path}}");
+    tracing::trace!(config.path = %path.display(), "reading config layer");
     match std::fs::read_to_string(path) {
         Ok(contents) => parse(&contents, &path.display().to_string()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             tracing::trace!(
                 config.path = %path.display(),
-                "config layer {{config.path}} is absent; treating as empty"
+                "config layer is absent; treating as empty"
             );
             Ok(Config::default())
         }
@@ -72,7 +72,7 @@ fn read_layer(path: &Path) -> Result<Config, ConfigError> {
             tracing::error!(
                 config.path = %path.display(),
                 error.message = %source,
-                "failed to read config layer from {{config.path}}"
+                "failed to read config layer"
             );
             Err(ConfigError::Io {
                 path: path.display().to_string(),
@@ -95,7 +95,7 @@ pub fn load(cwd: &Path, runtime: Option<Config>) -> Result<Config, ConfigError> 
     tracing::debug!(
         config.cwd = %cwd.display(),
         config.has_runtime_override = runtime.is_some(),
-        "loading configuration for {{config.cwd}}"
+        "loading configuration"
     );
     let mut layers = vec![(ConfigLayer::SystemDefaults, Config::default())];
 
@@ -112,7 +112,7 @@ pub fn load(cwd: &Path, runtime: Option<Config>) -> Result<Config, ConfigError> 
     tracing::debug!(
         config.provider_count = merged.providers.len(),
         config.rule_count = merged.routing.rules.len(),
-        "configuration loaded: {{config.provider_count}} providers, {{config.rule_count}} rules"
+        "configuration loaded"
     );
     Ok(merged)
 }

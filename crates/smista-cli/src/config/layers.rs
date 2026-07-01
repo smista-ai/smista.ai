@@ -74,10 +74,7 @@ impl ConfigLayer {
 /// for doctests to run against.)
 #[must_use]
 pub fn merge(mut layers: Vec<(ConfigLayer, Config)>) -> Config {
-    tracing::trace!(
-        merge.layer_count = layers.len(),
-        "merging {{merge.layer_count}} config layers"
-    );
+    tracing::trace!(merge.layer_count = layers.len(), "merging config layers");
     layers.sort_by_key(|(layer, _)| *layer);
     let mut acc = Config::default();
     for (layer, config) in layers {
@@ -155,7 +152,7 @@ fn merge_tools(low: ToolsConfig, high: ToolsConfig, high_is_preference: bool) ->
     tracing::trace!(
         merge.tool_count = high.permissions.len(),
         merge.high_is_preference = high_is_preference,
-        "merging {{merge.tool_count}} tool permission overrides"
+        "merging tool permission overrides"
     );
     let mut merged = low;
     for (tool, mode) in high.permissions {
@@ -169,7 +166,7 @@ fn merge_tools(low: ToolsConfig, high: ToolsConfig, high_is_preference: bool) ->
                         merge.tool = %tool,
                         merge.kept_mode = ?stricter,
                         merge.attempted_mode = ?mode,
-                        "preference layer attempted to weaken tool {{merge.tool}}; keeping stricter mode"
+                        "preference layer attempted to weaken tool permission; keeping stricter mode"
                     );
                 }
                 merged.permissions.insert(tool, stricter);
@@ -216,7 +213,7 @@ fn merge_privacy(
             merge.field = "privacy.remote.mode",
             merge.kept_mode = ?merged.remote.mode,
             merge.attempted_mode = ?high_mode,
-            "preference layer attempted to weaken {{merge.field}}; keeping stricter mode"
+            "preference layer attempted to weaken field; keeping stricter mode"
         );
     }
 
@@ -237,7 +234,7 @@ fn merge_privacy(
             merge.field = "privacy.local.mode",
             merge.kept_mode = ?merged.local.mode,
             merge.attempted_mode = ?high_mode,
-            "preference layer attempted to weaken {{merge.field}}; keeping stricter mode"
+            "preference layer attempted to weaken field; keeping stricter mode"
         );
     }
     merged

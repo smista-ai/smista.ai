@@ -64,18 +64,18 @@ impl FromStr for ModelReference {
     /// separator or has an empty provider or model part, and
     /// [`ParseError::UnknownProvider`] if the provider part is unknown.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        tracing::trace!(model.reference = %s, "parsing model reference {{model.reference}}");
+        tracing::trace!(model.reference = %s, "parsing model reference");
         let Some((provider, model)) = s.split_once(SEPARATOR) else {
             tracing::warn!(
                 model.reference = %s,
-                "model reference {{model.reference}} is missing the `provider/model` separator"
+                "model reference is missing the `provider/model` separator"
             );
             return Err(ParseError::InvalidModelReference(s.to_string()).into());
         };
         if provider.is_empty() || model.is_empty() {
             tracing::warn!(
                 model.reference = %s,
-                "model reference {{model.reference}} has an empty provider or model part"
+                "model reference has an empty provider or model part"
             );
             return Err(ParseError::InvalidModelReference(s.to_string()).into());
         }
@@ -84,7 +84,7 @@ impl FromStr for ModelReference {
             tracing::warn!(
                 model.provider = %provider,
                 error.message = %source,
-                "model reference names unknown provider {{model.provider}}"
+                "model reference names unknown provider"
             );
         })?;
         Ok(Self {

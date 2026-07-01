@@ -16,14 +16,14 @@ pub fn check_references(config: &Config, report: &mut ValidationReport) {
     tracing::trace!(
         references.rule_count = config.routing.rules.len(),
         references.provider_count = config.providers.len(),
-        "checking provider references across {{references.rule_count}} rules"
+        "checking provider references across rules"
     );
     let mut visit = |provider: &Provider, location: String| {
         if !config.providers.contains_key(provider) {
             tracing::warn!(
                 references.provider = %provider,
                 references.location = %location,
-                "unresolved provider reference at {{references.location}}"
+                "unresolved provider reference"
             );
             report.push(ValidationError {
                 code: ValidationCode::UnknownProvider,

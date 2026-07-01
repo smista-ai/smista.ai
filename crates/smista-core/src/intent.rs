@@ -103,7 +103,7 @@ impl FromStr for TaskIntent {
             "prompt" => Ok(Self::Prompt),
             "skill" => Ok(Self::Skill),
             other => {
-                tracing::warn!(intent.value = %other, "unknown task intent {{intent.value}}");
+                tracing::warn!(intent.value = %other, "unknown task intent");
                 Err(ParseError::UnknownIntent(other.to_string()).into())
             }
         }
