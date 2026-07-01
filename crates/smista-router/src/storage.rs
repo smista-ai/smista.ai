@@ -104,6 +104,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_build_in_memory_storage() {
+        let config = StorageConfig {
+            mode: StorageMode::Memory,
+            ..StorageConfig::default()
+        };
+
+        build_storage(&config)
+            .await
+            .expect("failed to build in-memory storage");
+    }
+
+    #[tokio::test]
     async fn should_fail_remote_storage_without_url() {
         let config = StorageConfig {
             mode: StorageMode::Remote,

@@ -265,3 +265,94 @@ fn detach(command: &mut Command) {
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
 }
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser as _;
+
+    use super::*;
+    use crate::args::{Args, Command as CliCommand};
+
+    /// Parses `smista start ...` argv into its [`RouterArgs`].
+    fn router_args(argv: &[&str]) -> RouterArgs {
+        let CliCommand::Start(start) = Args::parse_from(argv).command else {
+            panic!("expected the start command");
+        };
+        start
+    }
+
+    #[test]
+    fn should_load_and_validate_a_valid_config_file() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let db = dir.path().join("db");
+        let config_path = dir.path().join("router.toml");
+        std::fs::write(
+            &config_path,
+            format!(
+                "[router.storage]\nmode = \"embedded\"\npath = \"{}\"\n",
+                db.display().to_string().replace('\\', "\\\\")
+            ),
+        )
+        .expect("failed to write config file");
+
+        let args = router_args(&[
+            "smista",
+            "start",
+            "--config",
+            config_path.to_str().expect("non-UTF-8 path"),
+        ]);
+
+        let (config, report) =
+            load_and_validate_configuration(&args).expect("configuration failed to load");
+
+        assert!(report.is_ok(), "unexpected findings: {:?}", report.errors());
+        assert_eq!(config.storage.path.as_deref(), Some(db.as_path()));
+    }
+
+    #[test]
+    fn should_report_validation_errors_without_failing_to_load() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let config_path = dir.path().join("router.toml");
+        // Remote storage without a URL is invalid, but loading still succeeds:
+        // validation findings are reported, not returned as a load error.
+        std::fs::write(&config_path, "[router.storage]\nmode = \"remote\"\n")
+            .expect("failed to write config file");
+
+        let args = router_args(&[
+            "smista",
+            "start",
+            "--config",
+            config_path.to_str().expect("non-UTF-8 path"),
+        ]);
+
+        let (_config, report) =
+            load_and_validate_configuration(&args).expect("configuration failed to load");
+
+        assert!(!report.is_ok());
+    }
+
+    #[test]
+    fn should_fold_command_line_opentelemetry_over_the_file() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let config_path = dir.path().join("router.toml");
+        // An empty file leaves every setting at its default; OpenTelemetry is
+        // disabled by default, so the command line must turn it on.
+        std::fs::write(&config_path, "").expect("failed to write config file");
+
+        let args = router_args(&[
+            "smista",
+            "start",
+            "--config",
+            config_path.to_str().expect("non-UTF-8 path"),
+            "--otel",
+            "--otel-endpoint",
+            "http://collector:4317",
+        ]);
+
+        let (config, _report) =
+            load_and_validate_configuration(&args).expect("configuration failed to load");
+
+        assert!(config.opentelemetry.enabled);
+        assert_eq!(config.opentelemetry.endpoint, "http://collector:4317");
+    }
+}

@@ -62,6 +62,24 @@ mod tests {
     }
 
     #[test]
+    fn should_flag_embedded_storage_when_default_path_is_cleared() {
+        // The default embedded path is what keeps the default config valid;
+        // clearing it must make validation fail with a missing-storage error.
+        let mut config = RouterConfig::default();
+        config.storage.path = None;
+
+        let report = validate(&config);
+
+        assert!(!report.is_ok());
+        assert!(
+            report
+                .errors()
+                .iter()
+                .any(|error| error.code == ValidationCode::MissingStorageConfig)
+        );
+    }
+
+    #[test]
     fn should_collect_multiple_errors_in_one_pass() {
         let config = parse(
             "[router]\nport = 0\n\n[router.storage]\nmode = \"remote\"\n",
