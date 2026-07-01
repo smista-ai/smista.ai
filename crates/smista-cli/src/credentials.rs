@@ -1,15 +1,11 @@
-//! Credential storage for the CLI.
+//! Credentials storage for the CLI.
 //!
-//! [`CredentialStorage`] is the CLI-facing wrapper around the secret backends.
+//! [`CredentialsStorage`] is the CLI-facing wrapper around the secret backends.
 //! It prefers the operating-system keyring, but can fall back to the file
 //! backend for environments where a keyring is unavailable, such as headless
 //! Linux sessions or CI jobs.
 
-#![expect(
-    dead_code,
-    reason = "The credential module exposes the storage API before the TUI command loop consumes every operation."
-)]
-
+mod providers;
 mod secrets;
 
 use std::fmt;
@@ -17,9 +13,10 @@ use std::path::Path;
 
 use secrecy::SecretString;
 
+pub use self::providers::ProvidersCredentials;
 use crate::credentials::secrets::{FileSecretStorage, KeyringSecretStorage, SecretStorage};
 
-/// Secret backend selected for a [`CredentialStorage`] instance.
+/// Secret backend selected for a [`CredentialsStorage`] instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CredentialBackend {
     /// Operating-system credential store.
@@ -28,8 +25,17 @@ pub enum CredentialBackend {
     File,
 }
 
+impl fmt::Display for CredentialBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CredentialBackend::Keyring => write!(f, "keyring"),
+            CredentialBackend::File => write!(f, "file"),
+        }
+    }
+}
+
 /// Stores CLI credentials through the configured secret backend.
-pub struct CredentialStorage {
+pub struct CredentialsStorage {
     /// Backend used to persist raw provider secrets.
     secret_storage: Box<dyn SecretStorage>,
     /// Selected backend kind, kept separately because trait objects do not
@@ -37,15 +43,15 @@ pub struct CredentialStorage {
     backend: CredentialBackend,
 }
 
-impl fmt::Debug for CredentialStorage {
+impl fmt::Debug for CredentialsStorage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CredentialStorage")
+        f.debug_struct("CredentialsStorage")
             .field("backend", &self.backend)
             .finish_non_exhaustive()
     }
 }
 
-impl CredentialStorage {
+impl CredentialsStorage {
     /// Creates credential storage for the CLI.
     ///
     /// When `enforce_keyring` is `false`, this tries the platform keyring first
@@ -63,32 +69,6 @@ impl CredentialStorage {
             || Ok(Box::new(KeyringSecretStorage::new()?)),
             || Ok(Box::new(FileSecretStorage::new()?)),
         )
-    }
-
-    /// Creates credential storage backed by the file backend.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file backend cannot resolve, create, or validate
-    /// its global secrets file.
-    pub fn new_with_file() -> anyhow::Result<Self> {
-        Ok(Self {
-            secret_storage: Box::new(FileSecretStorage::new()?),
-            backend: CredentialBackend::File,
-        })
-    }
-
-    /// Creates credential storage backed by the platform keyring.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the platform keyring cannot be initialized or is not
-    /// available for use.
-    pub fn new_with_keyring() -> anyhow::Result<Self> {
-        Ok(Self {
-            secret_storage: Box::new(KeyringSecretStorage::new()?),
-            backend: CredentialBackend::Keyring,
-        })
     }
 
     /// Returns the selected backend.
@@ -204,10 +184,9 @@ impl CredentialStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
-    use std::rc::Rc;
+    use std::sync::{Arc, RwLock};
 
     use anyhow::anyhow;
     use secrecy::ExposeSecret as _;
@@ -229,16 +208,16 @@ mod tests {
 
     #[derive(Clone, Debug, Default)]
     struct MockSecretStorage {
-        state: Rc<RefCell<MockState>>,
+        state: Arc<RwLock<MockState>>,
     }
 
     impl MockSecretStorage {
         fn calls(&self) -> Vec<String> {
-            self.state.borrow().calls.clone()
+            self.state.read().unwrap().calls.clone()
         }
 
         fn set_local(&self, path: &Path, key_name: &str, value: &str) {
-            self.state.borrow_mut().local.insert(
+            self.state.write().unwrap().local.insert(
                 (path.to_path_buf(), key_name.to_string()),
                 value.to_string(),
             );
@@ -246,45 +225,47 @@ mod tests {
 
         fn set_global(&self, key_name: &str, value: &str) {
             self.state
-                .borrow_mut()
+                .write()
+                .unwrap()
                 .global
                 .insert(key_name.to_string(), value.to_string());
         }
 
         fn global_value(&self, key_name: &str) -> Option<String> {
-            self.state.borrow().global.get(key_name).cloned()
+            self.state.read().unwrap().global.get(key_name).cloned()
         }
 
         fn local_value(&self, path: &Path, key_name: &str) -> Option<String> {
             self.state
-                .borrow()
+                .read()
+                .unwrap()
                 .local
                 .get(&(path.to_path_buf(), key_name.to_string()))
                 .cloned()
         }
 
         fn fail_local_get(&self, message: &'static str) {
-            self.state.borrow_mut().fail_local_get = Some(message);
+            self.state.write().unwrap().fail_local_get = Some(message);
         }
 
         fn fail_global_get(&self, message: &'static str) {
-            self.state.borrow_mut().fail_global_get = Some(message);
+            self.state.write().unwrap().fail_global_get = Some(message);
         }
 
         fn fail_local_put(&self, message: &'static str) {
-            self.state.borrow_mut().fail_local_put = Some(message);
+            self.state.write().unwrap().fail_local_put = Some(message);
         }
 
         fn fail_global_put(&self, message: &'static str) {
-            self.state.borrow_mut().fail_global_put = Some(message);
+            self.state.write().unwrap().fail_global_put = Some(message);
         }
 
         fn fail_local_delete(&self, message: &'static str) {
-            self.state.borrow_mut().fail_local_delete = Some(message);
+            self.state.write().unwrap().fail_local_delete = Some(message);
         }
 
         fn fail_global_delete(&self, message: &'static str) {
-            self.state.borrow_mut().fail_global_delete = Some(message);
+            self.state.write().unwrap().fail_global_delete = Some(message);
         }
     }
 
@@ -295,7 +276,7 @@ mod tests {
             path: &Path,
             value: &SecretString,
         ) -> anyhow::Result<()> {
-            let mut state = self.state.borrow_mut();
+            let mut state = self.state.write().unwrap();
             state
                 .calls
                 .push(format!("put_local:{}:{}", path.display(), key_name));
@@ -310,7 +291,7 @@ mod tests {
         }
 
         fn put_global(&self, key_name: &str, value: &SecretString) -> anyhow::Result<()> {
-            let mut state = self.state.borrow_mut();
+            let mut state = self.state.write().unwrap();
             state.calls.push(format!("put_global:{key_name}"));
             if let Some(message) = state.fail_global_put {
                 return Err(anyhow!(message));
@@ -322,7 +303,7 @@ mod tests {
         }
 
         fn get_local(&self, key_name: &str, path: &Path) -> anyhow::Result<Option<SecretString>> {
-            let mut state = self.state.borrow_mut();
+            let mut state = self.state.write().unwrap();
             state
                 .calls
                 .push(format!("get_local:{}:{}", path.display(), key_name));
@@ -337,7 +318,7 @@ mod tests {
         }
 
         fn get_global(&self, key_name: &str) -> anyhow::Result<Option<SecretString>> {
-            let mut state = self.state.borrow_mut();
+            let mut state = self.state.write().unwrap();
             state.calls.push(format!("get_global:{key_name}"));
             if let Some(message) = state.fail_global_get {
                 return Err(anyhow!(message));
@@ -346,7 +327,7 @@ mod tests {
         }
 
         fn delete_local(&self, key_name: &str, path: &Path) -> anyhow::Result<()> {
-            let mut state = self.state.borrow_mut();
+            let mut state = self.state.write().unwrap();
             state
                 .calls
                 .push(format!("delete_local:{}:{}", path.display(), key_name));
@@ -360,7 +341,7 @@ mod tests {
         }
 
         fn delete_global(&self, key_name: &str) -> anyhow::Result<()> {
-            let mut state = self.state.borrow_mut();
+            let mut state = self.state.write().unwrap();
             state.calls.push(format!("delete_global:{key_name}"));
             if let Some(message) = state.fail_global_delete {
                 return Err(anyhow!(message));
@@ -370,8 +351,8 @@ mod tests {
         }
     }
 
-    fn storage(mock: MockSecretStorage) -> CredentialStorage {
-        CredentialStorage::from_secret_storage(CredentialBackend::File, Box::new(mock))
+    fn storage(mock: MockSecretStorage) -> CredentialsStorage {
+        CredentialsStorage::from_secret_storage(CredentialBackend::File, Box::new(mock))
     }
 
     fn secret(value: &str) -> SecretString {
@@ -381,28 +362,28 @@ mod tests {
     #[test]
     fn should_select_keyring_when_available() {
         let keyring = MockSecretStorage::default();
-        let file_called = Rc::new(RefCell::new(false));
-        let file_called_for_factory = Rc::clone(&file_called);
+        let file_called = Arc::new(RwLock::new(false));
+        let file_called_for_factory = Arc::clone(&file_called);
 
-        let storage = CredentialStorage::new_from_factories(
+        let storage = CredentialsStorage::new_from_factories(
             false,
             || Ok(Box::new(keyring.clone())),
             || {
-                *file_called_for_factory.borrow_mut() = true;
+                *file_called_for_factory.write().unwrap() = true;
                 Ok(Box::new(MockSecretStorage::default()))
             },
         )
         .unwrap();
 
         assert_eq!(storage.backend(), CredentialBackend::Keyring);
-        assert!(!*file_called.borrow());
+        assert!(!*file_called.read().unwrap());
     }
 
     #[test]
     fn should_fallback_to_file_when_keyring_is_not_enforced() {
         let file = MockSecretStorage::default();
 
-        let storage = CredentialStorage::new_from_factories(
+        let storage = CredentialsStorage::new_from_factories(
             false,
             || Err(anyhow!("keyring unavailable")),
             || Ok(Box::new(file.clone())),
@@ -414,20 +395,20 @@ mod tests {
 
     #[test]
     fn should_not_fallback_to_file_when_keyring_is_enforced() {
-        let file_called = Rc::new(RefCell::new(false));
-        let file_called_for_factory = Rc::clone(&file_called);
+        let file_called = Arc::new(RwLock::new(false));
+        let file_called_for_factory = Arc::clone(&file_called);
 
-        let err = CredentialStorage::new_from_factories(
+        let err = CredentialsStorage::new_from_factories(
             true,
             || Err(anyhow!("keyring unavailable")),
             || {
-                *file_called_for_factory.borrow_mut() = true;
+                *file_called_for_factory.write().unwrap() = true;
                 Ok(Box::new(MockSecretStorage::default()))
             },
         )
         .unwrap_err();
 
-        assert!(!*file_called.borrow());
+        assert!(!*file_called.read().unwrap());
         assert!(
             err.to_string().contains("keyring credential storage"),
             "unexpected error: {err}"
@@ -436,7 +417,7 @@ mod tests {
 
     #[test]
     fn should_report_file_failure_after_keyring_fallback_failure() {
-        let err = CredentialStorage::new_from_factories(
+        let err = CredentialsStorage::new_from_factories(
             false,
             || Err(anyhow!("keyring unavailable")),
             || Err(anyhow!("file unavailable")),
@@ -604,8 +585,14 @@ mod tests {
 
         let rendered = format!("{:?}", storage(mock));
 
-        assert!(rendered.contains("CredentialStorage"));
+        assert!(rendered.contains("CredentialsStorage"));
         assert!(rendered.contains("File"));
         assert!(!rendered.contains("secret-value"));
+    }
+
+    #[test]
+    fn should_display_backend() {
+        assert_eq!(format!("{}", CredentialBackend::Keyring), "keyring");
+        assert_eq!(format!("{}", CredentialBackend::File), "file");
     }
 }

@@ -4,6 +4,7 @@
 //! that start and stop a local router live under [`router`].
 
 mod cli;
+mod credentials;
 mod router;
 
 use crate::args::{Args, Command};
@@ -25,6 +26,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         ..
     } = args;
     match command {
+        Some(Command::Credentials(args)) => credentials::run(args, enforce_keyring),
         Some(Command::Start(start)) => router::start(start, log_file.as_deref(), &log_filter).await,
         Some(Command::Stop(stop)) => router::stop(stop),
         None => cli::run(enforce_keyring),

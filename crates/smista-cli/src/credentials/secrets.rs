@@ -15,7 +15,7 @@ pub use self::keyring::KeyringSecretStorage;
 /// expose the same split between global secrets and project-local secrets.
 /// `key_name` identifies the provider credential, while `path` identifies the
 /// project root used by local operations.
-pub trait SecretStorage {
+pub trait SecretStorage: Send + Sync + 'static {
     /// Stores or replaces a project-local secret for `key_name`.
     fn put_local(&self, key_name: &str, path: &Path, value: &SecretString) -> anyhow::Result<()>;
 
