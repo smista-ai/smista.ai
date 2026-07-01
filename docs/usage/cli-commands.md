@@ -2,6 +2,9 @@
 
 - [CLI Commands](#cli-commands)
   - [From your shell](#from-your-shell)
+    - [Running the router](#running-the-router)
+    - [Global flags](#global-flags)
+    - [Version and help](#version-and-help)
   - [Interactive slash commands](#interactive-slash-commands)
     - [Session](#session)
     - [Running tasks](#running-tasks)
@@ -20,7 +23,9 @@ interactive session where commands are typed as slash commands.
 | `smista`           | Start an interactive session.                                 |
 | `smista <prompt>`  | Start a session, run the prompt, show the result.             |
 | `smista init`      | Scaffold `.smista/` and `.smista/config.toml` in the project. |
-| `smista --version` | Print the version.                                            |
+| `smista start`     | Start the local router. Daemonizes by default.                |
+| `smista stop`      | Stop the local router recorded in the pidfile.                |
+| `smista --version` | Print the CLI version.                                        |
 | `smista --help`    | Show help.                                                    |
 
 A one-shot prompt is just a shortcut: it starts a session, sends the prompt
@@ -30,6 +35,51 @@ session and trace.
 ```sh
 smista "refactor the auth middleware"
 ```
+
+### Running the router
+
+The CLI talks to a local router. Start it once and leave it running:
+
+```sh
+smista start
+```
+
+By default `smista start` daemonizes — it spawns the router as a detached
+background process and returns, so your shell is free again. Pass `--foreground`
+to run it in the current process instead, which is what a service manager wants.
+`smista stop` reads the router's process id from the pidfile and shuts it down.
+
+Both commands accept flags to point at a specific configuration file or pidfile,
+and `smista start` exposes flags to configure OpenTelemetry trace export. See
+[Running the Router](../configuration/router.md) for the full list and for the
+configuration file itself.
+
+### Global flags
+
+The logging flags are global: they may appear before or after the subcommand,
+and each has an environment-variable equivalent.
+
+| Flag                      | Environment variable       | What it does                                                |
+| ------------------------- | -------------------------- | ----------------------------------------------------------- |
+| `-L`, `--log-file <path>` | `SMISTA_ROUTER_LOG_FILE`   | Write logs to a file instead of stdout.                     |
+| `-l`, `--log-filter <f>`  | `SMISTA_ROUTER_LOG_FILTER` | Set the log level filter (e.g. `debug`). Defaults to `off`. |
+
+```sh
+smista --log-filter debug start --foreground
+```
+
+### Version and help
+
+`smista --version` prints the CLI version. Include it in bug reports so the
+exact build in use is unambiguous.
+
+```sh
+$ smista --version
+smista 0.0.0
+```
+
+`smista --help` shows the full command and flag reference; `smista <command>
+--help` shows the flags for a single command.
 
 ## Interactive slash commands
 
