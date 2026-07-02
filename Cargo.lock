@@ -5494,6 +5494,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "url",
  "uuid",
  "windows-native-keyring-store",
  "yaml_serde",
