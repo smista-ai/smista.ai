@@ -20,19 +20,20 @@ pass and reports them together, so you can fix everything at once.
 ## CLI / policy configuration (`config.toml`)
 
 These checks apply to the merged CLI and routing-policy configuration loaded
-from your global, project, and local preference layers.
+from your global and project configuration, plus any runtime override.
+CLI configuration validation emits errors only.
 
-| Check                                                                                                                                                                        | Severity | How to fix                                                                                                                |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Unknown provider** — a routing rule, fallback, or default route references a provider identifier that is not enabled in `[providers]`                                      | Error    | Enable that provider with a `[providers.<id>]` table, or correct the reference                                            |
-| **Invalid glob** — a pattern in `privacy.restricted_paths`, `privacy.remote.blocked_paths`, or a rule's `paths` list fails to compile                                        | Error    | Fix the glob syntax (e.g. close unclosed brackets)                                                                        |
-| **Duplicate rule name** — two `[[routing.rules]]` entries share the same `name`                                                                                              | Error    | Give each rule a unique `name`                                                                                            |
-| **Missing default route** — no `[routing.default]` table is present                                                                                                          | Error    | Add `[routing.default]` with a `model` field                                                                              |
-| **Invalid fallback** — a rule lists its own `model` as a fallback, or lists the same fallback model more than once                                                           | Error    | Remove the self-reference or duplicate from `fallbacks`                                                                   |
-| **Ambiguous rules** — two overlapping rules share the same `priority` value and the same specificity score, making their relative order undefined                            | Error    | Give them distinct `priority` values or make their match conditions mutually exclusive                                    |
-| **Unsafe override** — a local or runtime preference layer sets `privacy.remote.mode` to a value less strict than the merged config-layer floor                               | Error    | Do not weaken the configured privacy mode in a preference layer                                                           |
-| **Permission widening** — a local or runtime preference layer sets a tool permission (`file_read`, `file_write`, `shell`, etc.) to a less strict value than the config floor | Error    | Keep the configured stricter permission; preference layers may only tighten, never loosen                                 |
-| **Inline secret** — a provider `api_key` is a literal string instead of a `${secret:NAME}` reference                                                                         | Error    | Replace the literal with `api_key = "${secret:NAME}"` and store the value in a secrets file or as an environment variable |
+| Check                                                                                                                                                       | Severity | How to fix                                                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Unknown provider** — a routing rule, fallback, or default route references a provider identifier that is not enabled in `[providers]`                     | Error    | Enable that provider with a `[providers.<id>]` table, or correct the reference                                            |
+| **Invalid glob** — a pattern in `privacy.restricted_paths`, `privacy.remote.blocked_paths`, or a rule's `paths` list fails to compile                       | Error    | Fix the glob syntax (e.g. close unclosed brackets)                                                                        |
+| **Duplicate rule name** — two `[[routing.rules]]` entries share the same `name`                                                                             | Error    | Give each rule a unique `name`                                                                                            |
+| **Missing default route** — no `[routing.default]` table is present                                                                                         | Error    | Add `[routing.default]` with a `model` field                                                                              |
+| **Invalid fallback** — a rule lists its own `model` as a fallback, or lists the same fallback model more than once                                          | Error    | Remove the self-reference or duplicate from `fallbacks`                                                                   |
+| **Ambiguous rules** — two overlapping rules share the same `priority` value and the same specificity score, making their relative order undefined           | Error    | Give them distinct `priority` values or make their match conditions mutually exclusive                                    |
+| **Unsafe override** — a runtime override sets `privacy.remote.mode` to a value less strict than the merged config-layer floor                               | Error    | Do not weaken the configured privacy mode in a runtime override                                                           |
+| **Permission widening** — a runtime override sets a tool permission (`file_read`, `file_write`, `shell`, etc.) to a less strict value than the config floor | Error    | Keep the configured stricter permission; runtime overrides may only tighten, never loosen                                 |
+| **Inline secret** — a provider `api_key` is a literal string instead of a `${secret:NAME}` reference                                                        | Error    | Replace the literal with `api_key = "${secret:NAME}"` and store the value in a secrets file or as an environment variable |
 
 ### Specificity
 
@@ -58,10 +59,9 @@ model = "openai/gpt-5.5-mini"
 
 ### Unsafe overrides and permission widening
 
-The merged global and project config layers set the safety floor. A
-local-preferences or runtime-override layer may add restrictions — for example
-switching a tool from `ask` to `deny` — but may not weaken a configured
-restriction.
+The merged global and project config layers set the safety floor. A runtime
+override may add restrictions — for example switching a tool from `ask` to
+`deny` — but may not weaken a configured restriction.
 
 ```toml
 # project .smista/config.toml
@@ -73,7 +73,7 @@ shell = "ask" # shell requires approval
 ```
 
 ```toml
-# local preferences — these are rejected
+# runtime override — these are rejected
 [privacy.remote]
 mode = "allow" # error: unsafe override
 

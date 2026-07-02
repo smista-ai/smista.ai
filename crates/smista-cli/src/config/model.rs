@@ -25,7 +25,7 @@ pub struct Config {
     pub privacy: PrivacyPolicy,
     /// Router client connection settings.
     pub router: RouterClientConfig,
-    /// Uncommitted local preferences (highest non-runtime layer).
+    /// Local preference fields merged with the rest of the CLI config.
     #[serde(rename = "local_preferences")]
     pub local: LocalPreferences,
 }
@@ -86,7 +86,7 @@ pub struct RouterClientConfig {
     pub auth_source: Option<AuthSource>,
 }
 
-/// Uncommitted local preferences. The only layer that is not version-controlled.
+/// Local preference fields embedded in CLI configuration.
 ///
 /// All fields are optional so that an unset preference defers to lower layers
 /// during the merge.

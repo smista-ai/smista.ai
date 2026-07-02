@@ -3,11 +3,11 @@
 //! Configuration is assembled from ordered layers, folded low→high so higher
 //! layers win. The merge strategy is *not* uniform; it is chosen per section to
 //! protect cohesive units and safety-critical fields. Layers split into two
-//! kinds: **config layers** (`SystemDefaults`, `Global`, `Project`) and
-//! **preference layers** (`LocalPrefs`, `RuntimeOverride`). The safety invariant
-//! is that a *preference* layer may tighten but never weaken a safety-critical
-//! field set by a config layer (spec: "a local user preference must not silently
-//! bypass this restriction").
+//! kinds: **config layers** (`SystemDefaults`, `Global`, `Project`) and the
+//! **preference layer** (`RuntimeOverride`). The safety invariant is that a
+//! *preference* layer may tighten but never weaken a safety-critical field set
+//! by a config layer (spec: "a local user preference must not silently bypass
+//! this restriction").
 //!
 //! - **`providers` map**: replaced wholesale when the higher layer is non-empty,
 //!   otherwise the lower map is kept.
@@ -42,8 +42,6 @@ pub enum ConfigLayer {
     Global,
     /// Project configuration.
     Project,
-    /// Uncommitted local preferences.
-    LocalPrefs,
     /// In-memory runtime override (e.g. CLI flags).
     RuntimeOverride,
 }
@@ -53,7 +51,7 @@ impl ConfigLayer {
     /// weaken — safety-critical fields set by a config layer.
     #[must_use]
     pub fn is_preference(self) -> bool {
-        matches!(self, Self::LocalPrefs | Self::RuntimeOverride)
+        matches!(self, Self::RuntimeOverride)
     }
 }
 
@@ -66,8 +64,8 @@ impl ConfigLayer {
 ///
 /// # Example
 ///
-/// Given a `Project` layer that sets `router.url` and a higher `LocalPrefs`
-/// layer that only enables `router.auto_start`, the merged config keeps the
+/// Given a `Project` layer that sets `router.url` and a higher
+/// `RuntimeOverride` layer that only enables `router.auto_start`, the merged config keeps the
 /// project's URL *and* has `auto_start` enabled — see the
 /// `should_preserve_lower_router_fields_when_higher_sets_one` unit test. (No
 /// runnable doc example: this crate is a binary, so it has no library target
@@ -285,13 +283,11 @@ mod tests {
     #[test]
     fn should_order_layers_low_to_high() {
         assert!(ConfigLayer::Global < ConfigLayer::Project);
-        assert!(ConfigLayer::Project < ConfigLayer::LocalPrefs);
-        assert!(ConfigLayer::LocalPrefs < ConfigLayer::RuntimeOverride);
+        assert!(ConfigLayer::Project < ConfigLayer::RuntimeOverride);
     }
 
     #[test]
     fn should_classify_preference_layers() {
-        assert!(ConfigLayer::LocalPrefs.is_preference());
         assert!(ConfigLayer::RuntimeOverride.is_preference());
         assert!(!ConfigLayer::Project.is_preference());
         assert!(!ConfigLayer::Global.is_preference());
@@ -305,7 +301,7 @@ mod tests {
         high.router.url = Some("high".to_string());
         let merged = merge(vec![
             (ConfigLayer::Project, low),
-            (ConfigLayer::LocalPrefs, high),
+            (ConfigLayer::RuntimeOverride, high),
         ]);
         assert_eq!(merged.router.url.as_deref(), Some("high"));
     }
@@ -316,9 +312,9 @@ mod tests {
         low.router.url = Some("low".to_string());
         let mut high = Config::default();
         high.router.url = Some("high".to_string());
-        // Provided high-first; merge must still sort and apply project under local.
+        // Provided high-first; merge must still sort and apply project under runtime.
         let merged = merge(vec![
-            (ConfigLayer::LocalPrefs, high),
+            (ConfigLayer::RuntimeOverride, high),
             (ConfigLayer::Project, low),
         ]);
         assert_eq!(merged.router.url.as_deref(), Some("high"));
@@ -336,7 +332,7 @@ mod tests {
         });
         let merged = merge(vec![
             (ConfigLayer::Project, project),
-            (ConfigLayer::LocalPrefs, local),
+            (ConfigLayer::RuntimeOverride, local),
         ]);
         assert_eq!(
             merged.privacy.restricted_paths,
@@ -362,7 +358,7 @@ mod tests {
         });
         let merged = merge(vec![
             (ConfigLayer::Project, project),
-            (ConfigLayer::LocalPrefs, local),
+            (ConfigLayer::RuntimeOverride, local),
         ]);
         assert_eq!(
             merged.privacy.remote.mode(),
@@ -406,12 +402,12 @@ mod tests {
         local.tools.set("shell", PermissionMode::Allow);
         let merged = merge(vec![
             (ConfigLayer::Project, project),
-            (ConfigLayer::LocalPrefs, local),
+            (ConfigLayer::RuntimeOverride, local),
         ]);
         assert_eq!(
             merged.tools.mode_for("shell"),
             Some(PermissionMode::Deny),
-            "a project Deny must not be weakened by a local Allow"
+            "a project Deny must not be weakened by a runtime Allow"
         );
     }
 
@@ -440,7 +436,7 @@ mod tests {
         local.router.auto_start = true;
         let merged = merge(vec![
             (ConfigLayer::Project, project),
-            (ConfigLayer::LocalPrefs, local),
+            (ConfigLayer::RuntimeOverride, local),
         ]);
         assert_eq!(
             merged.router.url.as_deref(),
@@ -458,7 +454,7 @@ mod tests {
         local.local.stream = Some(true);
         let merged = merge(vec![
             (ConfigLayer::Project, project),
-            (ConfigLayer::LocalPrefs, local),
+            (ConfigLayer::RuntimeOverride, local),
         ]);
         assert_eq!(merged.local.auto_apply, Some(true));
         assert_eq!(merged.local.stream, Some(true));
@@ -471,7 +467,7 @@ mod tests {
         local.tools.set("read_file", PermissionMode::Allow);
         let merged = merge(vec![
             (ConfigLayer::Project, project),
-            (ConfigLayer::LocalPrefs, local),
+            (ConfigLayer::RuntimeOverride, local),
         ]);
         assert_eq!(
             merged.tools.mode_for("read_file"),

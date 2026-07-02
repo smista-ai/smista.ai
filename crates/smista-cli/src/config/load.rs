@@ -91,7 +91,24 @@ fn read_layer(path: &Path) -> Result<Config, ConfigError> {
 ///
 /// Propagates [`ConfigError`] from any layer that exists but cannot be read or
 /// parsed.
-pub fn load(cwd: &Path, runtime: Option<Config>) -> Result<Config, ConfigError> {
+#[cfg(test)]
+fn load(cwd: &Path, runtime: Option<Config>) -> Result<Config, ConfigError> {
+    load_with_layers(cwd, runtime).map(|(config, _)| config)
+}
+
+/// Loads all configuration layers and returns them with the merged config.
+///
+/// This is used by validation callers that need to inspect provenance in
+/// addition to the effective merged configuration.
+///
+/// # Errors
+///
+/// Propagates [`ConfigError`] from any layer that exists but cannot be read or
+/// parsed.
+pub fn load_with_layers(
+    cwd: &Path,
+    runtime: Option<Config>,
+) -> Result<(Config, Vec<(ConfigLayer, Config)>), ConfigError> {
     tracing::debug!(
         config.cwd = %cwd.display(),
         config.has_runtime_override = runtime.is_some(),
@@ -108,13 +125,13 @@ pub fn load(cwd: &Path, runtime: Option<Config>) -> Result<Config, ConfigError> 
         layers.push((ConfigLayer::RuntimeOverride, runtime));
     }
 
-    let merged = merge(layers);
+    let merged = merge(layers.clone());
     tracing::debug!(
         config.provider_count = merged.providers.len(),
         config.rule_count = merged.routing.rules.len(),
         "configuration loaded"
     );
-    Ok(merged)
+    Ok((merged, layers))
 }
 
 #[cfg(test)]

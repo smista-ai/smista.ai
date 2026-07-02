@@ -8,8 +8,6 @@ use serde::Serialize;
 pub enum Severity {
     /// Blocks the action.
     Error,
-    /// Surfaces but does not block.
-    Warning,
 }
 
 /// Stable, machine-readable identity of a validation finding.
@@ -26,13 +24,13 @@ pub enum ValidationCode {
     InvalidGlob,
     /// No `[routing.default]` is configured.
     MissingDefaultRoute,
-    /// A preference layer widens a tool permission beyond the project default.
+    /// A runtime override widens a tool permission beyond the project default.
     PermissionWidening,
     /// Two rules share priority and specificity with no ordering allowance.
     RuleAmbiguity,
     /// A reference names a provider absent from `[providers]`.
     UnknownProvider,
-    /// A preference layer weakens a non-overridable safety policy.
+    /// A runtime override weakens a non-overridable safety policy.
     UnsafeOverride,
 }
 
@@ -53,19 +51,15 @@ pub struct ValidationError {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct ValidationReport {
     errors: Vec<ValidationError>,
-    warnings: Vec<ValidationError>,
 }
 
 impl ValidationReport {
-    /// Records a finding, routing it by severity.
+    /// Records a validation error.
     pub fn push(&mut self, finding: ValidationError) {
-        match finding.severity {
-            Severity::Error => self.errors.push(finding),
-            Severity::Warning => self.warnings.push(finding),
-        }
+        self.errors.push(finding);
     }
 
-    /// Returns `true` when there are no errors (warnings are allowed).
+    /// Returns `true` when there are no errors.
     #[must_use]
     pub fn is_ok(&self) -> bool {
         self.errors.is_empty()
@@ -77,23 +71,13 @@ impl ValidationReport {
         &self.errors
     }
 
-    /// All warning-severity findings.
-    #[must_use]
-    pub fn warnings(&self) -> &[ValidationError] {
-        &self.warnings
-    }
-
-    /// Renders findings as human-readable lines, errors first.
+    /// Renders findings as human-readable lines.
     #[must_use]
     pub fn to_human(&self) -> String {
         let mut out = String::new();
-        for finding in self.errors.iter().chain(self.warnings.iter()) {
-            let severity = match finding.severity {
-                Severity::Error => "error",
-                Severity::Warning => "warning",
-            };
+        for finding in &self.errors {
             let location = finding.location.as_deref().unwrap_or("-");
-            out.push_str(&format!("{severity} [{location}]: {}\n", finding.message));
+            out.push_str(&format!("error [{location}]: {}\n", finding.message));
         }
         out
     }
@@ -104,7 +88,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn should_route_findings_by_severity() {
+    fn should_record_findings_as_errors() {
         let mut report = ValidationReport::default();
         report.push(ValidationError {
             code: ValidationCode::UnknownProvider,
@@ -112,14 +96,7 @@ mod tests {
             message: "x".into(),
             location: None,
         });
-        report.push(ValidationError {
-            code: ValidationCode::PermissionWidening,
-            severity: Severity::Warning,
-            message: "y".into(),
-            location: None,
-        });
         assert_eq!(report.errors().len(), 1);
-        assert_eq!(report.warnings().len(), 1);
         assert!(!report.is_ok());
     }
 
