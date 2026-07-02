@@ -73,6 +73,16 @@ mod tests {
     use crate::config::parse;
 
     #[test]
+    fn should_validate_default_config_clean() {
+        let report = validate(&Config::default());
+        assert!(
+            report.is_ok(),
+            "default CLI config must validate clean: {:?}",
+            report.errors()
+        );
+    }
+
+    #[test]
     fn should_validate_minimal_authored_config_clean() {
         // A CLI config is user-authored: it must name a provider and a default
         // route. With only those present, every other field takes its default
@@ -119,6 +129,8 @@ mod tests {
             [providers.openai]
             type = "openai"
             api_key = "literal"
+
+            [routing]
             "#,
             "test",
         )

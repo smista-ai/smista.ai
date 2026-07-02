@@ -34,11 +34,15 @@ pub async fn run(StatusArgs { url }: StatusArgs) -> anyhow::Result<()> {
         .context("Failed to get router status")?;
 
     println!(
-        r#"smista.ai router at "{url}" status: {status}; version: {version}"#,
+        r#"smista.ai router ("{url}") status: "{status}" - version: "{version}""#,
         url = url,
         status = status.status,
         version = status.version
     );
+
+    if status.status != "ok" {
+        anyhow::bail!("Router is not healthy. Please check the router logs for more information.");
+    }
 
     Ok(())
 }

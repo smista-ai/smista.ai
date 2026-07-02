@@ -1,6 +1,7 @@
 # Configuring the CLI
 
 - [Configuring the CLI](#configuring-the-cli)
+  - [Built-in default configuration](#built-in-default-configuration)
   - [Routing rules](#routing-rules)
     - [Rule fields](#rule-fields)
     - [Match semantics](#match-semantics)
@@ -21,6 +22,27 @@
 smista.ai reads TOML configuration to decide which model handles each task, what
 context may be sent where, and which tool calls require approval. Configuration
 is deterministic, versionable and inspectable — routing never depends on an LLM.
+
+## Built-in default configuration
+
+With no global or project `config.toml`, the CLI starts from a valid built-in
+configuration:
+
+```toml
+[providers.ollama]
+type = "ollama"
+
+[routing.default]
+model = "ollama/qwen2.5-coder"
+```
+
+This default is keyless and passes configuration validation on its own. Model
+availability is still checked later by the router, so using it requires an
+Ollama endpoint that can serve `qwen2.5-coder`.
+
+If you keep the built-in default route, keep `providers.ollama` enabled. If you
+replace the provider set with only remote providers, also replace
+`[routing.default]` with a model from one of those providers.
 
 ## Routing rules
 
@@ -162,6 +184,9 @@ A policy must define a default route, used when no rule matches:
 model = "openai/gpt-5.5-mini"
 fallbacks = ["ollama/qwen2.5-coder"]
 ```
+
+When no route is authored, the built-in default route is
+`ollama/qwen2.5-coder`.
 
 ## Task intents
 

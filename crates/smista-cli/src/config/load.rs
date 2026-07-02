@@ -157,6 +157,12 @@ mod tests {
         // No global is created in temp; project file is absent under this cwd.
         let config = load(&dir, None).unwrap();
         assert_eq!(config.router, Default::default());
+        let report = crate::config::validate::validate(&config);
+        assert!(
+            report.is_ok(),
+            "loaded default CLI config must validate clean: {:?}",
+            report.errors()
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
