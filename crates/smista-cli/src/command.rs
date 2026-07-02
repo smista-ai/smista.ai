@@ -3,6 +3,7 @@
 //! Each `smista` subcommand maps to a handler. The process-management commands
 //! that start and stop a local router live under [`router`].
 
+mod apikey;
 mod cli;
 mod credentials;
 mod router;
@@ -26,6 +27,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         ..
     } = args;
     match command {
+        Some(Command::Apikey(args)) => apikey::run(args, enforce_keyring),
         Some(Command::Credentials(args)) => credentials::run(args, enforce_keyring),
         Some(Command::Start(start)) => router::start(start, log_file.as_deref(), &log_filter).await,
         Some(Command::Stop(stop)) => router::stop(stop),

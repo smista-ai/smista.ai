@@ -41,7 +41,7 @@ pub fn run(
     let providers_credentials = Arc::new(ProvidersCredentials::new(credentials, &cwd));
 
     match command {
-        CredentialsCommand::Add { provider, api_key } => {
+        CredentialsCommand::Set { provider, api_key } => {
             add_credentials(providers_credentials, provider, api_key, global)
         }
         CredentialsCommand::Check { provider } => {

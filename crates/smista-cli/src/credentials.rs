@@ -5,6 +5,7 @@
 //! backend for environments where a keyring is unavailable, such as headless
 //! Linux sessions or CI jobs.
 
+mod api_key;
 mod providers;
 mod secrets;
 
@@ -13,6 +14,7 @@ use std::path::Path;
 
 use secrecy::SecretString;
 
+pub use self::api_key::ApiKeyStorage;
 pub use self::providers::ProvidersCredentials;
 use crate::credentials::secrets::{FileSecretStorage, KeyringSecretStorage, SecretStorage};
 

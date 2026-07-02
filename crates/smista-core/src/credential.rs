@@ -78,6 +78,11 @@ impl ApiKey {
         parse_api_key_user_id(self.expose())
     }
 
+    /// Returns the key as a [`SecretString`] so it can be stored in a secret backend.
+    pub fn as_secret_string(&self) -> &SecretString {
+        &self.0
+    }
+
     /// Returns the name of the request header that carries the API key.
     pub const fn header_name() -> &'static str {
         API_KEY_HEADER
@@ -99,6 +104,17 @@ impl FromStr for ApiKey {
         // can be presented back to the router exactly as issued.
         parse_api_key_user_id(s)?;
         Ok(Self(SecretString::from(s)))
+    }
+}
+
+impl TryFrom<SecretString> for ApiKey {
+    type Error = ParseError;
+
+    fn try_from(value: SecretString) -> Result<Self, Self::Error> {
+        // Validate the structure, then keep the original secret verbatim so it
+        // can be presented back to the router exactly as issued.
+        parse_api_key_user_id(value.expose_secret())?;
+        Ok(Self(value))
     }
 }
 
@@ -206,6 +222,18 @@ mod tests {
     }
 
     #[test]
+    fn should_parse_a_well_formed_api_key_from_secret_string_and_recover_its_user_id() {
+        let user_id = sample_user_id();
+        let raw = format!("{API_KEY_PREFIX_V1}{}-deadbeefsecret", user_id.simple());
+
+        let key: ApiKey = SecretString::from(raw.clone())
+            .try_into()
+            .expect("a well-formed key should parse");
+        assert_eq!(key.expose(), raw);
+        assert_eq!(key.user_id().expect("user id should parse"), user_id);
+    }
+
+    #[test]
     fn should_assemble_an_api_key_that_parses_back_to_its_user_id() {
         let user_id = sample_user_id();
         let key = ApiKey::from_parts(&user_id, "deadbeefsecret");
@@ -222,6 +250,14 @@ mod tests {
             "sk-other-deadbeef-secret".parse::<ApiKey>().unwrap_err(),
             ParseError::InvalidApiKey
         );
+    }
+
+    #[test]
+    fn should_get_api_key_as_secret_string() {
+        let user_id = sample_user_id();
+        let key = ApiKey::from_parts(&user_id, "deadbeefsecret");
+        let secret_string = key.as_secret_string();
+        assert_eq!(secret_string.expose_secret(), key.expose());
     }
 
     #[test]

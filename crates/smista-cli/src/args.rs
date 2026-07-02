@@ -1,8 +1,10 @@
+mod apikey;
 mod credentials;
 mod router;
 
 use std::path::PathBuf;
 
+pub use self::apikey::{ApikeyArgs, ApikeyCommand};
 pub use self::credentials::{CredentialsArgs, CredentialsCommand};
 pub use self::router::{RouterArgs, StopArgs};
 
@@ -55,6 +57,8 @@ impl Args {
 /// The action a `smista` invocation performs.
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
+    /// Manage smista.ai API key for the CLI.
+    Apikey(ApikeyArgs),
     /// Manage credentials for interacting with the LLMs.
     Credentials(CredentialsArgs),
     /// Start a local router. Daemonizes by default; pass `--foreground` to run
@@ -237,7 +241,7 @@ mod tests {
         assert!(!credentials.global);
         assert!(matches!(
             credentials.command,
-            CredentialsCommand::Add {
+            CredentialsCommand::Set {
                 provider: smista_sdk::core::model::Provider::OpenAI,
                 api_key
             } if api_key == "sk-test"
@@ -261,7 +265,7 @@ mod tests {
         assert!(credentials.global);
         assert!(matches!(
             credentials.command,
-            CredentialsCommand::Add {
+            CredentialsCommand::Set {
                 provider: smista_sdk::core::model::Provider::Anthropic,
                 api_key
             } if api_key == "sk-ant-test"
@@ -278,7 +282,7 @@ mod tests {
         assert!(matches!(
             set.command,
             Some(Command::Credentials(CredentialsArgs {
-                command: CredentialsCommand::Add {
+                command: CredentialsCommand::Set {
                     provider: smista_sdk::core::model::Provider::Gemini,
                     ..
                 },
@@ -332,5 +336,84 @@ mod tests {
     #[test]
     fn should_reject_unknown_credentials_provider() {
         assert!(Args::try_parse_from(["smista", "credentials", "check", "cohere"]).is_err());
+    }
+
+    #[test]
+    fn should_parse_apikey_set_command() {
+        let args = Args::parse_from([
+            "smista",
+            "apikey",
+            "set",
+            "sk-smista-api01-00000000000000000000000000000000-secret",
+        ]);
+
+        let Some(Command::Apikey(apikey)) = args.command else {
+            panic!("expected the apikey command");
+        };
+        assert!(!apikey.global);
+        assert!(matches!(
+            apikey.command,
+            ApikeyCommand::Set { api_key }
+                if api_key == "sk-smista-api01-00000000000000000000000000000000-secret"
+        ));
+    }
+
+    #[test]
+    fn should_parse_apikey_global_flag() {
+        let args = Args::parse_from([
+            "smista",
+            "apikey",
+            "--global",
+            "add",
+            "sk-smista-api01-00000000000000000000000000000000-secret",
+        ]);
+
+        let Some(Command::Apikey(apikey)) = args.command else {
+            panic!("expected the apikey command");
+        };
+        assert!(apikey.global);
+        assert!(matches!(apikey.command, ApikeyCommand::Set { .. }));
+    }
+
+    #[test]
+    fn should_parse_apikey_command_aliases() {
+        let set = Args::parse_from([
+            "smista",
+            "apikey",
+            "add",
+            "sk-smista-api01-00000000000000000000000000000000-secret",
+        ]);
+        let get = Args::parse_from(["smista", "apikey", "get"]);
+        let delete = Args::parse_from(["smista", "apikey", "delete"]);
+        let rm = Args::parse_from(["smista", "apikey", "rm"]);
+
+        assert!(matches!(
+            set.command,
+            Some(Command::Apikey(ApikeyArgs {
+                command: ApikeyCommand::Set { .. },
+                ..
+            }))
+        ));
+        assert!(matches!(
+            get.command,
+            Some(Command::Apikey(ApikeyArgs {
+                command: ApikeyCommand::Check,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            delete.command,
+            Some(Command::Apikey(ApikeyArgs {
+                command: ApikeyCommand::Remove,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            rm.command,
+            Some(Command::Apikey(ApikeyArgs {
+                command: ApikeyCommand::Remove,
+                ..
+            }))
+        ));
     }
 }
