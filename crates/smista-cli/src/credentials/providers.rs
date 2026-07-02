@@ -19,6 +19,7 @@ use crate::credentials::CredentialsStorage;
 /// Global credentials use the backend's global scope. Reads always ask
 /// [`CredentialsStorage`] to resolve local credentials first and then global
 /// credentials.
+#[derive(Clone)]
 pub struct ProvidersCredentials {
     cwd: PathBuf,
     storage: Arc<CredentialsStorage>,

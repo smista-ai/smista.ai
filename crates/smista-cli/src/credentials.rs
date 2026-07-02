@@ -6,6 +6,14 @@
 //! Linux sessions or CI jobs.
 
 mod api_key;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "E2EE key storage is implemented before session workflow wiring."
+    )
+)]
+mod e2ee;
 mod providers;
 mod secrets;
 
@@ -15,6 +23,7 @@ use std::path::Path;
 use secrecy::SecretString;
 
 pub use self::api_key::ApiKeyStorage;
+pub use self::e2ee::E2eeKeysCredentials;
 pub use self::providers::ProvidersCredentials;
 use crate::credentials::secrets::{FileSecretStorage, KeyringSecretStorage, SecretStorage};
 

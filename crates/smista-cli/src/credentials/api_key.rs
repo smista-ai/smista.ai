@@ -19,6 +19,7 @@ use crate::credentials::CredentialsStorage;
 /// Global API keys use the backend's global scope. Reads always ask
 /// [`CredentialsStorage`] to resolve local credentials first and then global
 /// credentials, so a project-local key overrides a global one.
+#[derive(Clone)]
 pub struct ApiKeyStorage {
     cwd: PathBuf,
     storage: Arc<CredentialsStorage>,
