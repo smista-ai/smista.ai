@@ -121,7 +121,7 @@ mod tests {
         );
         let stack = vec![
             (ConfigLayer::Project, project),
-            (ConfigLayer::LocalPrefs, local),
+            (ConfigLayer::RuntimeOverride, local),
         ];
         let mut report = ValidationReport::default();
         check_provenance(&stack, &mut report);
@@ -151,7 +151,7 @@ mod tests {
         let stack = vec![
             (ConfigLayer::Global, global),
             (ConfigLayer::Project, project),
-            (ConfigLayer::LocalPrefs, local),
+            (ConfigLayer::RuntimeOverride, local),
         ];
         let mut report = ValidationReport::default();
         check_provenance(&stack, &mut report);
@@ -237,7 +237,7 @@ mod tests {
         );
         let stack = vec![
             (ConfigLayer::Project, project),
-            (ConfigLayer::LocalPrefs, local),
+            (ConfigLayer::RuntimeOverride, local),
         ];
         let mut report = ValidationReport::default();
         check_provenance(&stack, &mut report);

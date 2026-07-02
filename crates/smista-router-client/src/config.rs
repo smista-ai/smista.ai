@@ -10,7 +10,7 @@ use std::time::Duration;
 use url::Url;
 
 /// Default router base URL: the loopback address and port the router listens on.
-const DEFAULT_URL: &str = "http://localhost:7331";
+pub const DEFAULT_URL: &str = "http://localhost:7331";
 /// Default time to wait for the TCP connection to be established.
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Default time to wait for a full request/response round-trip.

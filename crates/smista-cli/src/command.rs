@@ -7,6 +7,7 @@ mod apikey;
 mod cli;
 mod credentials;
 mod router;
+mod status;
 
 use crate::args::{Args, Command};
 
@@ -30,7 +31,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         Some(Command::Apikey(args)) => apikey::run(args, enforce_keyring),
         Some(Command::Credentials(args)) => credentials::run(args, enforce_keyring),
         Some(Command::Start(start)) => router::start(start, log_file.as_deref(), &log_filter).await,
+        Some(Command::Status(args)) => status::run(args).await,
         Some(Command::Stop(stop)) => router::stop(stop),
-        None => cli::run(enforce_keyring),
+        None => cli::run(enforce_keyring).await,
     }
 }

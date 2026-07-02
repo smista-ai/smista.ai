@@ -44,6 +44,6 @@ pub use smista_router_client::ReqwestClient;
 pub use smista_router_client::UreqClient;
 #[doc(inline)]
 pub use smista_router_client::{
-    ApiKey, Client, ProviderCredentials, Result, RouterClientConfig, RouterClientError,
-    SessionToken,
+    ApiKey, Client, DEFAULT_URL as ROUTER_DEFAULT_URL, ProviderCredentials, Result,
+    RouterClientConfig, RouterClientError, SessionToken,
 };

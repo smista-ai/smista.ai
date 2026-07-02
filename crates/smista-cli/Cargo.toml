@@ -30,7 +30,7 @@ secrecy = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 sha2 = { workspace = true }
 smista-router = { workspace = true }
-smista-sdk = { workspace = true }
+smista-sdk = { workspace = true, features = ["reqwest-client"] }
 sysinfo = { workspace = true, features = ["system"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "macros", "net", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
@@ -39,6 +39,7 @@ toml = { workspace = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
+url = { workspace = true }
 uuid = { workspace = true }
 yaml_serde = { workspace = true }
 

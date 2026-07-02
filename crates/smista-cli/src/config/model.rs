@@ -3,14 +3,16 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use smista_sdk::core::model::Provider;
-use smista_sdk::core::policy::{ClassificationConfig, PrivacyPolicy, RoutingPolicy, ToolsConfig};
+use smista_sdk::core::model::{ModelReference, Provider};
+use smista_sdk::core::policy::{
+    ClassificationConfig, DefaultRoute, PrivacyPolicy, RoutingPolicy, ToolsConfig,
+};
 
 /// The merged CLI/policy configuration loaded from `config.toml`.
 ///
-/// Every section defaults to empty so a missing or partial file is valid; the
-/// layered merge (`super::layers`) combines layers per section.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+/// The built-in default is a valid, keyless local-first policy. Missing or
+/// partial authored files are merged onto that baseline by `super::layers`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// Configured providers, keyed by provider identity.
@@ -25,9 +27,47 @@ pub struct Config {
     pub privacy: PrivacyPolicy,
     /// Router client connection settings.
     pub router: RouterClientConfig,
-    /// Uncommitted local preferences (highest non-runtime layer).
+    /// Local preference fields merged with the rest of the CLI config.
     #[serde(rename = "local_preferences")]
     pub local: LocalPreferences,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        let default_provider = Provider::Ollama;
+        let mut providers = BTreeMap::new();
+        providers.insert(
+            default_provider.clone(),
+            ProviderConfig {
+                kind: Some(default_provider),
+                api_key: None,
+            },
+        );
+
+        Self {
+            providers,
+            routing: RoutingPolicy {
+                rules: Vec::new(),
+                default: Some(DefaultRoute {
+                    model: default_model_reference(),
+                    fallbacks: Vec::new(),
+                }),
+            },
+            classification: ClassificationConfig::default(),
+            tools: ToolsConfig::default(),
+            privacy: PrivacyPolicy::default(),
+            router: RouterClientConfig::default(),
+            local: LocalPreferences::default(),
+        }
+    }
+}
+
+/// Returns the built-in CLI default model.
+fn default_model_reference() -> ModelReference {
+    ModelReference {
+        provider: Provider::Ollama,
+        model: "qwen2.5-coder".to_string(),
+    }
 }
 
 /// How a provider is configured client-side.
@@ -86,7 +126,7 @@ pub struct RouterClientConfig {
     pub auth_source: Option<AuthSource>,
 }
 
-/// Uncommitted local preferences. The only layer that is not version-controlled.
+/// Local preference fields embedded in CLI configuration.
 ///
 /// All fields are optional so that an unset preference defers to lower layers
 /// during the merge.
@@ -114,6 +154,16 @@ mod tests {
     fn should_deserialize_empty_config_to_default() {
         let config: Config = toml::from_str("").unwrap();
         assert_eq!(config, Config::default());
+    }
+
+    #[test]
+    fn should_default_to_ollama_provider_and_route() {
+        let config = Config::default();
+        assert!(config.providers.contains_key(&Provider::Ollama));
+        assert_eq!(
+            config.routing.default.unwrap().model.to_string(),
+            "ollama/qwen2.5-coder"
+        );
     }
 
     #[test]

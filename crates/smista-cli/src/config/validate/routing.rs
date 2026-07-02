@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn should_flag_missing_default_route() {
-        let config = parse("", "test").unwrap();
+        let config = parse("[routing]\n", "test").unwrap();
         let mut report = ValidationReport::default();
         check_routing_structure(&config, &mut report);
         assert!(

@@ -77,6 +77,6 @@ pub use self::client::ReqwestClient;
 #[cfg(feature = "ureq")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ureq")))]
 pub use self::client::UreqClient;
-pub use self::config::RouterClientConfig;
+pub use self::config::{DEFAULT_URL, RouterClientConfig};
 pub use self::credentials::{ApiKey, ProviderCredentials, SessionToken};
 pub use self::error::{Result, RouterClientError};

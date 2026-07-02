@@ -25,16 +25,63 @@
 //! [`store`] the discovery and lookup logic, [`warning`] and [`error`] the
 //! reported findings, and [`front_matter`] the `SKILL.md` parsing helpers.
 
+#![expect(
+    dead_code,
+    reason = "skills types are consumed by the interactive CLI in milestone M6"
+)]
+
 mod entry;
 mod error;
 mod front_matter;
 mod store;
 mod warning;
 
+use std::path::{Path, PathBuf};
+
 pub use entry::SkillEntry;
 pub use error::SkillError;
+use smista_sdk::core::paths::{home_agents_dir, project_agents_dir};
 pub use store::SkillStore;
 pub use warning::SkillWarning;
 
 /// Name of the descriptor file every skill directory must contain.
 const SKILL_FILE: &str = "SKILL.md";
+/// Skills directory name within an agents directory.
+const SKILLS_DIR: &str = "skills";
+
+/// Returns the project skills directory: `<cwd>/.agents/skills`.
+///
+/// Skills are shared across agent tools, so they live under the cross-tool
+/// `.agents` directory rather than under smista's own `.smista` directory.
+#[must_use]
+fn skills_dir(cwd: &Path) -> PathBuf {
+    project_agents_dir(cwd).join(SKILLS_DIR)
+}
+
+/// Returns the global skills directory: `~/.agents/skills`, if resolvable.
+///
+/// Like the project skills directory (see [`skills_dir`]), global skills live
+/// under the cross-tool `~/.agents` directory. Project skills take precedence
+/// over these.
+#[must_use]
+fn global_skills_dir() -> Option<PathBuf> {
+    home_agents_dir().map(|dir| dir.join(SKILLS_DIR))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_place_project_skills_under_agents() {
+        let path = skills_dir(Path::new("/repo"));
+        assert_eq!(path, Path::new("/repo").join(".agents").join("skills"));
+    }
+
+    #[test]
+    fn should_build_global_skills_under_home_agents() {
+        if let Some(path) = global_skills_dir() {
+            assert!(path.ends_with(Path::new(".agents").join("skills")));
+        }
+    }
+}

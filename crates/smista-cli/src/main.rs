@@ -18,6 +18,7 @@ mod config;
 mod credentials;
 mod log;
 mod signal;
+mod skills;
 mod telemetry;
 
 use clap::Parser as _;

@@ -5,9 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use smista_sdk::core::paths::{
-    global_config_dir, home_agents_dir, project_agents_dir, project_dir, runtime_dir,
-};
+use smista_sdk::core::paths::{global_config_dir, project_dir, runtime_dir};
 
 /// Configuration file name within a configuration directory.
 const CONFIG_FILE: &str = "config.toml";
@@ -15,8 +13,6 @@ const CONFIG_FILE: &str = "config.toml";
 const ROUTER_PIDFILE: &str = "router.pid";
 /// Secrets file name within the project directory.
 const SECRETS_FILE: &str = "secrets";
-/// Skills directory name within the project directory.
-const SKILLS_DIR: &str = "skills";
 /// Plans directory name within the project directory.
 const PLANS_DIR: &str = "plans";
 
@@ -62,34 +58,15 @@ pub fn global_secrets_file() -> Option<PathBuf> {
     global_config_dir().map(|dir| dir.join(SECRETS_FILE))
 }
 
-/// Returns the project skills directory: `<cwd>/.agents/skills`.
-///
-/// Skills are shared across agent tools, so they live under the cross-tool
-/// `.agents` directory rather than under smista's own `.smista` directory.
-///
-/// The use of `.agents` dir allows to share skills between different tools and implicitly support skills
-/// installed with Vercel's `skill` CLI tool.
-#[must_use]
-pub fn skills_dir(cwd: &Path) -> PathBuf {
-    project_agents_dir(cwd).join(SKILLS_DIR)
-}
-
-/// Returns the global skills directory: `~/.agents/skills`, if the home
-/// directory resolves.
-///
-/// Like the project skills directory (see [`skills_dir`]), global skills live
-/// under the cross-tool `~/.agents` directory. Project skills take precedence
-/// over these.
-///
-/// The use of `.agents` dir allows to share skills between different tools and implicitly support skills
-/// installed with Vercel's `skill` CLI tool.
-#[must_use]
-pub fn global_skills_dir() -> Option<PathBuf> {
-    home_agents_dir().map(|dir| dir.join(SKILLS_DIR))
-}
-
 /// Returns the project plans directory: `<cwd>/.smista/plans`.
 #[must_use]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "plans storage path is reserved for upcoming plan support"
+    )
+)]
 pub fn plans_dir(cwd: &Path) -> PathBuf {
     project_dir(cwd).join(PLANS_DIR)
 }
@@ -124,26 +101,12 @@ mod tests {
     }
 
     #[test]
-    fn should_build_skills_and_plans_dirs() {
-        assert!(skills_dir(Path::new("/repo")).ends_with("skills"));
+    fn should_build_plans_dir() {
         assert!(plans_dir(Path::new("/repo")).ends_with("plans"));
-    }
-
-    #[test]
-    fn should_place_project_skills_under_agents() {
-        let path = skills_dir(Path::new("/repo"));
-        assert_eq!(path, Path::new("/repo").join(".agents").join("skills"));
     }
 
     #[test]
     fn should_build_router_pidfile_under_runtime_dir() {
         assert!(router_pidfile().ends_with("router.pid"));
-    }
-
-    #[test]
-    fn should_build_global_skills_under_home_agents() {
-        if let Some(path) = global_skills_dir() {
-            assert!(path.ends_with(Path::new(".agents").join("skills")));
-        }
     }
 }

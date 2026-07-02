@@ -7,6 +7,7 @@
     - [Credential storage](#credential-storage)
     - [Managing router API keys](#managing-router-api-keys)
     - [Managing provider credentials](#managing-provider-credentials)
+    - [Checking router status](#checking-router-status)
     - [Version and help](#version-and-help)
   - [Interactive slash commands](#interactive-slash-commands)
     - [Session](#session)
@@ -29,6 +30,7 @@ interactive session where commands are typed as slash commands.
 | `smista apikey ...`      | Add, check, or remove the router API key.                     |
 | `smista credentials ...` | Add, check, or remove provider API keys.                      |
 | `smista start`           | Start the local router. Daemonizes by default.                |
+| `smista status`          | Check whether the router is reachable and report its version. |
 | `smista stop`            | Stop the local router recorded in the pidfile.                |
 | `smista --version`       | Print the CLI version.                                        |
 | `smista --help`          | Show help.                                                    |
@@ -152,6 +154,23 @@ instance name, for example:
 
 ```sh
 smista credentials set openai-compat:my-vllm sk-...
+```
+
+### Checking router status
+
+Use `smista status` to query the router's `/status` endpoint and print the
+router state and version.
+
+```sh
+smista status
+```
+
+By default, the command uses the configured router URL from CLI configuration.
+If no router URL is configured, it falls back to the default local router URL.
+Pass `--url` to check a specific router instance:
+
+```sh
+smista status --url http://127.0.0.1:7331
 ```
 
 ### Version and help

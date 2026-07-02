@@ -1,12 +1,14 @@
 mod apikey;
 mod credentials;
 mod router;
+mod status;
 
 use std::path::PathBuf;
 
 pub use self::apikey::{ApikeyArgs, ApikeyCommand};
 pub use self::credentials::{CredentialsArgs, CredentialsCommand};
 pub use self::router::{RouterArgs, StopArgs};
+pub use self::status::StatusArgs;
 
 /// Top-level `smista` command-line arguments.
 ///
@@ -64,6 +66,8 @@ pub enum Command {
     /// Start a local router. Daemonizes by default; pass `--foreground` to run
     /// it in the current process.
     Start(RouterArgs),
+    /// Get router status. Queries the router `/status` endpoint and prints the result.
+    Status(StatusArgs),
     /// Stop the local router recorded in the pidfile.
     Stop(StopArgs),
 }

@@ -7,7 +7,7 @@ use smista_sdk::core::skill::Skill;
 
 use super::front_matter::{parse_front_matter, split_front_matter};
 use super::{SkillEntry, SkillError, SkillWarning};
-use crate::config::paths::{global_skills_dir, skills_dir};
+use crate::skills::{global_skills_dir, skills_dir};
 
 /// The set of discovered skills and the source of truth for skill names.
 ///
