@@ -38,7 +38,7 @@ argon2 = { version = "0.5", default-features = false }
 async-trait = "0.1"
 axum = { version = "0.8", default-features = false }
 chrono = "0.4"
-clap = "4"
+clap = { version = "4", default-features = false }
 dirs = "6"
 futures = "0.3"
 globset = "0.4"

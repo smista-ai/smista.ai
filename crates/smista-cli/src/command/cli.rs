@@ -5,10 +5,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::credentials::{CredentialsStorage, ProvidersCredentials};
+use crate::credentials::{ApiKeyStorage, CredentialsStorage, ProvidersCredentials};
 
 #[expect(dead_code, reason = "context will be used in the next tasks")]
 pub struct Context {
+    api_key: Arc<ApiKeyStorage>,
     cwd: PathBuf,
     providers_credentials: Arc<ProvidersCredentials>,
 }
@@ -28,6 +29,7 @@ pub fn run(enforce_keyring: bool) -> anyhow::Result<()> {
 
     // build context
     let _context = Context {
+        api_key: Arc::new(ApiKeyStorage::new(credentials.clone(), &cwd)),
         providers_credentials: Arc::new(ProvidersCredentials::new(credentials, &cwd)),
         cwd,
     };

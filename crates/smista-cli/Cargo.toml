@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-clap = { workspace = true, features = ["derive", "env"] }
+clap = { workspace = true, features = ["color", "derive", "env", "help", "std", "suggestions", "usage"] }
 globset = { workspace = true }
 keyring-core = { workspace = true }
 opentelemetry = { workspace = true }
@@ -35,6 +35,7 @@ toml = { workspace = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "registry"] }
+uuid = { workspace = true }
 yaml_serde = { workspace = true }
 
 [target."cfg(target_os = \"linux\")".dependencies]
