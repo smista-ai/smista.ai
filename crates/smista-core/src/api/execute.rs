@@ -213,7 +213,7 @@ pub struct ContextFile {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts", ts(export))]
 pub struct ContextInstruction {
-    /// Where the instruction came from, for example `SMISTA.md`.
+    /// Where the instruction came from, for example `AGENTS.md`.
     pub source: String,
     /// The instruction content.
     pub content: String,
@@ -493,7 +493,7 @@ mod tests {
         "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
         "attachments": {
             "files": [ { "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true } ],
-            "instructions": [ { "source": "SMISTA.md", "content": "..." } ],
+            "instructions": [ { "source": "AGENTS.md", "content": "..." } ],
             "invoked_skills": [ { "name": "code-review", "content": "Report findings by severity." } ],
             "available_skills": [ { "name": "changelog", "content": "Summarize changes under a heading." } ]
         }

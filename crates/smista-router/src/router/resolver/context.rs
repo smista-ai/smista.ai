@@ -820,7 +820,7 @@ mod tests {
         let att = attachments(
             vec![file("a.rs", "code", false)],
             vec![ContextInstruction {
-                source: "SMISTA.md".to_string(),
+                source: "AGENTS.md".to_string(),
                 content: "follow the rules".to_string(),
             }],
         );
@@ -1045,7 +1045,7 @@ mod tests {
         let att = attachments(
             Vec::new(),
             vec![ContextInstruction {
-                source: "SMISTA.md".to_string(),
+                source: "AGENTS.md".to_string(),
                 content: "always do x".to_string(),
             }],
         );

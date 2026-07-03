@@ -69,7 +69,7 @@ itself — the prompt, the local files and skills, and the policy:
 | `input`                        | The prompt `text`, an optional `command` (forces the intent) and an optional `explicit_model`.        |
 | `workspace`                    | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced paths, active file.                 |
 | `attachments.files`            | Explicit `@path` files **with content** and a `content_hash`, each flagged `required` or discardable. |
-| `attachments.instructions`     | Instruction documents the client read from disk (for example `SMISTA.md`).                            |
+| `attachments.instructions`     | Instruction documents the client read from disk (for example `AGENTS.md`).                            |
 | `attachments.invoked_skills`   | Skills the user explicitly invoked, each `name` + `content` (the `SKILL.md` body).                    |
 | `attachments.available_skills` | Skills offered for the model to activate, same `name` + `content` shape.                              |
 | `policy`                       | The deterministic `routing`, `tools` and `privacy` policy, sent verbatim.                             |
@@ -190,7 +190,7 @@ same body but never calls a model.
     "files": [
       { "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true }
     ],
-    "instructions": [{ "source": "SMISTA.md", "content": "..." }],
+    "instructions": [{ "source": "AGENTS.md", "content": "..." }],
     "invoked_skills": [],
     "available_skills": []
   },
@@ -243,7 +243,7 @@ A completed turn:
       "fallback_used": false,
       "override_used": false
     },
-    "context": { "included": ["src/auth/middleware.rs", "SMISTA.md"], "excluded": [".env"] },
+    "context": { "included": ["src/auth/middleware.rs", "AGENTS.md"], "excluded": [".env"] },
     "usage": { "input_tokens": 1200, "output_tokens": 500, "estimated_cost": "0.08", "currency": "USD" },
     "trace_id": "trace:xyz"
   }
