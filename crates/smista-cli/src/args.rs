@@ -70,6 +70,10 @@ pub enum Command {
     Config(ConfigArgs),
     /// Manage credentials for interacting with the LLMs.
     Credentials(CredentialsArgs),
+    /// Log in to the router.
+    ///
+    /// This command is a no-op if the router is already logged in.
+    Login,
     /// Start a local router. Daemonizes by default; pass `--foreground` to run
     /// it in the current process.
     Start(RouterArgs),
@@ -232,6 +236,13 @@ mod tests {
             stop.pidfile.as_deref(),
             Some(Path::new("/run/user/1000/smista/router.pid"))
         );
+    }
+
+    #[test]
+    fn should_parse_login_command() {
+        let args = Args::parse_from(["smista", "login"]);
+
+        assert!(matches!(args.command, Some(Command::Login)));
     }
 
     #[test]

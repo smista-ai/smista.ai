@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
-use smista_sdk::client::{ApiKey, Client as _, ReqwestClient, RouterClientConfig};
+use smista_sdk::client::{ApiKey, Client as _, ReqwestClient};
 use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 
@@ -50,13 +50,19 @@ pub async fn run(
         crate::config::load_and_validate(&cwd).context("Failed to load CLI configuration")?;
 
     // setup router client
-    let (router_client, router_url) =
-        router_client(&config).context("Failed to create router client")?;
+    let router_client =
+        crate::client::config_client(&config).context("Failed to configure router client")?;
 
     // auto start router
-    check_and_auto_start_router(&config, &router_client, &router_url, log_file, log_filter)
-        .await
-        .context("Failed to auto-start router")?;
+    check_and_auto_start_router(
+        &config,
+        &router_client,
+        router_client.base_url(),
+        log_file,
+        log_filter,
+    )
+    .await
+    .context("Failed to auto-start router")?;
 
     let api_key = Arc::new(ApiKeyStorage::new(credentials.clone(), &cwd));
     let router_client = sign_in_router_client(router_client, api_key.get()?)
@@ -81,21 +87,6 @@ pub async fn run(
 
     tracing::info!("smista-cli main command finished");
     Ok(())
-}
-
-fn router_client(config: &Config) -> anyhow::Result<(ReqwestClient, Url)> {
-    let router_url = config
-        .router
-        .url
-        .as_deref()
-        .unwrap_or(smista_sdk::client::ROUTER_DEFAULT_URL);
-    tracing::info!("using router URL: {router_url}");
-
-    let router_url = Url::parse(router_url).context("Failed to parse router URL")?;
-    tracing::debug!("parsed router URL: {router_url}");
-    let router_client = ReqwestClient::new(RouterClientConfig::new(router_url.clone()))?;
-
-    Ok((router_client, router_url))
 }
 
 /// Checks if the router is running, and if not, tries to auto-start it.
@@ -279,10 +270,19 @@ async fn sign_in_router_client(
     api_key: Option<ApiKey>,
 ) -> anyhow::Result<ReqwestClient> {
     let Some(api_key) = api_key else {
-        anyhow::bail!("no router API key configured. Run `smista apikey set <api-key>` first.");
+        anyhow::bail!(
+            "no router API key configured. Run `smista login` or `smista apikey set <api-key>` first."
+        );
     };
+    let user_id = api_key.user_id()?;
+    tracing::debug!("signing in router client for user {user_id}");
     let client = client.with_api_key(api_key);
-    client.sign_in().await.context("router sign-in failed")?;
+    let response = client.sign_in().await.context("router sign-in failed")?;
+    tracing::info!(
+        "router sign-in succeeded for user {user_id}; session token expires at: {expires_at}",
+        user_id = user_id,
+        expires_at = response.expires_at
+    );
 
     Ok(client)
 }
@@ -297,7 +297,7 @@ mod tests {
     use std::time::Duration;
 
     use smista_mock_web_server::{Endpoint, EndpointStatus, MockRouter, defaults};
-    use smista_sdk::client::{ApiKey, Client as _};
+    use smista_sdk::client::{ApiKey, Client as _, RouterClientConfig};
 
     use super::*;
 

@@ -191,6 +191,15 @@ impl CredentialsStorage {
             backend,
         }
     }
+
+    /// Creates file-backed storage with a caller-provided global secrets path.
+    #[cfg(test)]
+    pub(crate) fn new_file_for_tests(global_path: std::path::PathBuf) -> anyhow::Result<Self> {
+        Ok(Self {
+            secret_storage: Box::new(FileSecretStorage::with_global_path(global_path)?),
+            backend: CredentialBackend::File,
+        })
+    }
 }
 
 #[cfg(test)]

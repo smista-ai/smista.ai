@@ -3,39 +3,29 @@
 //! Gets the status of the smista.ai router and print status.
 
 use anyhow::Context as _;
-use smista_sdk::client::{Client as _, ROUTER_DEFAULT_URL, ReqwestClient, RouterClientConfig};
-use url::Url;
+use smista_sdk::client::Client as _;
 
 use crate::args::StatusArgs;
 
 pub async fn run(StatusArgs { url }: StatusArgs) -> anyhow::Result<()> {
     // resolve url; if specified, use it; otherwise, load the CLI config
-    let url = match url {
-        Some(url) => url,
-        None => {
-            let config = crate::config::load_and_validate(&std::env::current_dir()?)
-                .context("Failed to load CLI configuration")?;
+    let mut config = crate::config::load_and_validate(&std::env::current_dir()?)
+        .context("Failed to load CLI configuration")?;
+    if let Some(url) = url {
+        config.router.url = Some(url.to_string());
+    }
 
-            let url = config
-                .router
-                .url
-                .unwrap_or_else(|| ROUTER_DEFAULT_URL.to_string());
+    let client =
+        crate::client::config_client(&config).context("Failed to configure router client")?;
 
-            Url::parse(&url).context("Failed to parse router URL")?
-        }
-    };
-
-    let config = RouterClientConfig::new(url.clone());
-    let reqwest_client = ReqwestClient::new(config)?;
-
-    let status = reqwest_client
+    let status = client
         .status()
         .await
         .context("Failed to get router status")?;
 
     println!(
         r#"smista.ai router ("{url}") status: "{status}" - version: "{version}""#,
-        url = url,
+        url = client.base_url(),
         status = status.status,
         version = status.version
     );

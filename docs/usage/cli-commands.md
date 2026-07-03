@@ -5,6 +5,7 @@
     - [Running the router](#running-the-router)
     - [Global flags](#global-flags)
     - [Credential storage](#credential-storage)
+    - [Logging in to the router](#logging-in-to-the-router)
     - [Managing router API keys](#managing-router-api-keys)
     - [Managing provider credentials](#managing-provider-credentials)
     - [Managing configuration files](#managing-configuration-files)
@@ -25,6 +26,7 @@ interactive session where commands are typed as slash commands.
 | `smista config ...`      | Create, inspect, edit, or check configuration files.          |
 | `smista apikey ...`      | Add, check, or remove the router API key.                     |
 | `smista credentials ...` | Add, check, or remove provider API keys.                      |
+| `smista login`           | Bootstrap a router user and store its API key.                |
 | `smista start`           | Start the local router. Daemonizes by default.                |
 | `smista status`          | Check whether the router is reachable and report its version. |
 | `smista stop`            | Stop the local router recorded in the pidfile.                |
@@ -100,17 +102,36 @@ Pass `--enforce-keyring` to make startup fail instead of falling back:
 smista --enforce-keyring
 ```
 
+### Logging in to the router
+
+Run `smista login` once after the router is reachable. The command calls the
+router bootstrap endpoint, stores the returned router API key in credential
+storage, and prints the user id.
+
+```sh
+smista start
+smista login
+```
+
+If an API key is already configured, `smista login` reports that you are already
+logged in and exits successfully.
+
 ### Managing router API keys
 
 Use `smista apikey` to store, check, and remove the API key used to sign in to
 the local router. This is the smista.ai router key returned by bootstrap, not an
-upstream provider key.
+upstream provider key. Most users should prefer `smista login`; `smista apikey`
+is available when you need to import, inspect, or remove a key explicitly.
 
 ```sh
 smista apikey set sk-smista-api01-...
 smista apikey check
 smista apikey remove
 ```
+
+To stop using the current router identity, remove the stored API key with
+`smista apikey remove`. To replace it, remove the old key and then run
+`smista login` again.
 
 API keys are stored in the project-local scope by default. Add `--global`
 before the apikey subcommand to store or remove the global key instead:

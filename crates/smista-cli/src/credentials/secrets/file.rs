@@ -59,7 +59,7 @@ impl FileSecretStorage {
     /// This constructor is test-only so tests can exercise global behavior
     /// without creating or modifying the invoking user's real secrets file.
     #[cfg(test)]
-    fn with_global_path(global_path: PathBuf) -> anyhow::Result<Self> {
+    pub(crate) fn with_global_path(global_path: PathBuf) -> anyhow::Result<Self> {
         let storage = Self { global_path };
         storage.ensure_file(&storage.global_path)?;
 
