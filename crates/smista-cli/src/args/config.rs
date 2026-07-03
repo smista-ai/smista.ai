@@ -25,20 +25,44 @@ pub struct ConfigArgs {
 /// The action a `smista config` invocation performs.
 #[derive(Debug, clap::Subcommand)]
 pub enum ConfigCommand {
+    /// Validate the contents of a configuration file.
+    Check {
+        /// Configuration file to check.
+        #[clap(value_enum, default_value_t = ConfigScope::Project)]
+        scope: ConfigScope,
+    },
+    /// Edit a configuration file in the default editor.
+    Edit {
+        /// Configuration file to edit.
+        #[clap(value_enum, default_value_t = ConfigScope::Project)]
+        scope: ConfigScope,
+    },
     /// Create a starter configuration file.
     Init {
         /// Replace the target configuration file if it already exists.
         #[clap(short = 'f', long = "force")]
         force: bool,
         /// Configuration file to initialize.
-        #[clap(value_enum, default_value_t = ConfigInitScope::Project)]
-        scope: ConfigInitScope,
+        #[clap(value_enum, default_value_t = ConfigScope::Project)]
+        scope: ConfigScope,
+    },
+    /// Show the path to a configuration file.
+    Path {
+        /// Configuration file to show the path for.
+        #[clap(value_enum)]
+        scope: Option<ConfigScope>,
+    },
+    /// Display the contents of a configuration file.
+    Show {
+        /// Configuration file to show.
+        #[clap(value_enum)]
+        scope: Option<ConfigScope>,
     },
 }
 
-/// The configuration file selected by `smista config init`.
+/// The configuration file selected by `smista config` commands.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, clap::ValueEnum)]
-pub enum ConfigInitScope {
+pub enum ConfigScope {
     /// Router runtime configuration.
     #[clap(name = "router")]
     Router,

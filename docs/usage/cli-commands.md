@@ -7,7 +7,7 @@
     - [Credential storage](#credential-storage)
     - [Managing router API keys](#managing-router-api-keys)
     - [Managing provider credentials](#managing-provider-credentials)
-    - [Creating configuration files](#creating-configuration-files)
+    - [Managing configuration files](#managing-configuration-files)
     - [Checking router status](#checking-router-status)
     - [Version and help](#version-and-help)
   - [Interactive slash commands](#interactive-slash-commands)
@@ -22,7 +22,7 @@ interactive session where commands are typed as slash commands.
 | ------------------------ | ------------------------------------------------------------- |
 | `smista`                 | Start an interactive session.                                 |
 | `smista <prompt>`        | Start a session, run the prompt, show the result.             |
-| `smista config init`     | Create a starter configuration file.                          |
+| `smista config ...`      | Create, inspect, edit, or check configuration files.          |
 | `smista apikey ...`      | Add, check, or remove the router API key.                     |
 | `smista credentials ...` | Add, check, or remove provider API keys.                      |
 | `smista start`           | Start the local router. Daemonizes by default.                |
@@ -152,7 +152,7 @@ instance name, for example:
 smista credentials set openai-compat:my-vllm sk-...
 ```
 
-### Creating configuration files
+### Managing configuration files
 
 Use `smista config init` to create starter configuration files. The command
 creates missing parent folders and prints the path it wrote.
@@ -180,6 +180,56 @@ the target file, or `--config <path>` to write a specific path:
 ```sh
 smista config --config ./router.toml init router
 smista config init --force project
+```
+
+Use `smista config show` to inspect configuration:
+
+| Command                      | What it prints                          |
+| ---------------------------- | --------------------------------------- |
+| `smista config show`         | Effective merged CLI configuration.     |
+| `smista config show project` | The project CLI configuration layer.    |
+| `smista config show global`  | The global CLI configuration layer.     |
+| `smista config show router`  | The router runtime configuration layer. |
+
+The merged view applies the same precedence used by the CLI: built-in defaults,
+then global configuration, then project configuration. Single-layer views read
+one file. Sensitive keys such as `api_key`, `password`, and `secret` are printed
+as `[redacted]`.
+
+Use `smista config path` to find configuration files:
+
+| Command                      | What it prints                                       |
+| ---------------------------- | ---------------------------------------------------- |
+| `smista config path`         | Router, global, and project paths with exist status. |
+| `smista config path project` | Project CLI configuration path only.                 |
+| `smista config path global`  | Global CLI configuration path only.                  |
+| `smista config path router`  | Router runtime configuration path only.              |
+
+Use `smista config edit` to open a configuration file:
+
+```sh
+smista config edit project
+smista config edit global
+smista config edit router
+```
+
+The editor comes from `VISUAL`, then `EDITOR`. If neither is set, smista uses
+the platform default opener. The command refuses to open a missing file and
+points at `smista config init <target>` instead.
+
+Use `smista config check` to validate a single configuration file:
+
+```sh
+smista config check project
+smista config check global
+smista config check router
+```
+
+Pass `--config <path>` before the subcommand to operate on a specific file:
+
+```sh
+smista config --config ./custom.toml show project
+smista config --config ./custom.toml check project
 ```
 
 ### Checking router status

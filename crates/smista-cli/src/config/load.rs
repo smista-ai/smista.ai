@@ -134,6 +134,23 @@ pub fn load_with_layers(
     Ok((merged, layers))
 }
 
+/// Loads a single CLI configuration file from an explicit path.
+///
+/// Missing files are treated as an empty configuration layer, matching the
+/// layered loader's behavior for optional global and project files.
+///
+/// # Errors
+///
+/// Returns [`ConfigError::Io`] when the file exists but cannot be read, or
+/// [`ConfigError::Parse`] when it contains invalid TOML.
+pub fn load_at(path: &Path) -> Result<Config, ConfigError> {
+    tracing::debug!(
+        config.path = %path.display(),
+        "loading configuration from explicit path"
+    );
+    read_layer(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +192,49 @@ mod tests {
         let config = load(&dir, Some(runtime)).unwrap();
         assert_eq!(config.router.url.as_deref(), Some("http://runtime"));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn should_load_explicit_config_from_tempfile() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[router]\nauto_start = true\n")
+            .expect("failed to write sample CLI config");
+
+        let config = load_at(&path).expect("failed to load explicit config");
+
+        assert!(config.router.auto_start);
+    }
+
+    #[test]
+    fn should_default_when_explicit_config_file_is_missing() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let path = dir.path().join("missing.toml");
+
+        let config = load_at(&path).expect("missing explicit config should default");
+
+        assert_eq!(config, Config::default());
+    }
+
+    #[test]
+    fn should_return_parse_error_for_explicit_invalid_config() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "this is = = invalid")
+            .expect("failed to write invalid sample CLI config");
+
+        let error = load_at(&path).unwrap_err();
+
+        assert!(matches!(error, ConfigError::Parse { .. }));
+    }
+
+    #[test]
+    fn should_return_io_error_for_explicit_directory_path() {
+        let dir = tempfile::tempdir().expect("failed to create temp dir");
+
+        let error = load_at(dir.path()).unwrap_err();
+
+        assert!(matches!(error, ConfigError::Io { .. }));
     }
 
     #[test]
