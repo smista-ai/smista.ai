@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn should_assemble_system_history_and_user_input() {
         let ctx = resolved_context_with(vec![
-            candidate(CandidateKind::Instruction, "SMISTA.md body"),
+            candidate(CandidateKind::Instruction, "AGENTS.md body"),
             candidate(CandidateKind::File, "fn main() {}"),
         ]);
         let history = vec![RecalledMessage {
@@ -153,7 +153,7 @@ mod tests {
         assert!(matches!(
             messages.first(),
             Some(RequestMessage::System { content })
-                if content.contains("PREAMBLE") && content.contains("SMISTA.md body")
+                if content.contains("PREAMBLE") && content.contains("AGENTS.md body")
         ));
         assert!(messages.iter().any(|message| matches!(
             message,

@@ -206,7 +206,7 @@ pub(crate) fn preview() -> PreviewResponse {
         provider: Provider::OpenAI,
         model: "gpt-5.5-thinking".to_owned(),
         matched_rule: Some("task.review -> openai/gpt-5.5-thinking".to_owned()),
-        included_context: vec!["current git diff".to_owned(), "SMISTA.md".to_owned()],
+        included_context: vec!["current git diff".to_owned(), "AGENTS.md".to_owned()],
         excluded_context: vec![".env".to_owned()],
         estimated_cost: CostRange {
             min: rust_decimal::Decimal::new(3, 2),

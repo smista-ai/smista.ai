@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Context as _;
+use tokio_util::sync::CancellationToken;
 
 use crate::config::Config;
 use crate::credentials::{
@@ -19,12 +20,16 @@ pub struct Context {
     config: Arc<Config>,
     cwd: PathBuf,
     e2ee_keys: Arc<E2eeKeysCredentials>,
+    exit: CancellationToken,
     providers_credentials: Arc<ProvidersCredentials>,
     skills_store: Arc<SkillStore>,
 }
 
 /// Runs smista.ai TUI and smista-router client; base subcommand.
-pub async fn run(enforce_keyring: bool) -> anyhow::Result<()> {
+///
+/// The `initial_prompt` is an optional string that will be used as the initial prompt for the TUI.
+/// If it is `None`, the TUI will start with an empty prompt.
+pub async fn run(_initial_prompt: Option<String>, enforce_keyring: bool) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
     tracing::debug!(
         "running smista-cli main command; cwd is {cwd}",
@@ -45,14 +50,14 @@ pub async fn run(enforce_keyring: bool) -> anyhow::Result<()> {
         api_key: Arc::new(ApiKeyStorage::new(credentials.clone(), &cwd)),
         config: Arc::new(config),
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
+        exit: CancellationToken::new(),
         providers_credentials: Arc::new(ProvidersCredentials::new(credentials, &cwd)),
         skills_store: Arc::new(SkillStore::discover(&cwd)),
         cwd,
     };
 
+    // TODO: link initial_prompt to the TUI; the tui will log it into the chat, and push to the router client.
     // TODO: check config auto-start for router and start it if needed
-    // TODO: in the future Context will have to hold the E2EE keys storage, the provider credentials storage, and the apikey storage instead
-    // TODO: context must also hold the CancellationToken
     // TODO: in next task we will run the main loop here
 
     tracing::debug!("smista-cli main command finished");

@@ -99,7 +99,7 @@ mod tests {
             "provider": "openai",
             "model": "gpt-5.5-thinking",
             "matched_rule": "task.review -> openai/gpt-5.5-thinking",
-            "included_context": ["current git diff", "SMISTA.md"],
+            "included_context": ["current git diff", "AGENTS.md"],
             "excluded_context": [".env", "target/**"],
             "estimated_cost": { "min": "0.03", "max": "0.09", "currency": "USD" },
             "required_permissions": [
@@ -139,7 +139,7 @@ mod tests {
             provider: Provider::OpenAI,
             model: "gpt-5.5-thinking".to_string(),
             matched_rule: None,
-            included_context: vec!["SMISTA.md".to_string()],
+            included_context: vec!["AGENTS.md".to_string()],
             excluded_context: Vec::new(),
             estimated_cost: CostRange {
                 min: "0.01".parse().unwrap(),

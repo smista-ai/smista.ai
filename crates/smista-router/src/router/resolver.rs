@@ -138,7 +138,7 @@ pub struct ContextFile {
 /// [`ContextInstruction`](smista_core::api::ContextInstruction).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContextInstruction {
-    /// Where the instruction came from, for example `SMISTA.md`.
+    /// Where the instruction came from, for example `AGENTS.md`.
     pub source: String,
     /// The instruction content.
     pub content: String,

@@ -26,6 +26,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         enforce_keyring,
         log_file,
         log_filter,
+        prompt,
         ..
     } = args;
     match command {
@@ -35,6 +36,6 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         Some(Command::Start(start)) => router::start(start, log_file.as_deref(), &log_filter).await,
         Some(Command::Status(args)) => status::run(args).await,
         Some(Command::Stop(stop)) => router::stop(stop),
-        None => cli::run(enforce_keyring).await,
+        None => cli::run(prompt, enforce_keyring).await,
     }
 }

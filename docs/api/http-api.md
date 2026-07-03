@@ -442,7 +442,7 @@ continuations and the streaming flow, see
   "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
   "attachments": {
     "files": [{ "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true }],
-    "instructions": [{ "source": "SMISTA.md", "content": "..." }],
+    "instructions": [{ "source": "AGENTS.md", "content": "..." }],
     "invoked_skills": [{ "name": "code-review", "content": "Report findings by severity." }],
     "available_skills": [{ "name": "changelog", "content": "Summarize changes under a heading." }]
   }
@@ -532,7 +532,7 @@ explanation under `data`:
       "override_used": false
     },
     "context": {
-      "included": ["src/auth/middleware.rs", "SMISTA.md", "current git diff"],
+      "included": ["src/auth/middleware.rs", "AGENTS.md", "current git diff"],
       "excluded": [".env", "secrets/**"]
     },
     "usage": {
@@ -669,7 +669,7 @@ and the required permissions:
   "provider": "openai",
   "model": "gpt-5.5-thinking",
   "matched_rule": "task.review -> openai/gpt-5.5-thinking",
-  "included_context": ["current git diff", "SMISTA.md"],
+  "included_context": ["current git diff", "AGENTS.md"],
   "excluded_context": [".env", "target/**"],
   "estimated_cost": { "min": "0.03", "max": "0.09", "currency": "USD" },
   "required_permissions": [

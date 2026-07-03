@@ -1544,7 +1544,7 @@
         "properties": {
           "source": {
             "type": "string",
-            "description": "Where the instruction came from, for example `SMISTA.md`."
+            "description": "Where the instruction came from, for example `AGENTS.md`."
           },
           "content": {
             "type": "string",

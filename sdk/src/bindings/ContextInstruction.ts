@@ -5,7 +5,7 @@
  */
 export type ContextInstruction = { 
 /**
- * Where the instruction came from, for example `SMISTA.md`.
+ * Where the instruction came from, for example `AGENTS.md`.
  */
 source: string, 
 /**
