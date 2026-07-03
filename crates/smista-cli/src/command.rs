@@ -5,6 +5,7 @@
 
 mod apikey;
 mod cli;
+mod config;
 mod credentials;
 mod router;
 mod status;
@@ -29,6 +30,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     } = args;
     match command {
         Some(Command::Apikey(args)) => apikey::run(args, enforce_keyring),
+        Some(Command::Config(args)) => config::run(args),
         Some(Command::Credentials(args)) => credentials::run(args, enforce_keyring),
         Some(Command::Start(start)) => router::start(start, log_file.as_deref(), &log_filter).await,
         Some(Command::Status(args)) => status::run(args).await,
