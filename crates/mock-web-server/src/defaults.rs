@@ -1,14 +1,13 @@
-//! Canned happy-path response bodies for the [`MockRouter`](super::MockRouter).
+//! Canned happy-path response bodies for [`MockRouter`](crate::MockRouter).
 //!
 //! Each function returns one valid, representative instance of an endpoint's
-//! success response, built from the `smista-core` API types so it always matches
-//! the wire contract. The [`MockRouter`](super::MockRouter) serves these by
-//! default; a test asserting on an exact value can call the same function to get
-//! the value it should expect back.
+//! success response, built from the `smista-sdk` core API types so it always matches
+//! the wire contract. The mock serves these by default; a test asserting on an
+//! exact value can call the same function to get the value it should expect.
 
 use std::collections::BTreeMap;
 
-use smista_core::api::{
+use smista_sdk::core::api::{
     BootstrapResponse, CompletedTurn, ContextOutcome, CostRange, CreateSessionResponse,
     DeleteSessionResponse, GetSessionResponse, ListModelsResponse, ListProvidersResponse,
     ListSessionsResponse, MeResponse, MessageContent, PreviewResponse, RequiredPermission,
@@ -16,26 +15,26 @@ use smista_core::api::{
     SignInResponse, SignOutResponse, StatusResponse, TraceResponse, TurnOutcome, TurnResponse,
     UnavailableProvider, UpdateSessionResponse,
 };
-use smista_core::error::ProviderErrorCategory;
-use smista_core::intent::TaskIntent;
-use smista_core::message::{Message, MessageRole};
-use smista_core::model::{
+use smista_sdk::core::error::ProviderErrorCategory;
+use smista_sdk::core::intent::TaskIntent;
+use smista_sdk::core::message::{Message, MessageRole};
+use smista_sdk::core::model::{
     ModelAuthRequirement, ModelCapabilities, ModelDescriptor, ModelParameters, Provider,
     ProviderDescriptor,
 };
-use smista_core::policy::{Classification, Confidence, IntentSource, PermissionMode};
-use smista_core::trace::Trace;
-use smista_core::usage::Usage;
+use smista_sdk::core::policy::{Classification, Confidence, IntentSource, PermissionMode};
+use smista_sdk::core::trace::Trace;
+use smista_sdk::core::usage::Usage;
 use uuid::Uuid;
 
-/// A fixed timestamp used for every dated field in the canned responses.
+/// Returns the fixed timestamp used for every dated field in canned responses.
 fn timestamp() -> chrono::DateTime<chrono::Utc> {
     "2026-05-25T09:00:00Z"
         .parse()
         .expect("the canned timestamp is valid RFC 3339")
 }
 
-/// A representative session summary shared by the session responses.
+/// Returns the representative session summary shared by session responses.
 fn session_summary() -> SessionSummary {
     SessionSummary {
         id: Uuid::nil(),
@@ -49,7 +48,7 @@ fn session_summary() -> SessionSummary {
     }
 }
 
-/// A representative usage breakdown shared by the turn and usage responses.
+/// Returns the representative usage breakdown shared by turn and usage responses.
 fn usage() -> Usage {
     Usage {
         input_tokens: Some(1_200),
@@ -59,7 +58,7 @@ fn usage() -> Usage {
 }
 
 /// Canned body for `GET /status`.
-pub(crate) fn status() -> StatusResponse {
+pub fn status() -> StatusResponse {
     StatusResponse {
         status: "ok".to_owned(),
         version: "0.0.0".to_owned(),
@@ -70,7 +69,7 @@ pub(crate) fn status() -> StatusResponse {
 ///
 /// The API key is well-formed (`sk-smista-api01-<user-id>-<secret>`) so a client
 /// that validates it on the way in accepts it.
-pub(crate) fn bootstrap() -> BootstrapResponse {
+pub fn bootstrap() -> BootstrapResponse {
     BootstrapResponse {
         user_id: "user:abc123".to_owned(),
         api_key: format!("sk-smista-api01-{}-examplesecret", Uuid::nil().simple()),
@@ -81,7 +80,7 @@ pub(crate) fn bootstrap() -> BootstrapResponse {
 ///
 /// The token is well-formed (`<token-id>-<secret>`) so a client that validates
 /// it on the way in accepts it.
-pub(crate) fn sign_in() -> SignInResponse {
+pub fn sign_in() -> SignInResponse {
     SignInResponse {
         token: format!("{}-examplesecret", Uuid::nil().simple()),
         expires_at: timestamp(),
@@ -89,33 +88,33 @@ pub(crate) fn sign_in() -> SignInResponse {
 }
 
 /// Canned body for `POST /api/v1/auth/sign-out`.
-pub(crate) fn sign_out() -> SignOutResponse {
+pub fn sign_out() -> SignOutResponse {
     SignOutResponse { revoked: true }
 }
 
 /// Canned body for `GET /api/v1/auth/me`.
-pub(crate) fn me() -> MeResponse {
+pub fn me() -> MeResponse {
     MeResponse {
         user_id: "user:abc123".to_owned(),
     }
 }
 
 /// Canned body for `POST /api/v1/sessions`.
-pub(crate) fn create_session() -> CreateSessionResponse {
+pub fn create_session() -> CreateSessionResponse {
     CreateSessionResponse {
         session: session_summary(),
     }
 }
 
 /// Canned body for `GET /api/v1/sessions`.
-pub(crate) fn list_sessions() -> ListSessionsResponse {
+pub fn list_sessions() -> ListSessionsResponse {
     ListSessionsResponse {
         sessions: vec![session_summary()],
     }
 }
 
 /// Canned body for `GET /api/v1/sessions/{id}`.
-pub(crate) fn get_session() -> GetSessionResponse {
+pub fn get_session() -> GetSessionResponse {
     GetSessionResponse {
         session: SessionDetail {
             id: Uuid::nil(),
@@ -144,18 +143,18 @@ pub(crate) fn get_session() -> GetSessionResponse {
 }
 
 /// Canned body for `PUT /api/v1/sessions/{id}`.
-pub(crate) fn update_session() -> UpdateSessionResponse {
+pub fn update_session() -> UpdateSessionResponse {
     UpdateSessionResponse {
         session: session_summary(),
     }
 }
 
 /// Canned body for `DELETE /api/v1/sessions/{id}`.
-pub(crate) fn delete_session() -> DeleteSessionResponse {
+pub fn delete_session() -> DeleteSessionResponse {
     DeleteSessionResponse { deleted: true }
 }
 
-/// A representative classification shared by the turn and preview responses.
+/// Returns the representative classification shared by turn and preview responses.
 fn classification(intent: TaskIntent) -> Classification {
     Classification {
         intent,
@@ -166,9 +165,8 @@ fn classification(intent: TaskIntent) -> Classification {
     }
 }
 
-/// Canned body for `POST /api/v1/sessions/{id}/execute` and `/continue`: a
-/// completed, plaintext turn.
-pub(crate) fn turn() -> TurnResponse {
+/// Canned body for `POST /api/v1/sessions/{id}/execute` and `/continue`.
+pub fn turn() -> TurnResponse {
     TurnResponse {
         outcome: TurnOutcome::Completed(Box::new(CompletedTurn {
             message: Message {
@@ -199,7 +197,7 @@ pub(crate) fn turn() -> TurnResponse {
 }
 
 /// Canned body for `POST /api/v1/sessions/{id}/preview`.
-pub(crate) fn preview() -> PreviewResponse {
+pub fn preview() -> PreviewResponse {
     PreviewResponse {
         task_type: TaskIntent::Review,
         classification: classification(TaskIntent::Review),
@@ -226,8 +224,8 @@ pub(crate) fn preview() -> PreviewResponse {
     }
 }
 
-/// Canned body for `GET /api/v1/sessions/{id}/traces`: an empty trace.
-pub(crate) fn traces() -> TraceResponse {
+/// Canned body for `GET /api/v1/sessions/{id}/traces`.
+pub fn traces() -> TraceResponse {
     TraceResponse {
         trace: Trace {
             session_id: Uuid::nil(),
@@ -237,7 +235,7 @@ pub(crate) fn traces() -> TraceResponse {
 }
 
 /// Canned body for `GET /api/v1/llm/providers`.
-pub(crate) fn list_providers() -> ListProvidersResponse {
+pub fn list_providers() -> ListProvidersResponse {
     ListProvidersResponse {
         providers: vec![ProviderDescriptor {
             id: Provider::OpenAI,
@@ -248,7 +246,7 @@ pub(crate) fn list_providers() -> ListProvidersResponse {
 }
 
 /// Canned body for `GET /api/v1/llm/models`.
-pub(crate) fn list_models() -> ListModelsResponse {
+pub fn list_models() -> ListModelsResponse {
     ListModelsResponse {
         models: vec![ModelDescriptor {
             provider: Provider::Ollama,
@@ -276,7 +274,7 @@ pub(crate) fn list_models() -> ListModelsResponse {
 }
 
 /// Canned body for `GET /api/v1/sessions/{id}/usage`.
-pub(crate) fn session_usage() -> SessionUsageResponse {
+pub fn session_usage() -> SessionUsageResponse {
     SessionUsageResponse {
         total: usage(),
         by_model: Vec::new(),

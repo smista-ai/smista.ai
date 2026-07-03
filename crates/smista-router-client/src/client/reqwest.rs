@@ -572,11 +572,11 @@ mod tests {
     use secrecy::SecretString;
     use smista_core::api::{ApiErrorCode, TurnOutcome};
     use smista_core::model::Provider;
-    use wiremock::{Request, ResponseTemplate};
+    use smista_mock_web_server::{
+        Endpoint, MockRouter, Request, ResponseTemplate, api_error, defaults, sse,
+    };
 
     use super::*;
-    use crate::mock::{Endpoint, MockRouter, api_error, defaults, sse};
-
     /// A representative [`ExecuteRequest`] used to exercise the turn endpoints.
     fn execute_request() -> ExecuteRequest {
         use smista_core::api::{
@@ -639,11 +639,7 @@ mod tests {
 
     /// Returns the requests the mock recorded, in arrival order.
     async fn received(router: &MockRouter) -> Vec<Request> {
-        router
-            .server()
-            .received_requests()
-            .await
-            .expect("the mock records requests")
+        router.received_requests().await
     }
 
     /// Reads a header off the first recorded request whose path ends with `suffix`.

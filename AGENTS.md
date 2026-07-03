@@ -33,15 +33,16 @@ Routing, policy evaluation, context selection, and tool mediation belong to
 
 This is a Cargo workspace. Rust crates live under `crates/`.
 
-| Crate                  | Kind | Responsibility                                          | License     |
-| ---------------------- | ---- | ------------------------------------------------------- | ----------- |
-| `smista-core`          | lib  | Shared domain types, config, policy, errors.            | MIT         |
-| `smista-storage`       | lib  | Storage traits, entities, and SurrealDB implementation. | Elastic-2.0 |
-| `smista-providers`     | lib  | Model abstraction and provider adapters via `rig`.      | Elastic-2.0 |
-| `smista-router`        | bin  | Routing and orchestration service.                      | Elastic-2.0 |
-| `smista-router-client` | lib  | Async Rust client for the router HTTP API.              | MIT         |
-| `smista-sdk`           | lib  | Rust SDK facade re-exporting core types and client.     | MIT         |
-| `smista-cli`           | bin  | The `smista` CLI built with `ratatui` and `clap`.       | Elastic-2.0 |
+| Crate                    | Kind | Responsibility                                          | License     |
+| ------------------------ | ---- | ------------------------------------------------------- | ----------- |
+| `smista-mock-web-server` | lib  | Unpublished test helper for the router HTTP API.        | MIT         |
+| `smista-core`            | lib  | Shared domain types, config, policy, errors.            | MIT         |
+| `smista-storage`         | lib  | Storage traits, entities, and SurrealDB implementation. | Elastic-2.0 |
+| `smista-providers`       | lib  | Model abstraction and provider adapters via `rig`.      | Elastic-2.0 |
+| `smista-router`          | bin  | Routing and orchestration service.                      | Elastic-2.0 |
+| `smista-router-client`   | lib  | Async Rust client for the router HTTP API.              | MIT         |
+| `smista-sdk`             | lib  | Rust SDK facade re-exporting core types and client.     | MIT         |
+| `smista-cli`             | bin  | The `smista` CLI built with `ratatui` and `clap`.       | Elastic-2.0 |
 
 The TypeScript SDK lives in [sdk/](sdk/) as `@smista-ai/sdk`. Documentation is
 an mdBook under [docs/](docs/).

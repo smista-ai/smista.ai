@@ -53,4 +53,5 @@ apple-native-keyring-store = { workspace = true, features = ["keychain"] }
 windows-native-keyring-store = { workspace = true }
 
 [dev-dependencies]
+smista-mock-web-server = { workspace = true }
 tempfile = { workspace = true }
