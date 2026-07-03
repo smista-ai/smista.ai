@@ -37,6 +37,7 @@ deterministic routing.
 
 | Component                                                       | Description                                                                                    | License     |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------- |
+| [`smista-mock-web-server`](crates/mock-web-server/README.md)    | Unpublished test helper for mocking the router HTTP API.                                       | MIT         |
 | [`smista-cli`](crates/smista-cli/README.md)                     | The `smista` command-line interface for developers.                                            | Elastic-2.0 |
 | [`smista-core`](crates/smista-core/README.md)                   | Shared domain types, config, routing policy and validation.                                    | MIT         |
 | [`smista-providers`](crates/smista-providers/README.md)         | Model abstraction and provider adapters (OpenAI, Anthropic, Gemini).                           | Elastic-2.0 |

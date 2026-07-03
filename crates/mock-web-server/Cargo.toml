@@ -1,0 +1,27 @@
+[package]
+name = "smista-mock-web-server"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = "MIT"
+publish = false
+readme = "README.md"
+repository = { workspace = true }
+rust-version = { workspace = true }
+description = "Unpublished test helper for mocking the smista-router HTTP API."
+
+[dependencies]
+axum = { workspace = true, features = ["http1", "json", "tokio"] }
+chrono = { workspace = true, features = ["serde"] }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+smista-sdk = { workspace = true }
+tokio = { workspace = true, features = ["net", "rt", "sync"] }
+tokio-util = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true, features = ["json"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
