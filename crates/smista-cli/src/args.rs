@@ -1,4 +1,5 @@
 mod apikey;
+mod config;
 mod credentials;
 mod router;
 mod status;
@@ -6,6 +7,7 @@ mod status;
 use std::path::PathBuf;
 
 pub use self::apikey::{ApikeyArgs, ApikeyCommand};
+pub use self::config::{ConfigArgs, ConfigCommand, ConfigInitScope};
 pub use self::credentials::{CredentialsArgs, CredentialsCommand};
 pub use self::router::{RouterArgs, StopArgs};
 pub use self::status::StatusArgs;
@@ -61,6 +63,8 @@ impl Args {
 pub enum Command {
     /// Manage smista.ai API key for the CLI.
     Apikey(ApikeyArgs),
+    /// Manage configuration files for smista.ai.
+    Config(ConfigArgs),
     /// Manage credentials for interacting with the LLMs.
     Credentials(CredentialsArgs),
     /// Start a local router. Daemonizes by default; pass `--foreground` to run
@@ -249,6 +253,64 @@ mod tests {
                 provider: smista_sdk::core::model::Provider::OpenAI,
                 api_key
             } if api_key == "sk-test"
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_init_without_scope_as_project() {
+        let args = Args::parse_from(["smista", "config", "init"]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert!(config.path.is_none());
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Init {
+                scope: ConfigInitScope::Project,
+                force: false
+            }
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_init_project_scope() {
+        let args = Args::parse_from(["smista", "config", "init", "project"]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Init {
+                scope: ConfigInitScope::Project,
+                force: false
+            }
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_init_force_and_path() {
+        let args = Args::parse_from([
+            "smista",
+            "config",
+            "--config",
+            "/tmp/smista.toml",
+            "init",
+            "--force",
+            "router",
+        ]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert_eq!(config.path.as_deref(), Some(Path::new("/tmp/smista.toml")));
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Init {
+                scope: ConfigInitScope::Router,
+                force: true
+            }
         ));
     }
 

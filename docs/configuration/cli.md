@@ -509,7 +509,7 @@ no_network = false
 | Global (Windows)     | `%USERPROFILE%\.smista\config.toml` | All projects           |
 | Project              | `.smista/config.toml`               | The current repository |
 
-Run `smista init` to scaffold `.smista/config.toml` in a project. Project
+Run `smista config init` to scaffold `.smista/config.toml` in a project. Project
 configuration is safe to commit when it contains no secrets, so a team shares
 one routing policy.
 

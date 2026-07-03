@@ -12,7 +12,7 @@ const CONFIG_FILE: &str = "config.toml";
 /// Router pidfile name within the global configuration directory.
 const ROUTER_PIDFILE: &str = "router.pid";
 /// Secrets file name within the project directory.
-const SECRETS_FILE: &str = "secrets";
+pub const SECRETS_FILE: &str = "secrets";
 /// Plans directory name within the project directory.
 const PLANS_DIR: &str = "plans";
 
