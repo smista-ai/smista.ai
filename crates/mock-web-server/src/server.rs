@@ -65,6 +65,17 @@ impl MockRouter {
         self.state.received.lock().await.clone()
     }
 
+    /// Changes the response status served for `endpoint`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when [`EndpointStatus::NotFound`] is configured for an endpoint
+    /// that has no documented 404 resource case.
+    pub async fn set_endpoint_status(&self, endpoint: Endpoint, status: EndpointStatus) {
+        validate_endpoint_status(endpoint, status);
+        self.state.statuses.lock().await.insert(endpoint, status);
+    }
+
     /// Waits for the server task to stop.
     pub async fn wait_stopped(mut self) {
         if let Some(handle) = self.handle.take() {
@@ -108,9 +119,7 @@ impl MockRouterBuilder {
     /// that has no documented 404 resource case.
     #[must_use]
     pub fn endpoint_status(mut self, endpoint: Endpoint, status: EndpointStatus) -> Self {
-        if status == EndpointStatus::NotFound && !endpoint.allows_not_found() {
-            panic!("Endpoint {endpoint:?} does not support NotFound");
-        }
+        validate_endpoint_status(endpoint, status);
         self.statuses.insert(endpoint, status);
         self
     }
@@ -139,7 +148,7 @@ impl MockRouterBuilder {
         let uri = uri_from_address(address);
         let state = Arc::new(MockRouterState {
             base_url: Url::parse(&uri).expect("the mock router URI is a valid base URL"),
-            statuses: self.statuses,
+            statuses: Mutex::new(self.statuses),
             responses: self.responses,
             received: Mutex::new(Vec::new()),
         });
@@ -182,7 +191,7 @@ struct MockRouterState {
     /// Base URL used to build recorded request URLs.
     base_url: Url,
     /// Response status overrides.
-    statuses: HashMap<Endpoint, EndpointStatus>,
+    statuses: Mutex<HashMap<Endpoint, EndpointStatus>>,
     /// Success body overrides.
     responses: HashMap<Endpoint, ResponseTemplate>,
     /// Recorded requests.
@@ -191,8 +200,10 @@ struct MockRouterState {
 
 impl MockRouterState {
     /// Returns the configured status for an endpoint.
-    fn endpoint_status(&self, endpoint: Endpoint) -> EndpointStatus {
+    async fn endpoint_status(&self, endpoint: Endpoint) -> EndpointStatus {
         self.statuses
+            .lock()
+            .await
             .get(&endpoint)
             .copied()
             .unwrap_or(EndpointStatus::Ok)
@@ -299,7 +310,7 @@ async fn handle(
         body,
     ));
 
-    match state.endpoint_status(endpoint) {
+    match state.endpoint_status(endpoint).await {
         EndpointStatus::Ok => state.response(endpoint).into_response(),
         EndpointStatus::Unauthorized => {
             api_error(ApiErrorCode::MissingCredentials, "Unauthorized").into_response()
@@ -310,6 +321,13 @@ async fn handle(
         EndpointStatus::NotFound => {
             api_error(ApiErrorCode::SessionNotFound, "Not found").into_response()
         }
+    }
+}
+
+/// Validates that `status` can be served by `endpoint`.
+fn validate_endpoint_status(endpoint: Endpoint, status: EndpointStatus) {
+    if status == EndpointStatus::NotFound && !endpoint.allows_not_found() {
+        panic!("Endpoint {endpoint:?} does not support NotFound");
     }
 }
 

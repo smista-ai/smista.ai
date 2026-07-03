@@ -12,6 +12,7 @@
 //!
 //! The CLI is both the client for the router, and the router itself, based on the subcommand invoked.
 
+mod app;
 mod args;
 mod command;
 mod config;

@@ -106,6 +106,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_update_endpoint_status_while_running() {
+        let router = MockRouter::builder()
+            .endpoint_status(Endpoint::Status, EndpointStatus::ServerError)
+            .start()
+            .await;
+
+        let (status, body) = get_json::<ApiError>(&router, "/status").await;
+        assert_eq!(status, 500);
+        assert_eq!(body.error.code, "internal_error");
+
+        router
+            .set_endpoint_status(Endpoint::Status, EndpointStatus::Ok)
+            .await;
+
+        let (status, body) = get_json::<StatusResponse>(&router, "/status").await;
+        assert_eq!(status, 200);
+        assert_eq!(body, defaults::status());
+    }
+
+    #[tokio::test]
     #[should_panic(expected = "Endpoint Status does not support NotFound")]
     async fn should_reject_not_found_for_endpoints_without_resource_not_found() {
         MockRouter::builder()
