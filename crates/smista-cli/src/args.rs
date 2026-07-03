@@ -22,6 +22,9 @@ pub struct Args {
     /// The subcommand to run.
     #[clap(subcommand)]
     pub command: Option<Command>,
+    /// Prompt to run when no subcommand is selected.
+    #[clap(value_name = "PROMPT")]
+    pub prompt: Option<String>,
     /// Require the operating-system keyring for credential storage.
     ///
     /// By default, the CLI falls back to file-backed storage when the keyring is
@@ -237,6 +240,19 @@ mod tests {
 
         assert!(args.command.is_none());
         assert!(args.enforce_keyring);
+    }
+
+    #[test]
+    fn should_parse_prompt_without_a_subcommand() {
+        let args = Args::parse_from(["smista", "write a changelog"]);
+
+        assert!(args.command.is_none());
+        assert_eq!(args.prompt.as_deref(), Some("write a changelog"));
+    }
+
+    #[test]
+    fn should_reject_prompt_after_a_subcommand() {
+        assert!(Args::try_parse_from(["smista", "status", "write a changelog"]).is_err());
     }
 
     #[test]
