@@ -49,6 +49,12 @@ environment variable.
 
 ## The golden workflow
 
+Bootstrap router credentials:
+
+```sh
+smista login
+```
+
 Run a one-shot prompt:
 
 ```sh

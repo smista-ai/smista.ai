@@ -17,6 +17,7 @@ use smista_core::api::{
     SignInResponse, SignOutResponse, StatusResponse, TraceResponse, TurnEvent, TurnResponse,
     UpdateSessionRequest, UpdateSessionResponse,
 };
+use url::Url;
 use uuid::Uuid;
 
 #[cfg(feature = "isahc")]
@@ -70,6 +71,13 @@ use crate::error::Result;
 /// Every fallible method returns [`Result`](crate::Result), whose error is
 /// [`RouterClientError`](crate::RouterClientError).
 pub trait Client: Send + Sync + 'static {
+    /// Returns the router base URL used by this client.
+    ///
+    /// The value is the configured base address before per-endpoint paths are
+    /// appended. Versioned API calls append `/api/v1/...`, while
+    /// [`status`](Self::status) reaches `/status` at this base URL.
+    fn base_url(&self) -> &Url;
+
     /// Calls the public `GET /status` health check, outside `/api/v1`.
     ///
     /// # Errors
@@ -321,9 +329,23 @@ mod tests {
     /// `Send`. It performs no I/O: `status` and the stream openers succeed with
     /// canned values, and the rest report [`RouterClientError::NotAuthenticated`]
     /// to avoid constructing every response type.
-    struct MockClient;
+    struct MockClient {
+        url: Url,
+    }
+
+    impl Default for MockClient {
+        fn default() -> Self {
+            Self {
+                url: Url::parse("http://localhost").unwrap(),
+            }
+        }
+    }
 
     impl Client for MockClient {
+        fn base_url(&self) -> &Url {
+            &self.url
+        }
+
         async fn status(&self) -> Result<StatusResponse> {
             Ok(StatusResponse {
                 status: "ok".to_string(),
@@ -444,7 +466,7 @@ mod tests {
 
     #[test]
     fn should_be_usable_through_generics_and_yield_send_futures() {
-        let client = MockClient;
+        let client = MockClient::default();
 
         // Every method's future must be `Send` so it can cross threads.
         assert_send(&client.status());
@@ -461,7 +483,8 @@ mod tests {
     fn should_exercise_every_method() {
         // Drive each method once so the mock implementation, and therefore the
         // whole trait surface, is exercised rather than left as dead code.
-        let client = MockClient;
+        let client = MockClient::default();
+        assert_eq!(client.base_url().as_str(), "http://localhost/");
         futures::executor::block_on(async {
             let _ = client.status().await;
             let _ = client.bootstrap().await;
@@ -501,7 +524,7 @@ mod tests {
 
     #[test]
     fn should_report_not_authenticated_for_protected_calls() {
-        let client = MockClient;
+        let client = MockClient::default();
         let error = futures::executor::block_on(client.list_sessions(None, None))
             .expect_err("the mock reports an unauthenticated state");
         assert!(matches!(error, RouterClientError::NotAuthenticated));
@@ -509,7 +532,7 @@ mod tests {
 
     #[test]
     fn should_open_a_stream_and_yield_events() {
-        let client = MockClient;
+        let client = MockClient::default();
         let events = futures::executor::block_on(async {
             let stream = client
                 .stream_continue(Uuid::nil(), ContinueRequest::Break)

@@ -14,6 +14,7 @@
 
 mod app;
 mod args;
+mod client;
 mod command;
 mod config;
 mod credentials;

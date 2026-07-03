@@ -390,6 +390,10 @@ fn parse_sse_record(record: &[u8], queue: &mut VecDeque<Result<TurnEvent>>) {
 }
 
 impl Client for ReqwestClient {
+    fn base_url(&self) -> &Url {
+        &self.config.base_url
+    }
+
     async fn status(&self) -> Result<StatusResponse> {
         let url = self.url("/status")?;
         self.send(self.client.get(url)).await
@@ -650,6 +654,12 @@ mod tests {
             .and_then(|request| request.headers.get(name))
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned)
+    }
+
+    #[test]
+    fn should_get_base_url() {
+        let client = ReqwestClient::new(RouterClientConfig::default()).expect("the client builds");
+        assert_eq!(client.base_url(), &RouterClientConfig::default().base_url);
     }
 
     #[tokio::test]
