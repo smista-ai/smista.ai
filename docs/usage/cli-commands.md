@@ -52,6 +52,23 @@ background process and returns, so your shell is free again. Pass `--foreground`
 to run it in the current process instead, which is what a service manager wants.
 `smista stop` reads the router's process id from the pidfile and shuts it down.
 
+The main `smista` command can also start a missing local router automatically.
+Enable it in CLI configuration:
+
+```toml
+[router]
+url = "http://localhost:7331"
+auto_start = true
+```
+
+Auto-start only applies to loopback router URLs such as `localhost`,
+`127.0.0.1`, or `[::1]`. When `/status` is already reachable, `smista` uses the
+running router no matter whether `auto_start` is enabled. When `/status` is not
+reachable, `auto_start = true` starts the local router and waits for it to
+become healthy. If auto-start is disabled, the command tells you to run
+`smista start`; if the configured router URL is remote, the command reports the
+router as unreachable instead of starting anything.
+
 Both commands accept flags to point at a specific configuration file or pidfile,
 and `smista start` exposes flags to configure OpenTelemetry trace export. See
 [Running the Router](../configuration/router.md) for the full list and for the
