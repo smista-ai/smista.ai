@@ -7,7 +7,7 @@ mod status;
 use std::path::PathBuf;
 
 pub use self::apikey::{ApikeyArgs, ApikeyCommand};
-pub use self::config::{ConfigArgs, ConfigCommand, ConfigInitScope};
+pub use self::config::{ConfigArgs, ConfigCommand, ConfigScope};
 pub use self::credentials::{CredentialsArgs, CredentialsCommand};
 pub use self::router::{RouterArgs, StopArgs};
 pub use self::status::StatusArgs;
@@ -283,7 +283,7 @@ mod tests {
         assert!(matches!(
             config.command,
             ConfigCommand::Init {
-                scope: ConfigInitScope::Project,
+                scope: ConfigScope::Project,
                 force: false
             }
         ));
@@ -299,7 +299,7 @@ mod tests {
         assert!(matches!(
             config.command,
             ConfigCommand::Init {
-                scope: ConfigInitScope::Project,
+                scope: ConfigScope::Project,
                 force: false
             }
         ));
@@ -324,9 +324,111 @@ mod tests {
         assert!(matches!(
             config.command,
             ConfigCommand::Init {
-                scope: ConfigInitScope::Router,
+                scope: ConfigScope::Router,
                 force: true
             }
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_show_without_scope_as_effective_config() {
+        let args = Args::parse_from(["smista", "config", "show"]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert!(config.path.is_none());
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Show { scope: None }
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_show_with_scope_as_single_layer() {
+        let args = Args::parse_from(["smista", "config", "show", "global"]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Show {
+                scope: Some(ConfigScope::Global)
+            }
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_path_without_scope_as_all_paths() {
+        let args = Args::parse_from(["smista", "config", "path"]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert!(config.path.is_none());
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Path { scope: None }
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_path_with_scope_as_single_path() {
+        let args = Args::parse_from(["smista", "config", "path", "router"]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Path {
+                scope: Some(ConfigScope::Router)
+            }
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_check_without_scope_as_project() {
+        let args = Args::parse_from(["smista", "config", "check"]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Check {
+                scope: ConfigScope::Project
+            }
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_edit_with_scope() {
+        let args = Args::parse_from(["smista", "config", "edit", "global"]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Edit {
+                scope: ConfigScope::Global
+            }
+        ));
+    }
+
+    #[test]
+    fn should_parse_config_path_with_explicit_config_path() {
+        let args = Args::parse_from(["smista", "config", "--config", "/tmp/custom.toml", "path"]);
+
+        let Some(Command::Config(config)) = args.command else {
+            panic!("expected the config command");
+        };
+        assert_eq!(config.path.as_deref(), Some(Path::new("/tmp/custom.toml")));
+        assert!(matches!(
+            config.command,
+            ConfigCommand::Path { scope: None }
         ));
     }
 

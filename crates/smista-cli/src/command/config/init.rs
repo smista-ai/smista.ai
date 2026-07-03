@@ -3,7 +3,7 @@
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use crate::args::ConfigInitScope;
+use crate::args::ConfigScope;
 
 /// Creates a starter configuration file for `scope`.
 ///
@@ -16,17 +16,17 @@ use crate::args::ConfigInitScope;
 /// Returns an error when the default path cannot be resolved, the target file
 /// exists and `force` is `false`, the parent directory cannot be created, or the
 /// starter template cannot be serialized or written.
-pub fn init(scope: ConfigInitScope, path: Option<&Path>, force: bool) -> anyhow::Result<()> {
+pub fn init(scope: ConfigScope, path: Option<&Path>, force: bool) -> anyhow::Result<()> {
+    let path = super::resolve_config_path_by_scope(path, scope)?;
+
     match scope {
-        ConfigInitScope::Router => init_router(path, force),
-        ConfigInitScope::Global => init_global(path, force),
-        ConfigInitScope::Project => init_project(path, force),
+        ConfigScope::Router => init_router(path, force),
+        ConfigScope::Global => init_global(path, force),
+        ConfigScope::Project => init_project(path, force),
     }
 }
 
-fn init_router(path: Option<&Path>, force: bool) -> anyhow::Result<()> {
-    tracing::debug!("Initializing router configuration");
-    let path = path_or_default(path, smista_router::config::paths::router_toml, "router")?;
+fn init_router(path: PathBuf, force: bool) -> anyhow::Result<()> {
     tracing::debug!(
         "Initializing router configuration at {path}",
         path = path.display()
@@ -47,9 +47,7 @@ fn init_router(path: Option<&Path>, force: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn init_global(path: Option<&Path>, force: bool) -> anyhow::Result<()> {
-    tracing::debug!("Initializing global CLI configuration");
-    let path = path_or_default(path, crate::config::paths::global_config_toml, "global CLI")?;
+fn init_global(path: PathBuf, force: bool) -> anyhow::Result<()> {
     tracing::debug!(
         "Initializing global CLI configuration at {path}",
         path = path.display()
@@ -65,12 +63,7 @@ fn init_global(path: Option<&Path>, force: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn init_project(path: Option<&Path>, force: bool) -> anyhow::Result<()> {
-    let cwd = std::env::current_dir()?;
-    tracing::debug!("Initializing project CLI configuration");
-    let path = path
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| crate::config::paths::project_config_toml(&cwd));
+fn init_project(path: PathBuf, force: bool) -> anyhow::Result<()> {
     tracing::debug!(
         "Initializing project CLI configuration at {path}",
         path = path.display()
@@ -103,18 +96,6 @@ fn init_cli_config(path: &Path, force: bool) -> anyhow::Result<()> {
     let toml = cli_template()?;
     tracing::debug!("Writing CLI configuration to {path}", path = path.display());
     write_config_file(path, &toml, force)
-}
-
-fn path_or_default(
-    path: Option<&Path>,
-    default_path: impl FnOnce() -> Option<PathBuf>,
-    description: &str,
-) -> anyhow::Result<PathBuf> {
-    path.map(Path::to_path_buf)
-        .or_else(default_path)
-        .ok_or_else(|| {
-            anyhow::anyhow!("Could not determine default {description} configuration path")
-        })
 }
 
 fn cli_template() -> anyhow::Result<String> {
@@ -216,7 +197,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
         let path = dir.path().join(".smista").join("config.toml");
 
-        init(ConfigInitScope::Project, Some(&path), false).expect("failed to init project config");
+        init(ConfigScope::Project, Some(&path), false).expect("failed to init project config");
 
         assert_valid_cli_config(&path);
         assert_eq!(
@@ -235,7 +216,7 @@ mod tests {
             .expect("failed to create project config dir");
         fs::write(&gitignore, "plans\n").expect("failed to write project gitignore");
 
-        init(ConfigInitScope::Project, Some(&path), false).expect("failed to init project config");
+        init(ConfigScope::Project, Some(&path), false).expect("failed to init project config");
 
         assert_eq!(
             fs::read_to_string(gitignore).expect("failed to read project gitignore"),
@@ -252,7 +233,7 @@ mod tests {
             .expect("failed to create project config dir");
         fs::write(&gitignore, "secrets\n").expect("failed to write project gitignore");
 
-        init(ConfigInitScope::Project, Some(&path), false).expect("failed to init project config");
+        init(ConfigScope::Project, Some(&path), false).expect("failed to init project config");
 
         assert_eq!(
             fs::read_to_string(gitignore).expect("failed to read project gitignore"),
@@ -265,7 +246,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
         let path = dir.path().join("config.toml");
 
-        init(ConfigInitScope::Global, Some(&path), false).expect("failed to init global config");
+        init(ConfigScope::Global, Some(&path), false).expect("failed to init global config");
 
         assert_valid_cli_config(&path);
     }
@@ -275,7 +256,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
         let path = dir.path().join("router.toml");
 
-        init(ConfigInitScope::Router, Some(&path), false).expect("failed to init router config");
+        init(ConfigScope::Router, Some(&path), false).expect("failed to init router config");
 
         let contents = fs::read_to_string(&path).expect("failed to read router config");
         assert!(contents.contains("[router]"));
@@ -288,7 +269,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("failed to create temp dir");
         let path = dir.path().join("nested").join("config.toml");
 
-        init(ConfigInitScope::Global, Some(&path), false).expect("failed to init global config");
+        init(ConfigScope::Global, Some(&path), false).expect("failed to init global config");
 
         assert!(path.exists());
     }
@@ -299,7 +280,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         fs::write(&path, "sentinel").expect("failed to write existing config");
 
-        let error = init(ConfigInitScope::Global, Some(&path), false).unwrap_err();
+        let error = init(ConfigScope::Global, Some(&path), false).unwrap_err();
 
         assert!(
             error.to_string().contains("configuration already exists"),
@@ -317,8 +298,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         fs::write(&path, "sentinel").expect("failed to write existing config");
 
-        init(ConfigInitScope::Global, Some(&path), true)
-            .expect("failed to force init global config");
+        init(ConfigScope::Global, Some(&path), true).expect("failed to force init global config");
 
         assert_valid_cli_config(&path);
         assert_ne!(

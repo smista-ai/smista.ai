@@ -29,10 +29,44 @@ pub use load::parse;
 use self::load::load_with_layers;
 #[doc(inline)]
 pub use self::model::Config;
+use crate::config::load::load_at;
 
 pub fn load_and_validate(cwd: &Path) -> anyhow::Result<Config> {
     let (config, layers) = load_with_layers(cwd, None)?;
     let report = validate::validate_layers(&config, &layers);
+
+    if !report.is_ok() {
+        anyhow::bail!(
+            "CLI configuration validation failed: {report}",
+            report = report.to_human()
+        );
+    }
+    Ok(config)
+}
+
+/// Loads the effective CLI configuration for `cwd`.
+///
+/// The result is the merged configuration after applying built-in defaults,
+/// global configuration, and project configuration in precedence order.
+///
+/// # Errors
+///
+/// Returns an error when an existing configuration layer cannot be read or
+/// parsed.
+pub fn load_effective(cwd: &Path) -> anyhow::Result<Config> {
+    let (config, _) = load_with_layers(cwd, None)?;
+    Ok(config)
+}
+
+/// Loads and validates a single CLI configuration file.
+///
+/// # Errors
+///
+/// Returns an error when `config_path` cannot be read, cannot be parsed, or
+/// fails CLI configuration validation.
+pub fn load_and_validate_at(config_path: &Path) -> anyhow::Result<Config> {
+    let config = load_at(config_path)?;
+    let report = validate::validate_layers(&config, &[]);
 
     if !report.is_ok() {
         anyhow::bail!(

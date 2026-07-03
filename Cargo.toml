@@ -48,6 +48,7 @@ globset = "0.4"
 http = "1"
 isahc = { version = "2", default-features = false }
 keyring-core = { version = "1", default-features = false }
+open = "5"
 opentelemetry = "0.32"
 opentelemetry-otlp = "0.32"
 opentelemetry_sdk = "0.32"

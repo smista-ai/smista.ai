@@ -22,6 +22,7 @@ chacha20poly1305 = { workspace = true }
 clap = { workspace = true, features = ["color", "derive", "env", "help", "std", "suggestions", "usage"] }
 globset = { workspace = true }
 keyring-core = { workspace = true }
+open = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true, features = ["grpc-tonic", "http-proto", "reqwest-client"] }
 opentelemetry_sdk = { workspace = true }
