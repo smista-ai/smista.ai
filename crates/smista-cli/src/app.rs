@@ -241,7 +241,8 @@ mod tests {
 
     use super::*;
     use crate::credentials::{
-        ApiKeyStorage, CredentialsStorage, E2eeKeysCredentials, ProvidersCredentials,
+        ApiKeyStorage, CredentialBackend, CredentialsStorage, E2eeKeysCredentials,
+        ProvidersCredentials,
     };
 
     #[tokio::test]
@@ -261,8 +262,10 @@ mod tests {
         let cwd = tempfile::tempdir()
             .expect("temporary directory is created")
             .keep();
-        let credentials =
-            Arc::new(CredentialsStorage::new(false).expect("test credentials storage builds"));
+        let credentials = CredentialsStorage::new_file_for_tests(cwd.join("global-secrets"))
+            .expect("test credentials storage builds");
+        assert_eq!(credentials.backend(), CredentialBackend::File);
+        let credentials = Arc::new(credentials);
         let router_client = ReqwestClient::new(RouterClientConfig::new(
             Url::parse("http://127.0.0.1:9").expect("test URL parses"),
         ))
