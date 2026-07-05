@@ -124,9 +124,10 @@ upstream provider key. Most users should prefer `smista login`; `smista apikey`
 is available when you need to import, inspect, or remove a key explicitly.
 
 ```sh
-smista apikey set sk-smista-api01-...
 smista apikey check
+smista apikey new
 smista apikey remove
+smista apikey set sk-smista-api01-...
 ```
 
 To stop using the current router identity, remove the stored API key with
@@ -141,11 +142,12 @@ smista apikey --global set sk-smista-api01-...
 smista apikey --global remove
 ```
 
-| Command                       | Aliases        | What it does                         |
-| ----------------------------- | -------------- | ------------------------------------ |
-| `smista apikey set <api-key>` | `add`          | Store or replace the router API key. |
-| `smista apikey check`         | `get`          | Print whether a router key is set.   |
-| `smista apikey remove`        | `delete`, `rm` | Remove the router key from scope.    |
+| Command                       | Aliases        | What it does                                       |
+| ----------------------------- | -------------- | -------------------------------------------------- |
+| `smista apikey check`         | `get`          | Print whether a router key is set.                 |
+| `smista apikey new`           | `generate`     | Generate a new router API key and print to stdout. |
+| `smista apikey remove`        | `delete`, `rm` | Remove the router key from scope.                  |
+| `smista apikey set <api-key>` | `add`          | Store or replace the router API key.               |
 
 ### Managing provider credentials
 

@@ -31,7 +31,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         ..
     } = args;
     match command {
-        Some(Command::Apikey(args)) => apikey::run(args, enforce_keyring),
+        Some(Command::Apikey(args)) => apikey::run(args, enforce_keyring).await,
         Some(Command::Config(args)) => config::run(args),
         Some(Command::Credentials(args)) => credentials::run(args, enforce_keyring),
         Some(Command::Login) => login::run(enforce_keyring).await,
