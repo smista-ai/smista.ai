@@ -13,7 +13,7 @@ use smista_sdk::client::{ApiKey, Client as _, ReqwestClient};
 use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 
-use crate::app::AppContext;
+use crate::app::{App, AppContext};
 use crate::args::RouterArgs;
 use crate::config::Config;
 use crate::credentials::{
@@ -29,7 +29,7 @@ const WAIT_FOR_ROUTER_TIMEOUT: Duration = Duration::from_secs(30);
 /// The `initial_prompt` is an optional string that will be used as the initial prompt for the TUI.
 /// If it is `None`, the TUI will start with an empty prompt.
 pub async fn run(
-    _initial_prompt: Option<String>,
+    initial_prompt: Option<String>,
     enforce_keyring: bool,
     log_file: Option<&Path>,
     log_filter: &str,
@@ -71,7 +71,7 @@ pub async fn run(
 
     // build context
     tracing::info!("app initialization completed; building app context");
-    let _context = AppContext {
+    let context = AppContext {
         api_key,
         config: Arc::new(config),
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
@@ -82,10 +82,10 @@ pub async fn run(
         cwd,
     };
 
-    // TODO: link initial_prompt to the TUI; the tui will log it into the chat, and push to the router client.
-    // TODO: link App::new().run().await here.
-
+    tracing::info!("app context built; starting app run loop");
+    App::new(context).run(initial_prompt).await?;
     tracing::info!("smista-cli main command finished");
+
     Ok(())
 }
 
