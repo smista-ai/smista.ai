@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use ratatui::backend::Backend;
 use smista_sdk::client::ReqwestClient;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
@@ -50,14 +51,14 @@ pub struct AppContext {
 }
 
 /// Dependencies needed by the application run loop.
-struct RunLoopArgs {
+struct RunLoopArgs<B: Backend> {
     cmd_tx: Sender<Cmd>,
     input_event_rx: Receiver<InputEvent>,
     initial_prompt: Option<String>,
     input_listener: JoinHandle<()>,
     msg_rx: Receiver<Msg>,
     router_client: JoinHandle<()>,
-    tui: Tui,
+    tui: Tui<B>,
 }
 
 /// Interactive CLI application coordinator.
@@ -99,7 +100,7 @@ impl App {
         tracing::debug!("Input listener setup complete");
         // setup tui
         tracing::debug!("Setting up tui");
-        let tui = Tui::new(self.context.clone(), initial_prompt.clone());
+        let (tui, _terminal_restore) = Tui::new(self.context.clone(), initial_prompt.clone())?;
         tracing::debug!("Tui setup complete");
         // setup router client
         tracing::debug!("Setting up router client");
@@ -136,7 +137,7 @@ impl App {
             input_event_tx,
         )
         .run();
-        let tui = Tui::new(context.clone(), None);
+        let tui = Tui::new_test(context.clone());
         let router_client = RouterClient::new(cmd_rx, msg_tx, context.clone()).run();
 
         tokio::spawn(async move {
@@ -164,7 +165,7 @@ impl App {
     ///
     /// Returns an error if forwarding a command fails before shutdown, or if a
     /// worker task panics while being joined.
-    async fn run_loop(
+    async fn run_loop<B: Backend>(
         self,
         RunLoopArgs {
             cmd_tx,
@@ -174,13 +175,16 @@ impl App {
             mut msg_rx,
             router_client,
             tui,
-        }: RunLoopArgs,
+        }: RunLoopArgs<B>,
     ) -> anyhow::Result<()> {
         tracing::debug!("starting run loop");
 
         // if there is an initial prompt, send it to the router client
         if let Some(prompt) = initial_prompt {
-            tracing::debug!(r#"sending initial prompt to router client: "{prompt}""#);
+            tracing::debug!(
+                prompt.bytes = prompt.len(),
+                "sending initial prompt to router client",
+            );
             cmd_tx
                 .send(Cmd::Execute {
                     prompt,
@@ -195,7 +199,10 @@ impl App {
                     break;
                 }
                 Some(input_event) = input_event_rx.recv() => {
-                    tracing::debug!("received input event: {input_event:?}");
+                    tracing::debug!(
+                        input.event = input_event.kind(),
+                        "received input event {{input.event}}",
+                    );
                     if let Some(cmd) = tui.handle_input_event(input_event) {
                         tracing::debug!("sending command to router client: {cmd:?}");
                         cmd_tx.send(cmd).await?;
