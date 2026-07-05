@@ -1,6 +1,6 @@
 //! Discovery and lookup of skills, the source of truth for skill names.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use smista_sdk::core::skill::Skill;
@@ -15,7 +15,7 @@ use crate::skills::{global_skills_dir, skills_dir};
 /// lazily through [`SkillStore::load`].
 #[derive(Debug, Clone, Default)]
 pub struct SkillStore {
-    skills: HashMap<String, SkillEntry>,
+    skills: BTreeMap<String, SkillEntry>,
     warnings: Vec<SkillWarning>,
 }
 

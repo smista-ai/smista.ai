@@ -109,6 +109,14 @@ pub fn load_with_layers(
     cwd: &Path,
     runtime: Option<Config>,
 ) -> Result<(Config, Vec<(ConfigLayer, Config)>), ConfigError> {
+    load_with_global_config(cwd, runtime, global_config_toml())
+}
+
+fn load_with_global_config(
+    cwd: &Path,
+    runtime: Option<Config>,
+    global_config: Option<std::path::PathBuf>,
+) -> Result<(Config, Vec<(ConfigLayer, Config)>), ConfigError> {
     tracing::debug!(
         config.cwd = %cwd.display(),
         config.has_runtime_override = runtime.is_some(),
@@ -116,7 +124,7 @@ pub fn load_with_layers(
     );
     let mut layers = vec![(ConfigLayer::SystemDefaults, Config::default())];
 
-    if let Some(global) = global_config_toml() {
+    if let Some(global) = global_config {
         layers.push((ConfigLayer::Global, read_layer(&global)?));
     }
     layers.push((ConfigLayer::Project, read_layer(&project_config_toml(cwd))?));
@@ -172,7 +180,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("smista-cfg-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         // No global is created in temp; project file is absent under this cwd.
-        let config = load(&dir, None).unwrap();
+        let (config, _) = load_with_global_config(&dir, None, None).unwrap();
         assert_eq!(config.router, Default::default());
         let report = crate::config::validate::validate(&config);
         assert!(

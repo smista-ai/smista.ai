@@ -20,6 +20,8 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 chacha20poly1305 = { workspace = true }
 clap = { workspace = true, features = ["color", "derive", "env", "help", "std", "suggestions", "usage"] }
+crossterm = { workspace = true, features = ["bracketed-paste", "event-stream", "events", "windows"] }
+futures = { workspace = true }
 globset = { workspace = true }
 keyring-core = { workspace = true }
 open = { workspace = true }
@@ -27,6 +29,7 @@ opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true, features = ["grpc-tonic", "http-proto", "reqwest-client"] }
 opentelemetry_sdk = { workspace = true }
 rand = { workspace = true }
+ratatui = { workspace = true, features = ["crossterm", "layout-cache", "macros", "std"] }
 secrecy = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 sha2 = { workspace = true }
