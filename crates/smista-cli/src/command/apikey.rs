@@ -8,7 +8,9 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use smista_sdk::client::ApiKey;
+use anyhow::Context as _;
+use smista_sdk::client::{ApiKey, Client};
+use smista_sdk::core::api::BootstrapResponse;
 
 use crate::args::{ApikeyArgs, ApikeyCommand};
 use crate::credentials::{ApiKeyStorage, CredentialsStorage};
@@ -23,7 +25,7 @@ use crate::credentials::{ApiKeyStorage, CredentialsStorage};
 ///
 /// Returns an error if the current directory cannot be resolved, API key
 /// storage cannot be initialized, or the selected storage operation fails.
-pub fn run(
+pub async fn run(
     ApikeyArgs { command, global }: ApikeyArgs,
     enforce_keyring: bool,
 ) -> anyhow::Result<()> {
@@ -41,24 +43,11 @@ pub fn run(
     let apikey_storage = Arc::new(ApiKeyStorage::new(credentials, &cwd));
 
     match command {
-        ApikeyCommand::Set { api_key } => set_api_key(apikey_storage, api_key, global),
         ApikeyCommand::Check => check_api_key(apikey_storage),
+        ApikeyCommand::New => new_api_key().await,
         ApikeyCommand::Remove => remove_api_key(apikey_storage, global),
+        ApikeyCommand::Set { api_key } => set_api_key(apikey_storage, api_key, global),
     }
-}
-
-fn set_api_key(
-    apikey_storage: Arc<ApiKeyStorage>,
-    api_key: String,
-    global: bool,
-) -> anyhow::Result<()> {
-    let api_key = ApiKey::from_str(&api_key)?;
-
-    apikey_storage.set(&api_key, global)?;
-
-    println!("API key set successfully.");
-
-    Ok(())
 }
 
 fn check_api_key(apikey_storage: Arc<ApiKeyStorage>) -> anyhow::Result<()> {
@@ -73,10 +62,52 @@ fn check_api_key(apikey_storage: Arc<ApiKeyStorage>) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn new_api_key() -> anyhow::Result<()> {
+    let config = crate::config::load_and_validate(&std::env::current_dir()?)
+        .context("Failed to load CLI configuration")?;
+    let client =
+        crate::client::config_client(&config).context("Failed to configure router client")?;
+
+    tracing::debug!(
+        "requesting new API key from router at {url}",
+        url = client.base_url()
+    );
+    let BootstrapResponse { api_key, user_id } = client
+        .bootstrap()
+        .await
+        .context("Failed to request new API key from router")?;
+
+    tracing::debug!(
+        "received new API key from router for user {user_id}",
+        user_id = user_id
+    );
+
+    let api_key =
+        ApiKey::from_str(&api_key).context("Failed to parse API key from router response")?;
+
+    println!("{api_key}", api_key = api_key.expose());
+
+    Ok(())
+}
+
 fn remove_api_key(apikey_storage: Arc<ApiKeyStorage>, global: bool) -> anyhow::Result<()> {
     apikey_storage.delete(global)?;
 
     println!("API key removed successfully.");
+
+    Ok(())
+}
+
+fn set_api_key(
+    apikey_storage: Arc<ApiKeyStorage>,
+    api_key: String,
+    global: bool,
+) -> anyhow::Result<()> {
+    let api_key = ApiKey::from_str(&api_key)?;
+
+    apikey_storage.set(&api_key, global)?;
+
+    println!("API key set successfully.");
 
     Ok(())
 }

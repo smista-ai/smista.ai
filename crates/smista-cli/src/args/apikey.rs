@@ -21,6 +21,9 @@ pub enum ApikeyCommand {
     /// Check whether the API key is set.
     #[clap(name = "check", alias = "get")]
     Check,
+    /// Get a new API key from the smista.ai router and print it to stdout.
+    #[clap(name = "new", alias = "generate")]
+    New,
     /// Remove the API key.
     #[clap(name = "remove", alias = "delete", alias = "rm")]
     Remove,
