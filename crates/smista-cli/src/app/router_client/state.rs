@@ -6,8 +6,8 @@
 /// responds, so there is no separate waiting-for-router-response state.
 /// [`Streaming`](Self::Streaming) is reserved for streaming execution and
 /// continuation, where the worker must poll stream events and incoming commands
-/// together so [`Break`](crate::app::router_client::protocol::ContinueExecution::Break)
-/// or [`Inject`](crate::app::router_client::protocol::ContinueExecution::Inject)
+/// together so [`Break`](crate::app::router_client::cmd::ContinueExecution::Break)
+/// or [`Inject`](crate::app::router_client::cmd::ContinueExecution::Inject)
 /// can interrupt the stream.
 #[cfg_attr(
     not(test),

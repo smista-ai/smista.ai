@@ -1,4 +1,6 @@
-mod protocol;
+mod approvals;
+pub mod cmd;
+pub mod msg;
 mod state;
 
 use std::collections::HashMap;
@@ -9,7 +11,9 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-pub use self::protocol::{Cmd, Msg};
+use self::approvals::ApprovalsStorage;
+pub use self::cmd::Cmd;
+pub use self::msg::Msg;
 use self::state::State;
 use crate::app::AppContext;
 
@@ -19,6 +23,11 @@ use crate::app::AppContext;
 /// execute router requests yet. Future tasks will translate [`Cmd`] values into
 /// authenticated HTTP calls and emit [`Msg`] updates.
 pub struct RouterClient {
+    #[expect(
+        dead_code,
+        reason = "approvals are used once real router calls are implemented."
+    )]
+    approvals: ApprovalsStorage,
     cmd_rx: Receiver<Cmd>,
     context: AppContext,
     #[expect(
@@ -37,6 +46,7 @@ impl RouterClient {
     #[must_use]
     pub fn new(cmd_rx: Receiver<Cmd>, msg_tx: Sender<Msg>, context: AppContext) -> Self {
         Self {
+            approvals: ApprovalsStorage::new(),
             cmd_rx,
             msg_tx,
             context,
@@ -118,8 +128,8 @@ impl RouterClient {
             (
                 State::Streaming,
                 Cmd::Continue(
-                    continue_execution @ (protocol::ContinueExecution::Break
-                    | protocol::ContinueExecution::Inject { .. }),
+                    continue_execution @ (cmd::ContinueExecution::Break
+                    | cmd::ContinueExecution::Inject { .. }),
                 ),
             ) => self.continue_execution(continue_execution).await,
             (state, Cmd::Continue(continue_execution)) if !matches!(state, State::Idle) => {
@@ -170,22 +180,16 @@ impl RouterClient {
         placeholder("preview deterministic router selection for prompt")
     }
 
-    async fn continue_execution(
-        &mut self,
-        continue_execution: protocol::ContinueExecution,
-    ) -> bool {
+    async fn continue_execution(&mut self, continue_execution: cmd::ContinueExecution) -> bool {
         match (&self.state, continue_execution) {
-            (State::AwaitingTool, protocol::ContinueExecution::ToolResults { results }) => {
+            (State::AwaitingTool, cmd::ContinueExecution::ToolResults { results }) => {
                 tracing::debug!(
                     result.count = results.len(),
                     "router client scaffold placeholder: submit tool results",
                 );
                 true
             }
-            (
-                State::AwaitingApproval,
-                protocol::ContinueExecution::ApprovalDecisions { decisions },
-            ) => {
+            (State::AwaitingApproval, cmd::ContinueExecution::ApprovalDecisions { decisions }) => {
                 tracing::debug!(
                     decision.count = decisions.len(),
                     "router client scaffold placeholder: submit approval decisions",
@@ -194,7 +198,7 @@ impl RouterClient {
             }
             (
                 state @ (State::AwaitingTool | State::AwaitingApproval | State::Streaming),
-                protocol::ContinueExecution::Break,
+                cmd::ContinueExecution::Break,
             ) => {
                 tracing::debug!(
                     ?state,
@@ -204,7 +208,7 @@ impl RouterClient {
             }
             (
                 state @ (State::AwaitingTool | State::AwaitingApproval | State::Streaming),
-                protocol::ContinueExecution::Inject { messages },
+                cmd::ContinueExecution::Inject { messages },
             ) => {
                 tracing::debug!(
                     ?state,
@@ -276,7 +280,7 @@ mod tests {
         let mut router_client = router_client_with_state(State::Idle);
 
         let handled = router_client
-            .handle_cmd(Cmd::Continue(protocol::ContinueExecution::Break))
+            .handle_cmd(Cmd::Continue(cmd::ContinueExecution::Break))
             .await;
 
         assert!(!handled);
@@ -304,12 +308,12 @@ mod tests {
         for state in non_idle_states() {
             let mut break_client = router_client_with_state(state.clone());
             let break_handled = break_client
-                .continue_execution(protocol::ContinueExecution::Break)
+                .continue_execution(cmd::ContinueExecution::Break)
                 .await;
 
             let mut inject_client = router_client_with_state(state);
             let inject_handled = inject_client
-                .continue_execution(protocol::ContinueExecution::Inject {
+                .continue_execution(cmd::ContinueExecution::Inject {
                     messages: Vec::new(),
                 })
                 .await;
@@ -325,7 +329,7 @@ mod tests {
             let mut router_client = router_client_with_state(state.clone());
 
             let handled = router_client
-                .continue_execution(protocol::ContinueExecution::ToolResults {
+                .continue_execution(cmd::ContinueExecution::ToolResults {
                     results: Vec::new(),
                 })
                 .await;
@@ -340,7 +344,7 @@ mod tests {
             let mut router_client = router_client_with_state(state.clone());
 
             let handled = router_client
-                .continue_execution(protocol::ContinueExecution::ApprovalDecisions {
+                .continue_execution(cmd::ContinueExecution::ApprovalDecisions {
                     decisions: Vec::new(),
                 })
                 .await;
