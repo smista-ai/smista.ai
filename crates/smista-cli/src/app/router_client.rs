@@ -1,9 +1,16 @@
 mod protocol;
+mod state;
 
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use smista_sdk::client::Client;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 pub use self::protocol::{Cmd, Msg};
+use self::state::State;
 use crate::app::AppContext;
 
 /// Worker responsible for communicating with `smista-router`.
@@ -19,6 +26,10 @@ pub struct RouterClient {
         reason = "Router messages are emitted once real router calls are implemented."
     )]
     msg_tx: Sender<Msg>,
+    /// Current session id, if any.
+    session_id: Option<Uuid>,
+    /// current state of the router client
+    state: State,
 }
 
 impl RouterClient {
@@ -29,6 +40,8 @@ impl RouterClient {
             cmd_rx,
             msg_tx,
             context,
+            session_id: None,
+            state: State::Idle,
         }
     }
 
@@ -47,14 +60,172 @@ impl RouterClient {
                     break;
                 }
                 Some(cmd) = self.cmd_rx.recv() => {
-                    tracing::debug!("RouterClient received command: {cmd:?}");
-                    tracing::trace!("RouterClient scaffold ignored command until execution is implemented");
+                    tracing::debug!("received command: {cmd:?}");
+                    self.handle_cmd(cmd).await;
                 }
             }
         }
 
+        // signing out on router.
+        if let Err(err) = self.context.router_client.sign_out().await {
+            tracing::error!("failed to sign out: {err}");
+        } else {
+            tracing::debug!("signed out successfully");
+        }
+
         tracing::info!("RouterClient stopped");
     }
+
+    async fn handle_cmd(&mut self, cmd: Cmd) -> bool {
+        match (&self.state, cmd) {
+            (
+                State::Idle,
+                Cmd::Execute {
+                    prompt,
+                    files,
+                    plan,
+                },
+            ) => self.execute(prompt, files, plan).await,
+            (
+                State::Idle,
+                Cmd::Preview {
+                    prompt,
+                    files,
+                    plan,
+                },
+            ) => self.preview(prompt, files, plan).await,
+            (_, Cmd::ListSessions) => placeholder("list sessions on the router for this user"),
+            (state, Cmd::ResumeSession(session_id)) => {
+                let todo = if matches!(state, State::Idle) {
+                    "resume session from idle state"
+                } else {
+                    "interrupt active run, then resume session"
+                };
+                tracing::debug!(%session_id, todo, "router client scaffold placeholder");
+                true
+            }
+            (_, Cmd::GetRouterStatus) => placeholder("get router health status"),
+            (state, Cmd::GetUsage)
+                if self.session_id.is_some() || !matches!(state, State::Idle) =>
+            {
+                placeholder("get current usage statistics for this session")
+            }
+            (state, Cmd::GetTrace)
+                if self.session_id.is_some() || !matches!(state, State::Idle) =>
+            {
+                placeholder("get execution trace for this session")
+            }
+            (
+                State::Streaming,
+                Cmd::Continue(
+                    continue_execution @ (protocol::ContinueExecution::Break
+                    | protocol::ContinueExecution::Inject { .. }),
+                ),
+            ) => self.continue_execution(continue_execution).await,
+            (state, Cmd::Continue(continue_execution)) if !matches!(state, State::Idle) => {
+                self.continue_execution(continue_execution).await
+            }
+            (state, Cmd::Clear) if !matches!(state, State::Idle) => {
+                placeholder("interrupt active run, then clear current session")
+            }
+            (State::Idle, Cmd::Clear) => placeholder("clear current idle session"),
+            (
+                _,
+                Cmd::Preview {
+                    prompt,
+                    files,
+                    plan,
+                },
+            ) => self.preview(prompt, files, plan).await,
+            (state, cmd) => {
+                tracing::warn!("received command {cmd:?} in state {state:?}, ignoring");
+                false
+            }
+        }
+    }
+
+    async fn execute(
+        &mut self,
+        prompt: String,
+        files: HashMap<PathBuf, String>,
+        plan: bool,
+    ) -> bool {
+        tracing::debug!(
+            "executing prompt: {prompt} with files: {files:?}, plan: {plan}",
+            files = files.keys().collect::<Vec<_>>()
+        );
+        placeholder("execute prompt through router and process turn response")
+    }
+
+    async fn preview(
+        &mut self,
+        prompt: String,
+        files: HashMap<PathBuf, String>,
+        plan: bool,
+    ) -> bool {
+        tracing::debug!(
+            "previewing prompt: {prompt} with files: {files:?}, plan: {plan}",
+            files = files.keys().collect::<Vec<_>>()
+        );
+        placeholder("preview deterministic router selection for prompt")
+    }
+
+    async fn continue_execution(
+        &mut self,
+        continue_execution: protocol::ContinueExecution,
+    ) -> bool {
+        match (&self.state, continue_execution) {
+            (State::AwaitingTool, protocol::ContinueExecution::ToolResults { results }) => {
+                tracing::debug!(
+                    result.count = results.len(),
+                    "router client scaffold placeholder: submit tool results",
+                );
+                true
+            }
+            (
+                State::AwaitingApproval,
+                protocol::ContinueExecution::ApprovalDecisions { decisions },
+            ) => {
+                tracing::debug!(
+                    decision.count = decisions.len(),
+                    "router client scaffold placeholder: submit approval decisions",
+                );
+                true
+            }
+            (
+                state @ (State::AwaitingTool | State::AwaitingApproval | State::Streaming),
+                protocol::ContinueExecution::Break,
+            ) => {
+                tracing::debug!(
+                    ?state,
+                    "router client scaffold placeholder: break active run",
+                );
+                true
+            }
+            (
+                state @ (State::AwaitingTool | State::AwaitingApproval | State::Streaming),
+                protocol::ContinueExecution::Inject { messages },
+            ) => {
+                tracing::debug!(
+                    ?state,
+                    message.count = messages.len(),
+                    "router client scaffold placeholder: inject user input into active run",
+                );
+                true
+            }
+            (state, continue_execution) => {
+                tracing::warn!(
+                    "received continuation {continue_execution:?} in state {state:?}, ignoring",
+                );
+                false
+            }
+        }
+    }
+}
+
+fn placeholder(todo: &'static str) -> bool {
+    tracing::debug!(todo, "router client scaffold placeholder");
+    true
 }
 
 #[cfg(test)]
@@ -70,7 +241,8 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::credentials::{
-        ApiKeyStorage, CredentialsStorage, E2eeKeysCredentials, ProvidersCredentials,
+        ApiKeyStorage, CredentialBackend, CredentialsStorage, E2eeKeysCredentials,
+        ProvidersCredentials,
     };
     use crate::skills::SkillStore;
 
@@ -86,6 +258,7 @@ mod tests {
             .send(Cmd::Execute {
                 prompt: "hello".to_owned(),
                 files: HashMap::default(),
+                plan: false,
             })
             .await
             .expect("router worker receives scaffold commands");
@@ -98,12 +271,118 @@ mod tests {
             .expect("router worker does not panic on scaffold commands");
     }
 
+    #[tokio::test]
+    async fn idle_rejects_continue() {
+        let mut router_client = router_client_with_state(State::Idle);
+
+        let handled = router_client
+            .handle_cmd(Cmd::Continue(protocol::ContinueExecution::Break))
+            .await;
+
+        assert!(!handled);
+    }
+
+    #[tokio::test]
+    async fn non_idle_rejects_execute() {
+        for state in non_idle_states() {
+            let mut router_client = router_client_with_state(state);
+
+            let handled = router_client
+                .handle_cmd(Cmd::Execute {
+                    prompt: "hello".to_owned(),
+                    files: HashMap::default(),
+                    plan: false,
+                })
+                .await;
+
+            assert!(!handled);
+        }
+    }
+
+    #[tokio::test]
+    async fn break_and_inject_are_valid_from_every_non_idle_state() {
+        for state in non_idle_states() {
+            let mut break_client = router_client_with_state(state.clone());
+            let break_handled = break_client
+                .continue_execution(protocol::ContinueExecution::Break)
+                .await;
+
+            let mut inject_client = router_client_with_state(state);
+            let inject_handled = inject_client
+                .continue_execution(protocol::ContinueExecution::Inject {
+                    messages: Vec::new(),
+                })
+                .await;
+
+            assert!(break_handled);
+            assert!(inject_handled);
+        }
+    }
+
+    #[tokio::test]
+    async fn tool_results_only_match_awaiting_tool() {
+        for state in all_states() {
+            let mut router_client = router_client_with_state(state.clone());
+
+            let handled = router_client
+                .continue_execution(protocol::ContinueExecution::ToolResults {
+                    results: Vec::new(),
+                })
+                .await;
+
+            assert_eq!(handled, state == State::AwaitingTool);
+        }
+    }
+
+    #[tokio::test]
+    async fn approval_decisions_only_match_awaiting_approval() {
+        for state in all_states() {
+            let mut router_client = router_client_with_state(state.clone());
+
+            let handled = router_client
+                .continue_execution(protocol::ContinueExecution::ApprovalDecisions {
+                    decisions: Vec::new(),
+                })
+                .await;
+
+            assert_eq!(handled, state == State::AwaitingApproval);
+        }
+    }
+
+    fn all_states() -> Vec<State> {
+        vec![
+            State::Idle,
+            State::AwaitingTool,
+            State::AwaitingApproval,
+            State::Streaming,
+        ]
+    }
+
+    fn non_idle_states() -> Vec<State> {
+        all_states()
+            .into_iter()
+            .filter(|state| *state != State::Idle)
+            .collect()
+    }
+
+    fn router_client_with_state(state: State) -> RouterClient {
+        let exit = CancellationToken::new();
+        let context = app_context(exit);
+        let (_cmd_tx, cmd_rx) = tokio::sync::mpsc::channel(1);
+        let (msg_tx, _msg_rx) = tokio::sync::mpsc::channel(1);
+        let mut router_client = RouterClient::new(cmd_rx, msg_tx, context);
+        router_client.state = state;
+        router_client
+    }
+
     fn app_context(exit: CancellationToken) -> AppContext {
         let cwd = tempfile::tempdir()
             .expect("temporary directory is created")
             .keep();
-        let credentials =
-            Arc::new(CredentialsStorage::new(false).expect("test credentials storage builds"));
+        let credentials = CredentialsStorage::new_file_for_tests(cwd.join("global-secrets"))
+            .expect("test credentials storage builds");
+        assert_eq!(credentials.backend(), CredentialBackend::File);
+        let credentials = Arc::new(credentials);
         let router_client = ReqwestClient::new(RouterClientConfig::new(
             Url::parse("http://127.0.0.1:9").expect("test URL parses"),
         ))

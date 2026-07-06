@@ -189,6 +189,7 @@ impl App {
                 .send(Cmd::Execute {
                     prompt,
                     files: HashMap::default(),
+                    plan: false,
                 })
                 .await?;
         }
