@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use smista_sdk::client::Client;
+use smista_sdk::core::api::CreateSessionRequest;
 use smista_sdk::core::model::ModelReference;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
@@ -20,6 +21,8 @@ pub use self::cmd::Cmd;
 pub use self::msg::Msg;
 use self::state::State;
 use crate::app::AppContext;
+
+const MAX_SESSION_TITLE_LENGTH: usize = 100;
 
 /// Worker responsible for communicating with `smista-router`.
 ///
@@ -36,9 +39,16 @@ pub struct RouterClient {
     /// Channel to send messages to the UI.
     msg_tx: Sender<Msg>,
     /// Current session id, if any.
-    session_id: Option<Uuid>,
+    session: Option<SessionInfo>,
     /// Current state of the router client.
     state: State,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SessionInfo {
+    id: Uuid,
+    title: String,
+    key_id: Option<String>,
 }
 
 impl RouterClient {
@@ -50,7 +60,7 @@ impl RouterClient {
             cmd_rx,
             msg_tx,
             context,
-            session_id: None,
+            session: None,
             state: State::Idle,
         }
     }
@@ -229,9 +239,86 @@ impl RouterClient {
             }
         }
     }
+
+    /// Initializes a new session with the router client.
+    ///
+    /// If successful, sets the `session_id` field to the new session's ID. If a session is already active, it will be replaced.
+    /// The new `session_id` is returned in the `Ok` variant of the result.
+    /// If an error occurs during session initialization, it is returned in the `Err` variant.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Session creation is scaffolded before execute uses it."
+        )
+    )]
+    async fn init_new_session(&mut self, prompt: &str) -> anyhow::Result<Uuid> {
+        tracing::debug!("initializing a new session");
+
+        let key_id = if self.context.config.local.encrypt_sessions() {
+            tracing::debug!("e2ee is enabled, creating a new encryption key for the session");
+            Some(self.context.e2ee_keys.create_key()?)
+        } else {
+            None
+        };
+        let title = session_title(prompt);
+
+        tracing::debug!(
+            encrypted = key_id.is_some(),
+            r#"creating session with title: "{title}""#
+        );
+        let response = self
+            .context
+            .router_client
+            .create_session(CreateSessionRequest {
+                title: title.clone(),
+                scope: Some(self.scope()),
+                key_id,
+            })
+            .await?;
+
+        tracing::debug!(
+            "created new session with id: {session_id}",
+            session_id = response.session.id
+        );
+        self.session = Some(SessionInfo {
+            id: response.session.id,
+            title: response.session.title.unwrap_or(title),
+            key_id: response.session.key_id,
+        });
+
+        Ok(response.session.id)
+    }
+
+    fn session_id(&self) -> Option<Uuid> {
+        self.session.as_ref().map(|info| info.id)
+    }
+
+    /// Computes the session list scope from the current working directory.
+    #[must_use]
+    fn scope(&self) -> String {
+        self.context.cwd.to_string_lossy().to_string()
+    }
 }
 
 fn placeholder(todo: &'static str) -> bool {
     tracing::debug!(todo, "router client scaffold placeholder");
     true
+}
+
+fn session_title(prompt: &str) -> String {
+    prompt
+        .split_ascii_whitespace()
+        .try_fold(String::new(), |mut acc, word| {
+            if acc.len() + word.len() + 1 > MAX_SESSION_TITLE_LENGTH {
+                Err(())
+            } else {
+                if !acc.is_empty() {
+                    acc.push(' ');
+                }
+                acc.push_str(word);
+                Ok(acc)
+            }
+        })
+        .unwrap_or_else(|_| String::new())
 }

@@ -6,8 +6,8 @@ use std::time::Duration;
 use smista_mock_web_server::{Endpoint, EndpointStatus, MockRouter, ResponseTemplate};
 use smista_sdk::client::{Client as _, ReqwestClient, RouterClientConfig};
 use smista_sdk::core::api::{
-    EncryptedPayload, GetSessionResponse, MessageContent, SessionDetail, SessionMessageDetail,
-    TraceResponse,
+    CreateSessionRequest, CreateSessionResponse, EncryptedPayload, GetSessionResponse,
+    MessageContent, SessionDetail, SessionMessageDetail, SessionSummary, TraceResponse,
 };
 use smista_sdk::core::intent::TaskIntent;
 use smista_sdk::core::message::MessageRole;
@@ -230,7 +230,7 @@ async fn handle_cmd_dispatches_session_usage_trace_and_clear_commands() {
     ));
     assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
     assert_eq!(router_client.state, State::Idle);
-    assert_eq!(router_client.session_id, None);
+    assert_eq!(router_client.session_id(), None);
 }
 
 #[tokio::test]
@@ -301,11 +301,90 @@ async fn session_list_uses_workspace_scope() {
 }
 
 #[tokio::test]
+async fn init_new_session_encrypts_by_default_and_records_session_info_key_id() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::CreateSession,
+            ResponseTemplate::new(201)
+                .set_body_json(created_session_response(Some("kf_response".to_owned()))),
+        )
+        .start()
+        .await;
+    let (mut router_client, _msg_rx) = router_client_for_mock(&router).await;
+
+    let session_id = router_client
+        .init_new_session("Refactor the auth middleware")
+        .await
+        .expect("session creation succeeds");
+
+    assert_eq!(session_id, Uuid::nil());
+    let session = router_client
+        .session
+        .as_ref()
+        .expect("session info is recorded");
+    assert_eq!(session.id, Uuid::nil());
+    assert_eq!(session.title, "Created session");
+    assert_eq!(session.key_id.as_deref(), Some("kf_response"));
+
+    let requests = router.received_requests().await;
+    let request = requests
+        .iter()
+        .find(|request| request.url.path() == "/api/v1/sessions")
+        .expect("create session request was sent");
+    let body = request
+        .body_json::<CreateSessionRequest>()
+        .expect("create session body decodes");
+    assert_eq!(body.title, "Refactor the auth middleware");
+    assert!(
+        body.key_id.is_some(),
+        "default session creation must send a key id"
+    );
+}
+
+#[tokio::test]
+async fn init_new_session_creates_plaintext_session_when_encryption_is_disabled() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::CreateSession,
+            ResponseTemplate::new(201).set_body_json(created_session_response(None)),
+        )
+        .start()
+        .await;
+    let (mut router_client, _msg_rx) = router_client_for_mock(&router).await;
+    let mut config = Config::default();
+    config.local.encrypt_sessions = Some(false);
+    router_client.context.config = Arc::new(config);
+
+    router_client
+        .init_new_session("Refactor encrypted auth middleware")
+        .await
+        .expect("session creation succeeds");
+
+    let session = router_client
+        .session
+        .as_ref()
+        .expect("session info is recorded");
+    assert_eq!(session.id, Uuid::nil());
+    assert_eq!(session.title, "Created session");
+    assert_eq!(session.key_id, None);
+
+    let requests = router.received_requests().await;
+    let request = requests
+        .iter()
+        .find(|request| request.url.path() == "/api/v1/sessions")
+        .expect("create session request was sent");
+    let body = request
+        .body_json::<CreateSessionRequest>()
+        .expect("create session body decodes");
+    assert_eq!(body.key_id, None);
+}
+
+#[tokio::test]
 async fn resume_session_maps_messages_and_resets_state() {
     let router = MockRouter::start().await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
     router_client.state = State::AwaitingTool;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Old session", None));
     router_client
         .approvals
         .approve("git commit -m test")
@@ -321,7 +400,13 @@ async fn resume_session_maps_messages_and_resets_state() {
     assert_eq!(session.messages.len(), 2);
     assert_eq!(session.messages[0].role, "user");
     assert_eq!(session.messages[0].content, "Refactor the auth middleware.");
-    assert_eq!(router_client.session_id, Some(Uuid::nil()));
+    assert_eq!(router_client.session_id(), Some(Uuid::nil()));
+    let session_info = router_client
+        .session
+        .as_ref()
+        .expect("session info is recorded");
+    assert_eq!(session_info.title, "Refactor auth middleware");
+    assert_eq!(session_info.key_id, None);
     assert_eq!(router_client.state, State::Idle);
     assert!(
         !router_client
@@ -347,7 +432,7 @@ async fn resume_session_maps_messages_and_resets_state() {
 async fn usage_handler_emits_current_session_usage() {
     let router = MockRouter::start().await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Usage session", None));
 
     router_client.get_usage().await;
 
@@ -370,7 +455,7 @@ async fn trace_handler_emits_plaintext_events() {
         .start()
         .await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", None));
 
     router_client.get_traces().await;
 
@@ -408,7 +493,7 @@ async fn trace_handler_deserializes_decrypted_payload_json() {
         .await;
     let (mut router_client, mut msg_rx) =
         router_client_for_mock_with_credentials(&router, cwd, credentials).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", Some(key_id)));
 
     router_client.get_traces().await;
 
@@ -443,7 +528,7 @@ async fn trace_handler_rejects_missing_active_session_before_requesting_router()
 async fn trace_handler_emits_empty_trace_for_empty_response() {
     let router = MockRouter::start().await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", None));
 
     router_client.get_traces().await;
 
@@ -465,7 +550,7 @@ async fn trace_handler_reports_decryption_errors_and_skips_payload() {
         .start()
         .await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", None));
 
     router_client.get_traces().await;
 
@@ -495,7 +580,7 @@ async fn trace_handler_reports_invalid_decrypted_payload_json() {
         .await;
     let (mut router_client, mut msg_rx) =
         router_client_for_mock_with_credentials(&router, cwd, credentials).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", Some(key_id)));
 
     router_client.get_traces().await;
 
@@ -511,7 +596,7 @@ async fn clear_interrupts_active_run_resets_state_and_emits_idle() {
     let router = MockRouter::start().await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
     router_client.state = State::Streaming;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
     router_client
         .approvals
         .approve("git commit -m test")
@@ -521,7 +606,7 @@ async fn clear_interrupts_active_run_resets_state_and_emits_idle() {
 
     assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
     assert_eq!(router_client.state, State::Idle);
-    assert_eq!(router_client.session_id, None);
+    assert_eq!(router_client.session, None);
     assert!(
         !router_client
             .approvals
@@ -545,14 +630,14 @@ async fn clear_reports_interrupt_errors_then_resets_state_and_emits_idle() {
         .await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
     router_client.state = State::Streaming;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
 
     router_client.clear_session().await;
 
     assert_error_contains(&mut msg_rx, "Failed to terminate active run").await;
     assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
     assert_eq!(router_client.state, State::Idle);
-    assert_eq!(router_client.session_id, None);
+    assert_eq!(router_client.session, None);
 }
 
 #[tokio::test]
@@ -563,7 +648,7 @@ async fn resume_session_reports_interrupt_errors_then_loads_session() {
         .await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
     router_client.state = State::Streaming;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
 
     router_client.resume_session(Uuid::nil()).await;
 
@@ -573,7 +658,7 @@ async fn resume_session_reports_interrupt_errors_then_loads_session() {
     };
     assert_eq!(session.id, Uuid::nil());
     assert_eq!(router_client.state, State::Idle);
-    assert_eq!(router_client.session_id, Some(Uuid::nil()));
+    assert_eq!(router_client.session_id(), Some(Uuid::nil()));
 }
 
 #[tokio::test]
@@ -609,6 +694,15 @@ async fn resume_session_reports_decryption_errors_and_skips_messages() {
     assert_eq!(session.messages.len(), 1);
     assert_eq!(session.messages[0].role, "assistant");
     assert_eq!(session.messages[0].content, "visible reply");
+    assert_eq!(
+        router_client
+            .session
+            .as_ref()
+            .expect("session info is recorded")
+            .key_id
+            .as_deref(),
+        Some("kf_ab12")
+    );
 }
 
 #[tokio::test]
@@ -640,15 +734,15 @@ async fn handlers_emit_errors_for_router_failures_and_missing_sessions() {
     router_client.get_usage().await;
     assert_error_contains(&mut msg_rx, "No active session").await;
 
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Usage session", None));
     router_client.get_usage().await;
     assert_error_contains(&mut msg_rx, "Failed to get usage statistics").await;
-    router_client.session_id = None;
+    router_client.session = None;
 
     router_client.resume_session(Uuid::nil()).await;
     assert_error_contains(&mut msg_rx, "Failed to get session").await;
 
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", None));
     router_client.get_traces().await;
     assert_error_contains(&mut msg_rx, "Failed to get execution trace").await;
 }
@@ -785,13 +879,36 @@ fn invalid_encrypted_payload() -> EncryptedPayload {
     }
 }
 
+fn session_info(id: Uuid, title: &str, key_id: Option<String>) -> SessionInfo {
+    SessionInfo {
+        id,
+        title: title.to_owned(),
+        key_id,
+    }
+}
+
+fn created_session_response(key_id: Option<String>) -> CreateSessionResponse {
+    CreateSessionResponse {
+        session: SessionSummary {
+            id: Uuid::nil(),
+            title: Some("Created session".to_owned()),
+            scope: Some("/tmp/project".to_owned()),
+            encrypted: key_id.is_some(),
+            key_id,
+            created_at: "2026-05-25T09:00:00Z".parse().expect("timestamp parses"),
+            updated_at: "2026-05-25T09:00:00Z".parse().expect("timestamp parses"),
+            archived: false,
+        },
+    }
+}
+
 fn session_response_with_messages(messages: Vec<SessionMessageDetail>) -> GetSessionResponse {
     GetSessionResponse {
         session: SessionDetail {
             id: Uuid::nil(),
             title: "Encrypted transcript".to_owned(),
             scope: None,
-            encrypted: true,
+            key_id: Some("kf_ab12".to_owned()),
             created_at: "2026-05-25T09:00:00Z".parse().expect("timestamp parses"),
             updated_at: "2026-05-25T09:00:00Z".parse().expect("timestamp parses"),
             messages,

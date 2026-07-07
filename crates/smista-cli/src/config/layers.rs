@@ -140,6 +140,7 @@ fn merge_local_prefs(low: LocalPreferences, high: LocalPreferences) -> LocalPref
         stream: high.stream.or(low.stream),
         local_only: high.local_only.or(low.local_only),
         no_network: high.no_network.or(low.no_network),
+        encrypt_sessions: high.encrypt_sessions.or(low.encrypt_sessions),
     }
 }
 
@@ -458,6 +459,19 @@ mod tests {
         ]);
         assert_eq!(merged.local.auto_apply, Some(true));
         assert_eq!(merged.local.stream, Some(true));
+    }
+
+    #[test]
+    fn should_merge_encrypt_sessions_local_preference_field_wise() {
+        let mut project = Config::default();
+        project.local.encrypt_sessions = Some(false);
+        let mut local = Config::default();
+        local.local.encrypt_sessions = Some(true);
+        let merged = merge(vec![
+            (ConfigLayer::Project, project),
+            (ConfigLayer::RuntimeOverride, local),
+        ]);
+        assert_eq!(merged.local.encrypt_sessions, Some(true));
     }
 
     #[test]

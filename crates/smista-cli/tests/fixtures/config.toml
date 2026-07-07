@@ -108,3 +108,4 @@ auto_apply = false
 stream = true
 local_only = false
 no_network = false
+encrypt_sessions = true

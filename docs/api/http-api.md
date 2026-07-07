@@ -297,6 +297,10 @@ Returns the full session, including its messages and free-form metadata.
 empty. An archived session is not returned here, and neither is a session owned
 by another user; both respond `404`, the same as an unknown id.
 
+The fetched session detail carries `key_id` when the session is encrypted and
+omits it for plaintext sessions. It does not include the summary-only
+`encrypted` flag; `key_id` presence is the detail view's encryption marker.
+
 Each message's `content` is tagged with how it is stored. A plaintext session
 returns `{ "plaintext": "..." }`; an end-to-end encrypted session returns
 `{ "encrypted": { ... } }` with the sealed envelope, since the router holds no
@@ -308,7 +312,6 @@ assistant turn and are omitted for the other roles.
   "session": {
     "id": "5f8b1c7e-3a2d-4e6f-9b0a-1c2d3e4f5a6b",
     "title": "Refactor auth middleware",
-    "encrypted": false,
     "created_at": "2026-05-25T09:00:00Z",
     "updated_at": "2026-05-25T09:30:00Z",
     "messages": [

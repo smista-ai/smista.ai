@@ -3113,7 +3113,6 @@
         "required": [
           "id",
           "title",
-          "encrypted",
           "created_at",
           "updated_at",
           "messages",
@@ -3136,9 +3135,12 @@
             ],
             "description": "Opaque scope the session belongs to, if any."
           },
-          "encrypted": {
-            "type": "boolean",
-            "description": "Whether the session's content is end-to-end encrypted."
+          "key_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Key fingerprint of the per-session key, if the session is encrypted."
           },
           "created_at": {
             "type": "string",

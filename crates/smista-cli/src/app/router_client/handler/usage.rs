@@ -8,7 +8,7 @@ impl RouterClient {
     /// Gets usage for the current session and emits [`Msg::Usage`] or [`Msg::Error`].
     pub(in crate::app::router_client) async fn get_usage(&self) {
         tracing::debug!("getting usage statistics for this session");
-        let Some(session_id) = self.session_id else {
+        let Some(session_id) = self.session_id() else {
             tracing::warn!("no active session, cannot get usage statistics");
             self.send_msg(Msg::Error(
                 "No active session, cannot get usage statistics".to_string(),

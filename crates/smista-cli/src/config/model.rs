@@ -144,6 +144,17 @@ pub struct LocalPreferences {
     /// Forbid network access.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub no_network: Option<bool>,
+    /// Create new sessions as end-to-end encrypted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encrypt_sessions: Option<bool>,
+}
+
+impl LocalPreferences {
+    /// Returns whether new CLI sessions should be end-to-end encrypted.
+    #[must_use]
+    pub fn encrypt_sessions(&self) -> bool {
+        self.encrypt_sessions.unwrap_or(true)
+    }
 }
 
 #[cfg(test)]
@@ -225,15 +236,18 @@ mod tests {
             stream = true
             local_only = false
             no_network = false
+            encrypt_sessions = true
         "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.local.auto_apply, Some(false));
         assert_eq!(config.local.stream, Some(true));
+        assert_eq!(config.local.encrypt_sessions, Some(true));
     }
 
     #[test]
     fn should_leave_local_prefs_unset_by_default() {
         assert_eq!(Config::default().local, LocalPreferences::default());
         assert!(Config::default().local.auto_apply.is_none());
+        assert!(Config::default().local.encrypt_sessions());
     }
 }
