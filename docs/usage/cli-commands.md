@@ -233,8 +233,10 @@ Use `smista config show` to inspect configuration:
 
 The merged view applies the same precedence used by the CLI: built-in defaults,
 then global configuration, then project configuration. Single-layer views read
-one file. Sensitive keys such as `api_key`, `password`, and `secret` are printed
-as `[redacted]`.
+and validate one file. The command prints parsed sections and values rather
+than the raw TOML file, so you can see how smista interpreted the configuration.
+Sensitive keys such as `api_key`, `password`, and `secret` are printed as
+`[redacted]`.
 
 Use `smista config path` to find configuration files:
 
