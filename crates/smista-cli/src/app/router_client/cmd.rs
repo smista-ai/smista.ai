@@ -3,12 +3,16 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use smista_sdk::core::model::ModelReference;
 use uuid::Uuid;
 
 /// Commands are sent by the UI to the router client to be executed on the smista-router.
-#[expect(
-    dead_code,
-    reason = "Router command variants are scaffolded before TUI routing is wired."
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Router command variants are scaffolded before TUI routing is wired."
+    )
 )]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cmd {
@@ -20,11 +24,17 @@ pub enum Cmd {
         files: HashMap<PathBuf, String>,
         /// Whether planning mode is enabled.
         plan: bool,
+        /// Explicit model to use, bypassing routing when set.
+        explicit_model: Option<ModelReference>,
     },
     /// Continue paused or streaming execution with user-visible input.
     Continue(ContinueExecution),
     /// Interrupt any active run and clear the current session.
     Clear,
+    /// List models available on the router for this user.
+    ListModels,
+    /// List providers available on the router for this user.
+    ListProviders,
     /// List sessions on the router for this user.
     ListSessions,
     /// Resume a session on the router for this user.
@@ -41,6 +51,8 @@ pub enum Cmd {
         files: HashMap<PathBuf, String>,
         /// Whether planning mode is enabled.
         plan: bool,
+        /// Explicit model to use, bypassing routing when set.
+        explicit_model: Option<ModelReference>,
     },
     /// Get the router health status.
     GetRouterStatus,

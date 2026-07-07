@@ -190,6 +190,7 @@ impl App {
                     prompt,
                     files: HashMap::default(),
                     plan: false,
+                    explicit_model: None,
                 })
                 .await?;
         }
