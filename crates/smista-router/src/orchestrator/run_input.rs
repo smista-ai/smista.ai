@@ -188,7 +188,6 @@ mod tests {
             },
             local_preferences: LocalPreferences {
                 auto_apply: false,
-                stream: true,
                 local_only: false,
                 no_network: false,
             },

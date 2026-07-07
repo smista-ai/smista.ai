@@ -142,16 +142,41 @@ pub struct ExecutePolicy {
     pub privacy: PrivacyPolicy,
 }
 
+impl ExecutePolicy {
+    /// Schema version for the first execute-policy snapshot format.
+    pub const VERSION_V1: u32 = 1;
+
+    /// Builds a version 1 execute-policy snapshot.
+    pub fn v1<S>(
+        source: S,
+        classification: ClassificationConfig,
+        routing: RoutingPolicy,
+        tools: ToolsConfig,
+        privacy: PrivacyPolicy,
+    ) -> Self
+    where
+        S: Into<String>,
+    {
+        Self {
+            version: Self::VERSION_V1,
+            source: source.into(),
+            classification,
+            routing,
+            tools,
+            privacy,
+        }
+    }
+}
+
 /// Client-side execution preferences.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts", ts(export))]
 pub struct LocalPreferences {
     /// Apply edits automatically without confirmation.
     pub auto_apply: bool,
-    /// Prefer a streaming response.
-    pub stream: bool,
     /// Restrict routing to local models only.
     pub local_only: bool,
     /// Forbid any network access for this request.
@@ -490,7 +515,7 @@ mod tests {
                 "local": { "mode": "allow" }
             }
         },
-        "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
+        "local_preferences": { "auto_apply": false, "local_only": false, "no_network": false },
         "attachments": {
             "files": [ { "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true } ],
             "instructions": [ { "source": "AGENTS.md", "content": "..." } ],
@@ -549,6 +574,46 @@ mod tests {
             serde_json::from_str::<ExecuteRequest>(&json).unwrap(),
             request
         );
+    }
+
+    #[test]
+    fn should_reject_removed_stream_local_preference() {
+        let json = r#"{
+            "auto_apply": false,
+            "stream": true,
+            "local_only": false,
+            "no_network": false
+        }"#;
+
+        let error =
+            serde_json::from_str::<LocalPreferences>(json).expect_err("stream is unsupported");
+        assert!(
+            error.to_string().contains("unknown field `stream`"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn should_construct_v1_execute_policy() {
+        let classification = ClassificationConfig::default();
+        let routing = RoutingPolicy::default();
+        let tools = ToolsConfig::default();
+        let privacy = PrivacyPolicy::default();
+
+        let policy = ExecutePolicy::v1(
+            "merged",
+            classification.clone(),
+            routing.clone(),
+            tools.clone(),
+            privacy.clone(),
+        );
+
+        assert_eq!(policy.version, ExecutePolicy::VERSION_V1);
+        assert_eq!(policy.source, "merged");
+        assert_eq!(policy.classification, classification);
+        assert_eq!(policy.routing, routing);
+        assert_eq!(policy.tools, tools);
+        assert_eq!(policy.privacy, privacy);
     }
 
     #[test]

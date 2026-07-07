@@ -22,6 +22,7 @@ mod log;
 mod signal;
 mod skills;
 mod telemetry;
+mod tools;
 
 use clap::Parser as _;
 

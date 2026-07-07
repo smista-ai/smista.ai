@@ -2175,7 +2175,6 @@
         "description": "Client-side execution preferences.",
         "required": [
           "auto_apply",
-          "stream",
           "local_only",
           "no_network"
         ],
@@ -2183,10 +2182,6 @@
           "auto_apply": {
             "type": "boolean",
             "description": "Apply edits automatically without confirmation."
-          },
-          "stream": {
-            "type": "boolean",
-            "description": "Prefer a streaming response."
           },
           "local_only": {
             "type": "boolean",
@@ -2196,7 +2191,8 @@
             "type": "boolean",
             "description": "Forbid any network access for this request."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "LocalPrivacy": {
         "type": "object",

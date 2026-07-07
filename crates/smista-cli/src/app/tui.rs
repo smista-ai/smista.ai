@@ -93,7 +93,29 @@ impl<B: Backend> Tui<B> {
     /// This scaffold does not update UI state yet.
     #[must_use]
     pub fn handle_client_msg(&self, msg: Msg) -> Option<Cmd> {
-        tracing::debug!("Handling client message: {msg:?}");
+        tracing::debug!(message = message_name(&msg), "handling client message");
         None
+    }
+}
+
+fn message_name(msg: &Msg) -> &'static str {
+    match msg {
+        Msg::AssistantTurn(_) => "assistant_turn",
+        Msg::StreamedContentChunk(_) => "streamed_content_chunk",
+        Msg::StreamedReasoningChunk(_) => "streamed_reasoning_chunk",
+        Msg::ToolCallStarted(_) => "tool_call_started",
+        Msg::ApprovalPrompt(_) => "approval_prompt",
+        Msg::ToolRequestPrompt(_) => "tool_request_prompt",
+        Msg::ModelsList(_) => "models_list",
+        Msg::ProvidersList(_) => "providers_list",
+        Msg::SessionsList(_) => "sessions_list",
+        Msg::ResumedSession(_) => "resumed_session",
+        Msg::Usage(_) => "usage",
+        Msg::Trace(_) => "trace",
+        Msg::Preview(_) => "preview",
+        Msg::RouterStatus(_) => "router_status",
+        Msg::Error(_) => "error",
+        Msg::Idle => "idle",
+        Msg::Thinking => "thinking",
     }
 }

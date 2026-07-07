@@ -9,13 +9,6 @@
 /// together so [`Break`](crate::app::router_client::cmd::ContinueExecution::Break)
 /// or [`Inject`](crate::app::router_client::cmd::ContinueExecution::Inject)
 /// can interrupt the stream.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Non-idle states are scaffolded before router responses set them."
-    )
-)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum State {
     /// The router client is idle and ready to receive commands.

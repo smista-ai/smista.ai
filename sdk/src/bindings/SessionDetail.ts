@@ -24,7 +24,7 @@ scope?: string,
 /**
  * Key fingerprint of the per-session key, if the session is encrypted.
  */
-key_id?: string,
+key_id?: string, 
 /**
  * When the session was created.
  */

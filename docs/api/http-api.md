@@ -442,7 +442,7 @@ continuations and the streaming flow, see
       "local": { "mode": "allow" }
     }
   },
-  "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false },
+  "local_preferences": { "auto_apply": false, "local_only": false, "no_network": false },
   "attachments": {
     "files": [{ "path": "src/auth/middleware.rs", "content": "...", "content_hash": "sha256:...", "required": true }],
     "instructions": [{ "source": "AGENTS.md", "content": "..." }],
@@ -459,7 +459,7 @@ The top-level fields are:
 | `input`             | The prompt `text`, an optional `command` and an optional `explicit_model`.                                                                                                                                                  |
 | `workspace`         | Repository snapshot: `root`, `git_branch`, `git_diff`, referenced/active files.                                                                                                                                             |
 | `policy`            | The deterministic `classification`, `routing`, `tools` and `privacy` policy (see below).                                                                                                                                    |
-| `local_preferences` | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                                                                                                                                                |
+| `local_preferences` | Resolved client toggles: `auto_apply`, `local_only`, `no_network`.                                                                                                                                                          |
 | `attachments`       | Local content the router cannot read: `files` (each `required` or discardable), `instructions`, `invoked_skills` (explicitly invoked, added to the model preamble), `available_skills` (offered for the model to activate). |
 
 `input.command` forces a task type (`edit`, `review`, …) and `input.explicit_model`

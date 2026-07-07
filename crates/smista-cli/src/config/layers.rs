@@ -137,7 +137,6 @@ fn merge_router_client(low: RouterClientConfig, high: RouterClientConfig) -> Rou
 fn merge_local_prefs(low: LocalPreferences, high: LocalPreferences) -> LocalPreferences {
     LocalPreferences {
         auto_apply: high.auto_apply.or(low.auto_apply),
-        stream: high.stream.or(low.stream),
         local_only: high.local_only.or(low.local_only),
         no_network: high.no_network.or(low.no_network),
         encrypt_sessions: high.encrypt_sessions.or(low.encrypt_sessions),
@@ -452,13 +451,13 @@ mod tests {
         let mut project = Config::default();
         project.local.auto_apply = Some(true);
         let mut local = Config::default();
-        local.local.stream = Some(true);
+        local.local.local_only = Some(true);
         let merged = merge(vec![
             (ConfigLayer::Project, project),
             (ConfigLayer::RuntimeOverride, local),
         ]);
         assert_eq!(merged.local.auto_apply, Some(true));
-        assert_eq!(merged.local.stream, Some(true));
+        assert_eq!(merged.local.local_only, Some(true));
     }
 
     #[test]

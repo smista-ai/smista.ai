@@ -4,7 +4,7 @@ mod input_listener;
 mod router_client;
 mod tui;
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -188,7 +188,7 @@ impl App {
             cmd_tx
                 .send(Cmd::Execute {
                     prompt,
-                    files: HashMap::default(),
+                    files: HashSet::default(),
                     plan: false,
                     explicit_model: None,
                 })
@@ -206,14 +206,23 @@ impl App {
                         "received input event {{input.event}}",
                     );
                     if let Some(cmd) = tui.handle_input_event(input_event) {
-                        tracing::debug!("sending command to router client: {cmd:?}");
+                        tracing::debug!(
+                            command = command_name(&cmd),
+                            "sending command to router client"
+                        );
                         cmd_tx.send(cmd).await?;
                     }
                 }
                 Some(msg) = msg_rx.recv() => {
-                    tracing::debug!("received message from router client: {msg:?}");
+                    tracing::debug!(
+                        message = message_name(&msg),
+                        "received message from router client"
+                    );
                     if let Some(cmd) = tui.handle_client_msg(msg) {
-                        tracing::debug!("sending command to router client: {cmd:?}");
+                        tracing::debug!(
+                            command = command_name(&cmd),
+                            "sending command to router client"
+                        );
                         cmd_tx.send(cmd).await?;
                     }
                 }
@@ -229,6 +238,44 @@ impl App {
         tracing::info!("shutting down run loop");
 
         Ok(())
+    }
+}
+
+fn command_name(cmd: &Cmd) -> &'static str {
+    match cmd {
+        Cmd::Execute { .. } => "execute",
+        Cmd::Continue(_) => "continue",
+        Cmd::Clear => "clear",
+        Cmd::ListModels => "list_models",
+        Cmd::ListProviders => "list_providers",
+        Cmd::ListSessions => "list_sessions",
+        Cmd::ResumeSession(_) => "resume_session",
+        Cmd::GetUsage => "get_usage",
+        Cmd::GetTrace => "get_trace",
+        Cmd::Preview { .. } => "preview",
+        Cmd::GetRouterStatus => "get_router_status",
+    }
+}
+
+fn message_name(msg: &Msg) -> &'static str {
+    match msg {
+        Msg::AssistantTurn(_) => "assistant_turn",
+        Msg::StreamedContentChunk(_) => "streamed_content_chunk",
+        Msg::StreamedReasoningChunk(_) => "streamed_reasoning_chunk",
+        Msg::ToolCallStarted(_) => "tool_call_started",
+        Msg::ApprovalPrompt(_) => "approval_prompt",
+        Msg::ToolRequestPrompt(_) => "tool_request_prompt",
+        Msg::ModelsList(_) => "models_list",
+        Msg::ProvidersList(_) => "providers_list",
+        Msg::SessionsList(_) => "sessions_list",
+        Msg::ResumedSession(_) => "resumed_session",
+        Msg::Usage(_) => "usage",
+        Msg::Trace(_) => "trace",
+        Msg::Preview(_) => "preview",
+        Msg::RouterStatus(_) => "router_status",
+        Msg::Error(_) => "error",
+        Msg::Idle => "idle",
+        Msg::Thinking => "thinking",
     }
 }
 

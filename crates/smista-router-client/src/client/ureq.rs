@@ -686,7 +686,6 @@ mod tests {
             },
             local_preferences: LocalPreferences {
                 auto_apply: false,
-                stream: false,
                 local_only: false,
                 no_network: false,
             },

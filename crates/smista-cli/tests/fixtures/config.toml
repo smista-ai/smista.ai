@@ -105,7 +105,6 @@ auth_source = "keychain"
 
 [local_preferences]
 auto_apply = false
-stream = true
 local_only = false
 no_network = false
 encrypt_sessions = true

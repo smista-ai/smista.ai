@@ -484,7 +484,6 @@ an unset field defers to the layers below.
 ```toml
 [local_preferences]
 auto_apply = false
-stream = true
 local_only = false
 no_network = false
 encrypt_sessions = true
@@ -493,7 +492,6 @@ encrypt_sessions = true
 | Field              | Effect                                                                                        |
 | ------------------ | --------------------------------------------------------------------------------------------- |
 | `auto_apply`       | Apply file writes without prompting for each diff.                                            |
-| `stream`           | Stream model output when the provider supports it.                                            |
 | `local_only`       | Use only local models this session; pins `ollama/` to the local instance, never Ollama Cloud. |
 | `no_network`       | Forbid network access for this session.                                                       |
 | `encrypt_sessions` | Create new sessions as end-to-end encrypted. Defaults to `true`; set `false` to opt out.      |

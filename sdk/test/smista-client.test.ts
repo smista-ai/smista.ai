@@ -22,7 +22,7 @@ function executeRequest(): ExecuteRequest {
       tools: { permissions: {} },
       privacy: { restricted_paths: [], remote: { blocked_paths: [] }, local: {} },
     },
-    local_preferences: { auto_apply: false, stream: false, local_only: false, no_network: false },
+    local_preferences: { auto_apply: false, local_only: false, no_network: false },
     attachments: { files: [], instructions: [], invoked_skills: [], available_skills: [] },
   };
 }

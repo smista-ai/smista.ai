@@ -1,6 +1,6 @@
 //! All Commands with their payloads sent by the UI to the router client to be executed on the smista-router.
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use smista_sdk::core::model::ModelReference;
@@ -20,8 +20,8 @@ pub enum Cmd {
     Execute {
         /// User prompt to be executed by the router. This is the main input for the router to process.
         prompt: String,
-        /// Files context loaded by the user. Maps file paths to their content.
-        files: HashMap<PathBuf, String>,
+        /// Files context loaded by the user.
+        files: HashSet<PathBuf>,
         /// Whether planning mode is enabled.
         plan: bool,
         /// Explicit model to use, bypassing routing when set.
@@ -47,8 +47,8 @@ pub enum Cmd {
     Preview {
         /// User prompt to preview through the router.
         prompt: String,
-        /// Files context loaded by the user. Maps file paths to their content.
-        files: HashMap<PathBuf, String>,
+        /// Files context loaded by the user.
+        files: HashSet<PathBuf>,
         /// Whether planning mode is enabled.
         plan: bool,
         /// Explicit model to use, bypassing routing when set.

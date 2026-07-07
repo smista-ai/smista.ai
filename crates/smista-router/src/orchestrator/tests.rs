@@ -325,7 +325,6 @@ fn sample_execute_request() -> ExecuteRequest {
         },
         local_preferences: LocalPreferences {
             auto_apply: false,
-            stream: false,
             local_only: false,
             no_network: false,
         },

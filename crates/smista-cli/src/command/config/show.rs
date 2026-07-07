@@ -529,7 +529,6 @@ fn render_local_preferences(
 ) -> std::fmt::Result {
     writeln!(output, "Local preferences")?;
     push_option_line(output, 2, "auto_apply", config.local.auto_apply.as_ref())?;
-    push_option_line(output, 2, "stream", config.local.stream.as_ref())?;
     push_option_line(output, 2, "local_only", config.local.local_only.as_ref())?;
     push_option_line(output, 2, "no_network", config.local.no_network.as_ref())?;
     push_option_line(

@@ -73,7 +73,7 @@ itself — the prompt, the local files and skills, and the policy:
 | `attachments.invoked_skills`   | Skills the user explicitly invoked, each `name` + `content` (the `SKILL.md` body).                    |
 | `attachments.available_skills` | Skills offered for the model to activate, same `name` + `content` shape.                              |
 | `policy`                       | The deterministic `routing`, `tools` and `privacy` policy, sent verbatim.                             |
-| `local_preferences`            | Resolved client toggles: `auto_apply`, `stream`, `local_only`, `no_network`.                          |
+| `local_preferences`            | Resolved client toggles: `auto_apply`, `local_only`, `no_network`.                                    |
 | `providers`                    | Providers offered for this run and the per-model credential status.                                   |
 
 The router cannot read the filesystem, so every file, instruction and skill the
@@ -195,7 +195,7 @@ same body but never calls a model.
     "available_skills": []
   },
   "policy": { "version": 1, "source": "merged", "classification": { }, "routing": { }, "tools": { }, "privacy": { } },
-  "local_preferences": { "auto_apply": false, "stream": true, "local_only": false, "no_network": false }
+  "local_preferences": { "auto_apply": false, "local_only": false, "no_network": false }
 }
 ```
 

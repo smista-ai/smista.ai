@@ -131,13 +131,11 @@ pub struct RouterClientConfig {
 /// All fields are optional so that an unset preference defers to lower layers
 /// during the merge.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocalPreferences {
     /// Apply file writes without prompting.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_apply: Option<bool>,
-    /// Stream model output when supported.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stream: Option<bool>,
     /// Use only local models.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_only: Option<bool>,
@@ -233,15 +231,27 @@ mod tests {
         let toml = r#"
             [local_preferences]
             auto_apply = false
-            stream = true
             local_only = false
             no_network = false
             encrypt_sessions = true
         "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.local.auto_apply, Some(false));
-        assert_eq!(config.local.stream, Some(true));
         assert_eq!(config.local.encrypt_sessions, Some(true));
+    }
+
+    #[test]
+    fn should_reject_removed_stream_local_preference() {
+        let toml = r#"
+            [local_preferences]
+            stream = true
+        "#;
+
+        let error = toml::from_str::<Config>(toml).expect_err("stream is no longer supported");
+        assert!(
+            error.to_string().contains("unknown field `stream`"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]

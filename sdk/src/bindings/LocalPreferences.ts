@@ -9,10 +9,6 @@ export type LocalPreferences = {
  */
 auto_apply: boolean, 
 /**
- * Prefer a streaming response.
- */
-stream: boolean, 
-/**
  * Restrict routing to local models only.
  */
 local_only: boolean, 

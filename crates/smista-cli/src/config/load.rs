@@ -302,6 +302,6 @@ mod tests {
 
         // Router client and local preferences.
         assert_eq!(config.router.connect_timeout_ms, Some(5000));
-        assert_eq!(config.local.stream, Some(true));
+        assert_eq!(config.local.local_only, Some(false));
     }
 }

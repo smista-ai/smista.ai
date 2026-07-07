@@ -1,7 +1,9 @@
-//! Command handlers for router-client commands implemented by issue #261.
+//! Command handlers for router-client commands.
 
 mod catalog;
 mod clear;
+mod execute;
+mod preview;
 mod session;
 mod status;
 mod trace;
@@ -17,6 +19,8 @@ impl RouterClient {
     pub(in crate::app::router_client) fn reset_session_state(&mut self) {
         self.session = None;
         self.approvals.clear();
+        self.pending_tool_prompts.clear();
+        self.pending_tool_results.clear();
         self.state = State::Idle;
     }
 
