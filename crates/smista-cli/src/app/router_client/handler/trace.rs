@@ -14,7 +14,7 @@ const TRACE_LIMIT: u64 = 100;
 impl RouterClient {
     /// Gets the current session trace and emits [`Msg::Trace`] or [`Msg::Error`].
     pub(in crate::app::router_client) async fn get_traces(&self) {
-        let Some(session_id) = self.session_id else {
+        let Some(session_id) = self.session_id() else {
             tracing::warn!("no active session, cannot get execution trace");
             self.send_msg(Msg::Error(
                 "No active session, cannot get execution trace".to_string(),

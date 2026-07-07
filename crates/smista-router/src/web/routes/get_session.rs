@@ -145,7 +145,7 @@ pub(crate) async fn get_session(
         id: session_id,
         title: session.title.unwrap_or_default(),
         scope: session.scope,
-        encrypted: session.encrypted,
+        key_id: session.key_id,
         created_at: session.created_at,
         updated_at: session.updated_at,
         messages,
@@ -291,7 +291,8 @@ mod tests {
         let session = &body["session"];
         assert_eq!(session["id"], session_id.to_string());
         assert_eq!(session["title"], "Refactor auth middleware");
-        assert_eq!(session["encrypted"], false);
+        assert!(session.get("encrypted").is_none());
+        assert!(session.get("key_id").is_none());
         // Metadata is always present, even when empty.
         assert_eq!(session["metadata"], serde_json::json!({}));
 
@@ -350,7 +351,8 @@ mod tests {
         .await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["session"]["encrypted"], true);
+        assert!(body["session"].get("encrypted").is_none());
+        assert_eq!(body["session"]["key_id"], "kf_ab12");
         let message = &body["session"]["messages"][0];
         // The router holds no key, so it returns the sealed envelope verbatim.
         assert!(message["content"].get("plaintext").is_none());

@@ -122,8 +122,10 @@ pub struct SessionDetail {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub scope: Option<String>,
-    /// Whether the session's content is end-to-end encrypted.
-    pub encrypted: bool,
+    /// Key fingerprint of the per-session key, if the session is encrypted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub key_id: Option<String>,
     /// When the session was created.
     pub created_at: DateTime<Utc>,
     /// When the session was last updated.
@@ -301,7 +303,7 @@ mod tests {
             id: Uuid::nil(),
             title: "Refactor auth middleware".to_string(),
             scope: None,
-            encrypted: false,
+            key_id: None,
             created_at: timestamp(),
             updated_at: timestamp(),
             messages: vec![
@@ -325,6 +327,25 @@ mod tests {
             serde_json::from_str::<SessionDetail>(&json).unwrap(),
             detail
         );
+    }
+
+    #[test]
+    fn should_serialize_encrypted_session_detail_with_key_id() {
+        let detail = SessionDetail {
+            id: Uuid::nil(),
+            title: "Secret session".to_string(),
+            scope: None,
+            key_id: Some("kf_ab12".to_string()),
+            created_at: timestamp(),
+            updated_at: timestamp(),
+            messages: Vec::new(),
+            metadata: serde_json::json!({}),
+        };
+
+        let value = serde_json::to_value(detail).unwrap();
+
+        assert_eq!(value["key_id"], "kf_ab12");
+        assert!(value.get("encrypted").is_none());
     }
 
     #[test]

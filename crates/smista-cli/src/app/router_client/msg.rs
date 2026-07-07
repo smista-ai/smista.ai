@@ -14,6 +14,10 @@ pub enum Msg {
     AssistantTurn(AssistantTurn),
     /// The router streamed a generated content chunk.
     StreamedContentChunk(String),
+    /// The router streamed a generated reasoning chunk.
+    StreamedReasoningChunk(String),
+    /// The router started preparing a tool call.
+    ToolCallStarted(ToolCallStarted),
     /// The router is waiting for the user to approve or reject an action.
     ApprovalPrompt(ApprovalPrompt),
     /// The router is waiting for the client to run tools.
@@ -49,6 +53,15 @@ pub struct AssistantTurn {
     pub message: String,
     /// Trace identifier, if the router reported one.
     pub trace_id: Option<String>,
+}
+
+/// Tool-call progress data reduced for UI rendering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolCallStarted {
+    /// Identifier correlating this event with the later tool request.
+    pub call_id: String,
+    /// Tool name.
+    pub name: String,
 }
 
 /// Approval prompt data reduced for UI rendering.

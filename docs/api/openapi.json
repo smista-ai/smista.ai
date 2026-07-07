@@ -2175,7 +2175,6 @@
         "description": "Client-side execution preferences.",
         "required": [
           "auto_apply",
-          "stream",
           "local_only",
           "no_network"
         ],
@@ -2183,10 +2182,6 @@
           "auto_apply": {
             "type": "boolean",
             "description": "Apply edits automatically without confirmation."
-          },
-          "stream": {
-            "type": "boolean",
-            "description": "Prefer a streaming response."
           },
           "local_only": {
             "type": "boolean",
@@ -2196,7 +2191,8 @@
             "type": "boolean",
             "description": "Forbid any network access for this request."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "LocalPrivacy": {
         "type": "object",
@@ -3113,7 +3109,6 @@
         "required": [
           "id",
           "title",
-          "encrypted",
           "created_at",
           "updated_at",
           "messages",
@@ -3136,9 +3131,12 @@
             ],
             "description": "Opaque scope the session belongs to, if any."
           },
-          "encrypted": {
-            "type": "boolean",
-            "description": "Whether the session's content is end-to-end encrypted."
+          "key_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Key fingerprint of the per-session key, if the session is encrypted."
           },
           "created_at": {
             "type": "string",

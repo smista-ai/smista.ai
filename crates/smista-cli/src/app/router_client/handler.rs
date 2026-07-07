@@ -1,7 +1,9 @@
-//! Command handlers for router-client commands implemented by issue #261.
+//! Command handlers for router-client commands.
 
 mod catalog;
 mod clear;
+mod execute;
+mod preview;
 mod session;
 mod status;
 mod trace;
@@ -15,8 +17,10 @@ use super::{Msg, RouterClient, State};
 impl RouterClient {
     /// Resets all state that is scoped to the current session.
     pub(in crate::app::router_client) fn reset_session_state(&mut self) {
-        self.session_id = None;
+        self.session = None;
         self.approvals.clear();
+        self.pending_tool_prompts.clear();
+        self.pending_tool_results.clear();
         self.state = State::Idle;
     }
 
@@ -50,7 +54,7 @@ impl RouterClient {
             tracing::warn!("tried to interrupt active run, but no active run is present");
             return Ok(());
         }
-        let Some(id) = self.session_id else {
+        let Some(id) = self.session_id() else {
             tracing::warn!("tried to interrupt active run, but no session id is present");
             return Ok(());
         };
@@ -62,12 +66,6 @@ impl RouterClient {
             .await
             .map_err(anyhow::Error::from)
             .map(|_| ())
-    }
-
-    /// Computes the session list scope from the current working directory.
-    #[must_use]
-    pub(in crate::app::router_client) fn scope(&self) -> String {
-        self.context.cwd.to_string_lossy().to_string()
     }
 
     /// Sends a router-client message to the UI.

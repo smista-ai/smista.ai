@@ -22,9 +22,9 @@ title: string,
  */
 scope?: string, 
 /**
- * Whether the session's content is end-to-end encrypted.
+ * Key fingerprint of the per-session key, if the session is encrypted.
  */
-encrypted: boolean, 
+key_id?: string, 
 /**
  * When the session was created.
  */

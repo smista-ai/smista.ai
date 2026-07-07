@@ -22,6 +22,7 @@ chacha20poly1305 = { workspace = true }
 clap = { workspace = true, features = ["color", "derive", "env", "help", "std", "suggestions", "usage"] }
 crossterm = { workspace = true, features = ["bracketed-paste", "event-stream", "events", "windows"] }
 futures = { workspace = true }
+gix = { workspace = true, features = ["sha1", "status"] }
 globset = { workspace = true }
 keyring-core = { workspace = true }
 open = { workspace = true }
@@ -39,7 +40,7 @@ smista-router = { workspace = true }
 smista-sdk = { workspace = true, features = ["reqwest-client"] }
 sysinfo = { workspace = true, features = ["system"] }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs", "macros", "net", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { workspace = true, features = ["fs", "macros", "net", "rt", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-util = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }

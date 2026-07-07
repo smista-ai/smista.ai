@@ -6,11 +6,10 @@ mod state;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, HashSet};
 
 use smista_sdk::client::Client;
-use smista_sdk::core::model::ModelReference;
+use smista_sdk::core::api::{CreateSessionRequest, ToolResult as ApiToolResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -20,6 +19,8 @@ pub use self::cmd::Cmd;
 pub use self::msg::Msg;
 use self::state::State;
 use crate::app::AppContext;
+
+const MAX_SESSION_TITLE_LENGTH: usize = 100;
 
 /// Worker responsible for communicating with `smista-router`.
 ///
@@ -35,10 +36,21 @@ pub struct RouterClient {
     context: AppContext,
     /// Channel to send messages to the UI.
     msg_tx: Sender<Msg>,
+    /// Tool calls that have run locally and are waiting for a turn end.
+    pending_tool_results: BTreeMap<String, ApiToolResult>,
+    /// Tool calls already surfaced to the user for approval.
+    pending_tool_prompts: HashSet<String>,
     /// Current session id, if any.
-    session_id: Option<Uuid>,
+    session: Option<SessionInfo>,
     /// Current state of the router client.
     state: State,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SessionInfo {
+    id: Uuid,
+    title: String,
+    key_id: Option<String>,
 }
 
 impl RouterClient {
@@ -49,8 +61,10 @@ impl RouterClient {
             approvals: ApprovalsStorage::new(),
             cmd_rx,
             msg_tx,
+            pending_tool_results: BTreeMap::new(),
+            pending_tool_prompts: HashSet::new(),
             context,
-            session_id: None,
+            session: None,
             state: State::Idle,
         }
     }
@@ -70,7 +84,7 @@ impl RouterClient {
                     break;
                 }
                 Some(cmd) = self.cmd_rx.recv() => {
-                    tracing::debug!("received command: {cmd:?}");
+                    tracing::debug!(command = command_name(&cmd), "received command");
                     self.handle_cmd(cmd).await;
                 }
             }
@@ -96,7 +110,10 @@ impl RouterClient {
                     plan,
                     explicit_model,
                 },
-            ) => self.execute(prompt, files, plan, explicit_model).await,
+            ) => {
+                self.execute(prompt, files, plan, explicit_model).await;
+                true
+            }
             (
                 _,
                 Cmd::Preview {
@@ -105,8 +122,11 @@ impl RouterClient {
                     plan,
                     explicit_model,
                 },
-            ) => self.preview(prompt, files, plan, explicit_model).await,
-            (state, Cmd::Continue(continue_execution)) if !matches!(state, State::Idle) => {
+            ) => {
+                self.preview(prompt, files, plan, explicit_model).await;
+                true
+            }
+            (_, Cmd::Continue(continue_execution)) if self.session.is_some() => {
                 self.continue_execution(continue_execution).await
             }
             (_, Cmd::ListModels) => {
@@ -142,46 +162,14 @@ impl RouterClient {
                 true
             }
             (state, cmd) => {
-                tracing::warn!("received command {cmd:?} in state {state:?}, ignoring");
+                tracing::warn!(
+                    command = command_name(&cmd),
+                    ?state,
+                    "received command in state, ignoring"
+                );
                 false
             }
         }
-    }
-
-    async fn execute(
-        &mut self,
-        prompt: String,
-        files: HashMap<PathBuf, String>,
-        plan: bool,
-        explicit_model: Option<ModelReference>,
-    ) -> bool {
-        tracing::debug!(
-            explicit_model = explicit_model.as_ref().map(ToString::to_string),
-            files = ?files.keys().collect::<Vec<_>>(),
-            plan,
-            "executing prompt: {prompt}",
-        );
-        // TODO: init session if none, otherwise continue session
-        // TODO: load skills
-        // TODO: load rules from config
-        // TODO: read AGENTS.md
-        placeholder("execute prompt through router and process turn response") // TODO: impl
-    }
-
-    async fn preview(
-        &mut self,
-        prompt: String,
-        files: HashMap<PathBuf, String>,
-        plan: bool,
-        explicit_model: Option<ModelReference>,
-    ) -> bool {
-        tracing::debug!(
-            explicit_model = explicit_model.as_ref().map(ToString::to_string),
-            files = ?files.keys().collect::<Vec<_>>(),
-            plan,
-            "previewing prompt: {prompt}",
-        );
-        placeholder("preview deterministic router selection for prompt") // TODO: impl
     }
 
     async fn continue_execution(&mut self, continue_execution: cmd::ContinueExecution) -> bool {
@@ -223,15 +211,108 @@ impl RouterClient {
             }
             (state, continue_execution) => {
                 tracing::warn!(
-                    "received continuation {continue_execution:?} in state {state:?}, ignoring",
+                    continuation = continuation_name(&continue_execution),
+                    ?state,
+                    "received continuation in state, ignoring",
                 );
                 false // TODO: impl
             }
         }
     }
+
+    /// Initializes a new session with the router client.
+    ///
+    /// If successful, sets the `session_id` field to the new session's ID. If a session is already active, it will be replaced.
+    /// The new `session_id` is returned in the `Ok` variant of the result.
+    /// If an error occurs during session initialization, it is returned in the `Err` variant.
+    async fn init_new_session(&mut self, prompt: &str) -> anyhow::Result<Uuid> {
+        tracing::debug!("initializing a new session");
+
+        let key_id = if self.context.config.local.encrypt_sessions() {
+            tracing::debug!("e2ee is enabled, creating a new encryption key for the session");
+            Some(self.context.e2ee_keys.create_key()?)
+        } else {
+            None
+        };
+        let title = session_title(prompt);
+
+        tracing::debug!(
+            encrypted = key_id.is_some(),
+            title.bytes = title.len(),
+            "creating session",
+        );
+        let response = self
+            .context
+            .router_client
+            .create_session(CreateSessionRequest {
+                title: title.clone(),
+                scope: Some(self.scope()),
+                key_id,
+            })
+            .await?;
+
+        tracing::debug!(
+            "created new session with id: {session_id}",
+            session_id = response.session.id
+        );
+        self.session = Some(SessionInfo {
+            id: response.session.id,
+            title: response.session.title.unwrap_or(title),
+            key_id: response.session.key_id,
+        });
+
+        Ok(response.session.id)
+    }
+
+    fn session_id(&self) -> Option<Uuid> {
+        self.session.as_ref().map(|info| info.id)
+    }
+
+    /// Computes the session list scope from the current working directory.
+    #[must_use]
+    fn scope(&self) -> String {
+        self.context.cwd.to_string_lossy().to_string()
+    }
 }
 
-fn placeholder(todo: &'static str) -> bool {
-    tracing::debug!(todo, "router client scaffold placeholder");
-    true
+fn session_title(prompt: &str) -> String {
+    prompt
+        .split_ascii_whitespace()
+        .try_fold(String::new(), |mut acc, word| {
+            if acc.len() + word.len() + 1 > MAX_SESSION_TITLE_LENGTH {
+                Err(())
+            } else {
+                if !acc.is_empty() {
+                    acc.push(' ');
+                }
+                acc.push_str(word);
+                Ok(acc)
+            }
+        })
+        .unwrap_or_else(|_| String::new())
+}
+
+fn command_name(cmd: &Cmd) -> &'static str {
+    match cmd {
+        Cmd::Execute { .. } => "execute",
+        Cmd::Continue(continue_execution) => continuation_name(continue_execution),
+        Cmd::Clear => "clear",
+        Cmd::ListModels => "list_models",
+        Cmd::ListProviders => "list_providers",
+        Cmd::ListSessions => "list_sessions",
+        Cmd::ResumeSession(_) => "resume_session",
+        Cmd::GetUsage => "get_usage",
+        Cmd::GetTrace => "get_trace",
+        Cmd::Preview { .. } => "preview",
+        Cmd::GetRouterStatus => "get_router_status",
+    }
+}
+
+fn continuation_name(continue_execution: &cmd::ContinueExecution) -> &'static str {
+    match continue_execution {
+        cmd::ContinueExecution::ToolResults { .. } => "continue_tool_results",
+        cmd::ContinueExecution::ApprovalDecisions { .. } => "continue_approval_decisions",
+        cmd::ContinueExecution::Inject { .. } => "continue_inject",
+        cmd::ContinueExecution::Break => "continue_break",
+    }
 }

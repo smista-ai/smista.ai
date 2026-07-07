@@ -38,10 +38,10 @@ Encryption is chosen per session, when the session is created. Ask for it on
 `POST /api/v1/sessions`:
 
 ```json
-{ "title": "Refactor auth middleware", "encrypted": true, "key_id": "kf_ab12" }
+{ "title": "Refactor auth middleware", "key_id": "kf_ab12" }
 ```
 
-`encrypted` defaults to `false`. When it is `true`, `key_id` is required: it is
+A session is encrypted when, and only when, `key_id` is present. The key id is
 the fingerprint of the key your client generated for this session. The choice is
 fixed for the life of the session and cannot be turned on or off later, because
 content already stored could no longer be matched to a key.

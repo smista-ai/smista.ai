@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::app::router_client::msg::{ResumedSession, SessionListItem, SessionMessage};
 use crate::app::router_client::state::State;
-use crate::app::router_client::{Msg, RouterClient};
+use crate::app::router_client::{Msg, RouterClient, SessionInfo};
 
 impl RouterClient {
     /// Lists sessions for the current workspace and emits [`Msg::SessionsList`] or [`Msg::Error`].
@@ -71,13 +71,18 @@ impl RouterClient {
                     count = messages.len()
                 );
 
-                self.session_id = Some(session_id);
+                let title = session.session.title;
+                self.session = Some(SessionInfo {
+                    id: session.session.id,
+                    title: title.clone(),
+                    key_id: session.session.key_id,
+                });
                 self.approvals.clear();
                 self.state = State::Idle;
 
                 Msg::ResumedSession(ResumedSession {
                     id: session.session.id,
-                    title: session.session.title,
+                    title,
                     messages,
                 })
             }

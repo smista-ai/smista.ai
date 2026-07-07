@@ -120,7 +120,7 @@ pub fn get_session() -> GetSessionResponse {
             id: Uuid::nil(),
             title: "Refactor auth middleware".to_owned(),
             scope: None,
-            encrypted: false,
+            key_id: None,
             created_at: timestamp(),
             updated_at: timestamp(),
             messages: vec![

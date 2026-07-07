@@ -1,17 +1,22 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use smista_mock_web_server::{Endpoint, EndpointStatus, MockRouter, ResponseTemplate};
+use smista_mock_web_server::{
+    Endpoint, EndpointStatus, MockRouter, ResponseTemplate, defaults, sse,
+};
 use smista_sdk::client::{Client as _, ReqwestClient, RouterClientConfig};
 use smista_sdk::core::api::{
-    EncryptedPayload, GetSessionResponse, MessageContent, SessionDetail, SessionMessageDetail,
-    TraceResponse,
+    ApiErrorBody, ApprovalDecision as ApiApprovalDecision, ApprovalKind, CompletedTurn,
+    ContextOutcome, CreateSessionRequest, CreateSessionResponse, EncryptedPayload,
+    GetSessionResponse, MessageContent, PendingApproval, SessionDetail, SessionMessageDetail,
+    SessionSummary, ToolApproval, ToolRequest, TraceResponse, TurnEvent, TurnOutcome, TurnResponse,
 };
 use smista_sdk::core::intent::TaskIntent;
 use smista_sdk::core::message::MessageRole;
 use smista_sdk::core::model::Provider as CoreProvider;
+use smista_sdk::core::policy::PermissionMode;
 use smista_sdk::core::trace::{
     Payload, RoutingDecisionPayload, Trace, TraceEvent as CoreTraceEvent, TraceEventPayload,
     TraceEventType,
@@ -26,6 +31,7 @@ use crate::credentials::{
     ApiKeyStorage, CredentialBackend, CredentialsStorage, E2eeKeysCredentials, ProvidersCredentials,
 };
 use crate::skills::SkillStore;
+use crate::tools::{ToolCall, ToolExecutor};
 
 #[tokio::test]
 async fn should_ignore_scaffold_commands_until_cancelled() {
@@ -38,7 +44,7 @@ async fn should_ignore_scaffold_commands_until_cancelled() {
     cmd_tx
         .send(Cmd::Execute {
             prompt: "hello".to_owned(),
-            files: HashMap::default(),
+            files: HashSet::default(),
             plan: false,
             explicit_model: None,
         })
@@ -72,7 +78,7 @@ async fn non_idle_rejects_execute() {
         let handled = router_client
             .handle_cmd(Cmd::Execute {
                 prompt: "hello".to_owned(),
-                files: HashMap::default(),
+                files: HashSet::default(),
                 plan: false,
                 explicit_model: None,
             })
@@ -88,7 +94,7 @@ async fn execute_and_preview_commands_accept_explicit_model_overrides() {
     let handled_execute = execute_client
         .handle_cmd(Cmd::Execute {
             prompt: "hello".to_owned(),
-            files: HashMap::default(),
+            files: HashSet::default(),
             plan: false,
             explicit_model: Some(
                 "anthropic/claude-sonnet"
@@ -102,7 +108,7 @@ async fn execute_and_preview_commands_accept_explicit_model_overrides() {
     let handled_preview = preview_client
         .handle_cmd(Cmd::Preview {
             prompt: "hello".to_owned(),
-            files: HashMap::default(),
+            files: HashSet::default(),
             plan: true,
             explicit_model: Some(
                 "ollama/qwen2.5-coder"
@@ -114,6 +120,129 @@ async fn execute_and_preview_commands_accept_explicit_model_overrides() {
 
     assert!(handled_execute);
     assert!(handled_preview);
+}
+
+#[tokio::test]
+async fn build_execute_request_uses_context_config_and_sorted_paths() {
+    let mut router_client = router_client_with_state(State::Idle);
+    let mut config = Config::default();
+    config.local.auto_apply = Some(true);
+    config.local.local_only = Some(true);
+    config.local.no_network = Some(true);
+    config.tools.set("shell", PermissionMode::Deny);
+    router_client.context.config = Arc::new(config.clone());
+
+    let request = router_client
+        .build_execute_request(
+            "review this".to_owned(),
+            [PathBuf::from("b.rs"), PathBuf::from("a.rs")]
+                .into_iter()
+                .collect(),
+            true,
+            Some(
+                "anthropic/claude-sonnet"
+                    .parse()
+                    .expect("model reference parses"),
+            ),
+        )
+        .await;
+
+    assert_eq!(request.input.text, "review this");
+    assert_eq!(request.input.command, Some(TaskIntent::Plan));
+    assert_eq!(
+        request
+            .input
+            .explicit_model
+            .as_ref()
+            .map(ToString::to_string),
+        Some("anthropic/claude-sonnet".to_owned())
+    );
+    assert_eq!(request.workspace.root, router_client.context.cwd);
+    assert_eq!(
+        request.workspace.referenced_paths,
+        vec![PathBuf::from("a.rs"), PathBuf::from("b.rs")]
+    );
+    assert_eq!(request.workspace.git_branch, None);
+    assert_eq!(request.workspace.git_diff, None);
+    assert_eq!(request.policy.version, 1);
+    assert_eq!(request.policy.source, "merged");
+    assert_eq!(request.policy.classification, config.classification);
+    assert_eq!(request.policy.routing, config.routing);
+    assert_eq!(request.policy.tools, config.tools);
+    assert_eq!(request.policy.privacy, config.privacy);
+    assert!(request.local_preferences.auto_apply);
+    assert!(request.local_preferences.local_only);
+    assert!(request.local_preferences.no_network);
+}
+
+#[tokio::test]
+async fn build_execute_request_attaches_files_instructions_and_available_skills() {
+    let mut router_client = router_client_with_state(State::Idle);
+    let cwd = router_client.context.cwd.clone();
+    let source = cwd.join("src");
+    std::fs::create_dir_all(&source).expect("source directory is created");
+    std::fs::write(source.join("lib.rs"), "pub fn answer() -> u8 { 42 }\n")
+        .expect("context file is written");
+    std::fs::write(cwd.join("AGENTS.md"), "Use repository instructions.\n")
+        .expect("instructions are written");
+    let skill_dir = cwd.join(".agents").join("skills").join("reviewer");
+    std::fs::create_dir_all(&skill_dir).expect("skill directory is created");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: reviewer\ndescription: Review code.\n---\nReview carefully.\n",
+    )
+    .expect("skill is written");
+    router_client.context.skills_store = Arc::new(SkillStore::discover(&cwd));
+
+    let request = router_client
+        .build_execute_request(
+            "explain this file".to_owned(),
+            [PathBuf::from("src/lib.rs")].into_iter().collect(),
+            false,
+            None,
+        )
+        .await;
+
+    assert_eq!(request.input.command, None);
+    assert_eq!(request.attachments.files.len(), 1);
+    let file = &request.attachments.files[0];
+    assert_eq!(file.path, PathBuf::from("src/lib.rs"));
+    assert_eq!(file.content, "pub fn answer() -> u8 { 42 }\n");
+    assert!(file.content_hash.starts_with("sha256:"));
+    assert_eq!(file.content_hash.len(), "sha256:".len() + 64);
+    assert!(file.required);
+    assert_eq!(request.attachments.instructions.len(), 1);
+    assert_eq!(request.attachments.instructions[0].source, "AGENTS.md");
+    assert_eq!(
+        request.attachments.instructions[0].content,
+        "Use repository instructions.\n"
+    );
+    assert!(request.attachments.invoked_skills.is_empty());
+    let skill = request
+        .attachments
+        .available_skills
+        .iter()
+        .find(|skill| skill.name == "reviewer")
+        .expect("project skill is available");
+    assert_eq!(skill.content, "Review carefully.");
+}
+
+#[tokio::test]
+async fn build_execute_request_reads_unborn_git_branch_without_shelling_out() {
+    let router_client = router_client_with_state(State::Idle);
+    let cwd = router_client.context.cwd.clone();
+    gix::init(&cwd).expect("git repository is initialized");
+    std::fs::write(
+        cwd.join(".git").join("HEAD"),
+        "ref: refs/heads/smista-test\n",
+    )
+    .expect("symbolic HEAD is written");
+
+    let request = router_client
+        .build_execute_request("plan this".to_owned(), HashSet::new(), false, None)
+        .await;
+
+    assert_eq!(request.workspace.git_branch.as_deref(), Some("smista-test"));
 }
 
 #[tokio::test]
@@ -164,6 +293,583 @@ async fn approval_decisions_only_match_awaiting_approval() {
 
         assert_eq!(handled, state == State::AwaitingApproval);
     }
+}
+
+#[tokio::test]
+async fn tool_call_started_emits_progress_message() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::ToolCallStarted {
+            call_id: "call-1".to_owned(),
+            name: "shell".to_owned(),
+        }))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::ToolCallStarted(msg::ToolCallStarted {
+            call_id: "call-1".to_owned(),
+            name: "shell".to_owned(),
+        })
+    );
+}
+
+#[tokio::test]
+async fn tool_call_requested_prompts_when_shell_approval_is_missing() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::ToolCallRequested {
+            call_id: "call-1".to_owned(),
+            name: "shell".to_owned(),
+            arguments: serde_json::json!({ "command": "cargo test -p smista-cli" }),
+            requires_approval: ToolApproval::Ask,
+        }))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::AwaitingTool);
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::ApprovalPrompt(msg::ApprovalPrompt {
+            id: "call-1".to_owned(),
+            title: "Approve shell".to_owned(),
+            detail: "cargo test -p smista-cli".to_owned(),
+            wildcard_alias: Some("cargo test *".to_owned()),
+        })
+    );
+}
+
+#[tokio::test]
+async fn tool_call_requested_executes_shell_when_session_alias_is_approved() {
+    let (mut router_client, _msg_rx) = router_client_with_receiver(State::Streaming);
+    router_client
+        .approvals
+        .approve("printf approved")
+        .expect("approval alias is stored");
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::ToolCallRequested {
+            call_id: "call-1".to_owned(),
+            name: "shell".to_owned(),
+            arguments: serde_json::json!({ "command": "printf approved" }),
+            requires_approval: ToolApproval::Ask,
+        }))
+        .await;
+
+    assert!(next_stream.is_none());
+    let result = router_client
+        .pending_tool_results
+        .get("call-1")
+        .expect("approved shell call is executed");
+    assert_eq!(result.content, "approved");
+    assert!(!result.is_error);
+    assert_eq!(result.decision, Some(ApiApprovalDecision::Approved));
+}
+
+#[tokio::test]
+async fn turn_end_completed_sends_assistant_turn_and_returns_idle() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(completed_turn_response(
+            "done", "trace-1",
+        )))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::AssistantTurn(msg::AssistantTurn {
+            message: "done".to_owned(),
+            trace_id: Some("trace-1".to_owned()),
+        })
+    );
+}
+
+#[tokio::test]
+async fn text_and_reasoning_events_emit_stream_chunks() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+
+    assert!(
+        router_client
+            .on_exec_stream_event(Ok(TurnEvent::TextDelta {
+                delta: "hello".to_owned(),
+            }))
+            .await
+            .is_none()
+    );
+    assert!(
+        router_client
+            .on_exec_stream_event(Ok(TurnEvent::ReasoningDelta {
+                delta: "because".to_owned(),
+            }))
+            .await
+            .is_none()
+    );
+
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::StreamedContentChunk("hello".to_owned())
+    );
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::StreamedReasoningChunk("because".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn stream_errors_emit_error_and_return_idle() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+
+    let next_stream = router_client
+        .on_exec_stream_event(Err(smista_sdk::client::RouterClientError::Decode(
+            "bad event".to_owned(),
+        )))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert_error_contains(&mut msg_rx, "Execution stream error").await;
+}
+
+#[tokio::test]
+async fn turn_end_idle_clears_pending_tool_state() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    router_client
+        .pending_tool_prompts
+        .insert("call-1".to_owned());
+    router_client.pending_tool_results.insert(
+        "call-2".to_owned(),
+        smista_sdk::core::api::ToolResult {
+            call_id: "call-2".to_owned(),
+            content: "ok".to_owned(),
+            is_error: false,
+            decision: None,
+        },
+    );
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::Idle {
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert!(router_client.pending_tool_prompts.is_empty());
+    assert!(router_client.pending_tool_results.is_empty());
+    assert!(msg_rx.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn turn_end_error_clears_pending_state_and_emits_error() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    router_client
+        .pending_tool_prompts
+        .insert("call-1".to_owned());
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::Error {
+                error: ApiErrorBody {
+                    code: "no_route".to_owned(),
+                    message: "No route matched".to_owned(),
+                    details: None,
+                },
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert!(router_client.pending_tool_prompts.is_empty());
+    assert_error_contains(&mut msg_rx, "No route matched").await;
+}
+
+#[tokio::test]
+async fn turn_end_awaiting_approval_emits_approval_prompt() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingApproval {
+                approval: PendingApproval {
+                    approval_id: "approval-1".to_owned(),
+                    kind: ApprovalKind::RemoteDisclosure,
+                    detail: serde_json::json!({ "provider": "anthropic" }),
+                },
+                to_encrypt: Default::default(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::AwaitingApproval);
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::ApprovalPrompt(msg::ApprovalPrompt {
+            id: "approval-1".to_owned(),
+            title: "Approve RemoteDisclosure".to_owned(),
+            detail: "{\n  \"provider\": \"anthropic\"\n}".to_owned(),
+            wildcard_alias: None,
+        })
+    );
+}
+
+#[tokio::test]
+async fn encrypted_turn_outcomes_emit_not_implemented_error() {
+    let encrypted_outcomes = [
+        TurnOutcome::AwaitingEncrypt {
+            to_encrypt: Default::default(),
+            trace_id: "trace-1".to_owned(),
+        },
+        TurnOutcome::AwaitingDecrypt {
+            to_decrypt: Default::default(),
+            to_encrypt: Default::default(),
+            trace_id: "trace-1".to_owned(),
+        },
+    ];
+
+    for outcome in encrypted_outcomes {
+        let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+        let next_stream = router_client
+            .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+                outcome,
+                allowed_continuations: Vec::new(),
+            }))))
+            .await;
+
+        assert!(next_stream.is_none());
+        assert_eq!(router_client.state, State::Idle);
+        assert_error_contains(&mut msg_rx, "Encrypted execution continuations").await;
+    }
+}
+
+#[tokio::test]
+async fn duplicate_tool_requests_do_not_prompt_twice() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    let event = TurnEvent::ToolCallRequested {
+        call_id: "call-1".to_owned(),
+        name: "shell".to_owned(),
+        arguments: serde_json::json!({ "command": "cargo test -p smista-cli" }),
+        requires_approval: ToolApproval::Ask,
+    };
+
+    assert!(
+        router_client
+            .on_exec_stream_event(Ok(event.clone()))
+            .await
+            .is_none()
+    );
+    assert!(
+        router_client
+            .on_exec_stream_event(Ok(event))
+            .await
+            .is_none()
+    );
+
+    assert!(matches!(
+        recv_msg(&mut msg_rx).await,
+        Msg::ApprovalPrompt(prompt) if prompt.id == "call-1"
+    ));
+    assert!(msg_rx.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn awaiting_tool_with_all_results_opens_continue_stream() {
+    let events = vec![TurnEvent::TurnEnd(Box::new(defaults::turn()))];
+    let router = MockRouter::builder()
+        .respond(Endpoint::ContinueRun, sse(&events))
+        .start()
+        .await;
+    let (mut router_client, _msg_rx) = router_client_for_mock(&router).await;
+    router_client.state = State::Streaming;
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingTool {
+                tool_requests: vec![ToolRequest {
+                    call_id: "call-1".to_owned(),
+                    name: "read_file".to_owned(),
+                    arguments: serde_json::json!({ "path": "missing.txt" }),
+                    requires_approval: ToolApproval::Allow,
+                }],
+                to_encrypt: Default::default(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_some());
+    assert_eq!(router_client.state, State::Streaming);
+    assert!(router_client.pending_tool_prompts.is_empty());
+    assert!(router_client.pending_tool_results.is_empty());
+}
+
+#[tokio::test]
+async fn execute_streams_deltas_and_reuses_active_session() {
+    let events = vec![
+        TurnEvent::TextDelta {
+            delta: "Here ".to_owned(),
+        },
+        TurnEvent::ReasoningDelta {
+            delta: "thinking".to_owned(),
+        },
+        TurnEvent::TurnEnd(Box::new(defaults::turn())),
+    ];
+    let router = MockRouter::builder()
+        .respond(Endpoint::Execute, sse(&events))
+        .start()
+        .await;
+    let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
+    router_client.session = Some(session_info(Uuid::nil(), "Existing session", None));
+
+    router_client
+        .execute("continue this".to_owned(), HashSet::new(), false, None)
+        .await;
+
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Thinking);
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::StreamedContentChunk("Here ".to_owned())
+    );
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::StreamedReasoningChunk("thinking".to_owned())
+    );
+    assert!(matches!(recv_msg(&mut msg_rx).await, Msg::AssistantTurn(_)));
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
+
+    let requests = router.received_requests().await;
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.url.path() != "/api/v1/sessions"),
+        "active execute must reuse the current session instead of creating a new one"
+    );
+    assert!(
+        requests
+            .iter()
+            .any(|request| request.url.path().ends_with("/execute"))
+    );
+}
+
+#[tokio::test]
+async fn preview_emits_summary_and_reuses_active_session() {
+    let router = MockRouter::start().await;
+    let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
+    router_client.session = Some(session_info(Uuid::nil(), "Existing session", None));
+
+    router_client
+        .preview("preview this".to_owned(), HashSet::new(), true, None)
+        .await;
+
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Thinking);
+    assert!(matches!(
+        recv_msg(&mut msg_rx).await,
+        Msg::Preview(summary)
+            if summary.task_type == "review"
+                && summary.provider == "openai"
+                && summary.model == "gpt-5.5-thinking"
+    ));
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
+
+    let requests = router.received_requests().await;
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.url.path() != "/api/v1/sessions"),
+        "active preview must reuse the current session instead of creating a new one"
+    );
+    assert!(
+        requests
+            .iter()
+            .any(|request| request.url.path().ends_with("/preview"))
+    );
+}
+
+#[tokio::test]
+async fn tool_executor_runs_builtin_read_file() {
+    let cwd = temp_cwd();
+    tokio::fs::write(cwd.join("README.md"), "hello")
+        .await
+        .expect("test file is written");
+    let executor = ToolExecutor::new(cwd);
+
+    let result = executor
+        .execute(ToolCall {
+            call_id: "call-1".to_owned(),
+            name: "read_file".to_owned(),
+            arguments: serde_json::json!({ "path": "README.md" }),
+            decision: None,
+        })
+        .await;
+
+    assert_eq!(result.call_id, "call-1");
+    assert_eq!(result.content, "hello");
+    assert!(!result.is_error);
+}
+
+#[tokio::test]
+async fn tool_executor_runs_builtin_write_file() {
+    let cwd = temp_cwd();
+    let executor = ToolExecutor::new(cwd.clone());
+
+    let result = executor
+        .execute(ToolCall {
+            call_id: "call-1".to_owned(),
+            name: "write_file".to_owned(),
+            arguments: serde_json::json!({
+                "path": "src/generated.rs",
+                "content": "pub const VALUE: u8 = 7;\n"
+            }),
+            decision: None,
+        })
+        .await;
+
+    assert!(!result.is_error);
+    assert_eq!(
+        tokio::fs::read_to_string(cwd.join("src/generated.rs"))
+            .await
+            .expect("written file is readable"),
+        "pub const VALUE: u8 = 7;\n"
+    );
+}
+
+#[tokio::test]
+async fn tool_executor_runs_builtin_edit_file() {
+    let cwd = temp_cwd();
+    tokio::fs::write(cwd.join("lib.rs"), "fn value() -> u8 { 1 }\n")
+        .await
+        .expect("test file is written");
+    let executor = ToolExecutor::new(cwd.clone());
+
+    let result = executor
+        .execute(ToolCall {
+            call_id: "call-1".to_owned(),
+            name: "edit_file".to_owned(),
+            arguments: serde_json::json!({
+                "path": "lib.rs",
+                "old": "1",
+                "new": "2"
+            }),
+            decision: None,
+        })
+        .await;
+
+    assert!(!result.is_error);
+    assert_eq!(
+        tokio::fs::read_to_string(cwd.join("lib.rs"))
+            .await
+            .expect("edited file is readable"),
+        "fn value() -> u8 { 2 }\n"
+    );
+}
+
+#[tokio::test]
+async fn tool_executor_rejects_paths_outside_workspace() {
+    let cwd = temp_cwd();
+    let outside = cwd
+        .parent()
+        .expect("temporary directory has a parent")
+        .join("smista-outside-file.txt");
+    let outside_write = cwd
+        .parent()
+        .expect("temporary directory has a parent")
+        .join(format!(
+            "{}-outside-write.txt",
+            cwd.file_name()
+                .expect("temporary directory has a final component")
+                .to_string_lossy()
+        ));
+    tokio::fs::write(&outside, "secret")
+        .await
+        .expect("outside fixture is written");
+    let executor = ToolExecutor::new(cwd.clone());
+
+    let read_result = executor
+        .execute(ToolCall {
+            call_id: "read".to_owned(),
+            name: "read_file".to_owned(),
+            arguments: serde_json::json!({ "path": outside }),
+            decision: None,
+        })
+        .await;
+    let write_result = executor
+        .execute(ToolCall {
+            call_id: "write".to_owned(),
+            name: "write_file".to_owned(),
+            arguments: serde_json::json!({
+                "path": outside_write.clone(),
+                "content": "escaped"
+            }),
+            decision: None,
+        })
+        .await;
+
+    assert!(read_result.is_error);
+    assert!(read_result.content.contains("outside the workspace"));
+    assert!(write_result.is_error);
+    assert!(write_result.content.contains("outside the workspace"));
+    assert!(
+        tokio::fs::metadata(&outside_write).await.is_err(),
+        "write_file must not create files outside the workspace"
+    );
+}
+
+#[tokio::test]
+async fn tool_executor_reports_unsupported_tools_missing_arguments_and_shell_failures() {
+    let cwd = temp_cwd();
+    let executor = ToolExecutor::new(cwd);
+
+    let unsupported = executor
+        .execute(ToolCall {
+            call_id: "unsupported".to_owned(),
+            name: "unknown".to_owned(),
+            arguments: serde_json::json!({}),
+            decision: None,
+        })
+        .await;
+    let missing_argument = executor
+        .execute(ToolCall {
+            call_id: "missing".to_owned(),
+            name: "read_file".to_owned(),
+            arguments: serde_json::json!({}),
+            decision: None,
+        })
+        .await;
+    let shell_failure = executor
+        .execute(ToolCall {
+            call_id: "shell".to_owned(),
+            name: "shell".to_owned(),
+            arguments: serde_json::json!({ "command": "exit 7" }),
+            decision: Some(ApiApprovalDecision::Approved),
+        })
+        .await;
+
+    assert!(unsupported.is_error);
+    assert!(unsupported.content.contains("unsupported tool"));
+    assert!(missing_argument.is_error);
+    assert!(
+        missing_argument
+            .content
+            .contains("missing string argument `path`")
+    );
+    assert!(shell_failure.is_error);
+    assert!(shell_failure.content.contains("exited with"));
+    assert_eq!(shell_failure.decision, Some(ApiApprovalDecision::Approved));
 }
 
 #[tokio::test]
@@ -230,7 +936,7 @@ async fn handle_cmd_dispatches_session_usage_trace_and_clear_commands() {
     ));
     assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
     assert_eq!(router_client.state, State::Idle);
-    assert_eq!(router_client.session_id, None);
+    assert_eq!(router_client.session_id(), None);
 }
 
 #[tokio::test]
@@ -301,11 +1007,90 @@ async fn session_list_uses_workspace_scope() {
 }
 
 #[tokio::test]
+async fn init_new_session_encrypts_by_default_and_records_session_info_key_id() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::CreateSession,
+            ResponseTemplate::new(201)
+                .set_body_json(created_session_response(Some("kf_response".to_owned()))),
+        )
+        .start()
+        .await;
+    let (mut router_client, _msg_rx) = router_client_for_mock(&router).await;
+
+    let session_id = router_client
+        .init_new_session("Refactor the auth middleware")
+        .await
+        .expect("session creation succeeds");
+
+    assert_eq!(session_id, Uuid::nil());
+    let session = router_client
+        .session
+        .as_ref()
+        .expect("session info is recorded");
+    assert_eq!(session.id, Uuid::nil());
+    assert_eq!(session.title, "Created session");
+    assert_eq!(session.key_id.as_deref(), Some("kf_response"));
+
+    let requests = router.received_requests().await;
+    let request = requests
+        .iter()
+        .find(|request| request.url.path() == "/api/v1/sessions")
+        .expect("create session request was sent");
+    let body = request
+        .body_json::<CreateSessionRequest>()
+        .expect("create session body decodes");
+    assert_eq!(body.title, "Refactor the auth middleware");
+    assert!(
+        body.key_id.is_some(),
+        "default session creation must send a key id"
+    );
+}
+
+#[tokio::test]
+async fn init_new_session_creates_plaintext_session_when_encryption_is_disabled() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::CreateSession,
+            ResponseTemplate::new(201).set_body_json(created_session_response(None)),
+        )
+        .start()
+        .await;
+    let (mut router_client, _msg_rx) = router_client_for_mock(&router).await;
+    let mut config = Config::default();
+    config.local.encrypt_sessions = Some(false);
+    router_client.context.config = Arc::new(config);
+
+    router_client
+        .init_new_session("Refactor encrypted auth middleware")
+        .await
+        .expect("session creation succeeds");
+
+    let session = router_client
+        .session
+        .as_ref()
+        .expect("session info is recorded");
+    assert_eq!(session.id, Uuid::nil());
+    assert_eq!(session.title, "Created session");
+    assert_eq!(session.key_id, None);
+
+    let requests = router.received_requests().await;
+    let request = requests
+        .iter()
+        .find(|request| request.url.path() == "/api/v1/sessions")
+        .expect("create session request was sent");
+    let body = request
+        .body_json::<CreateSessionRequest>()
+        .expect("create session body decodes");
+    assert_eq!(body.key_id, None);
+}
+
+#[tokio::test]
 async fn resume_session_maps_messages_and_resets_state() {
     let router = MockRouter::start().await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
     router_client.state = State::AwaitingTool;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Old session", None));
     router_client
         .approvals
         .approve("git commit -m test")
@@ -321,7 +1106,13 @@ async fn resume_session_maps_messages_and_resets_state() {
     assert_eq!(session.messages.len(), 2);
     assert_eq!(session.messages[0].role, "user");
     assert_eq!(session.messages[0].content, "Refactor the auth middleware.");
-    assert_eq!(router_client.session_id, Some(Uuid::nil()));
+    assert_eq!(router_client.session_id(), Some(Uuid::nil()));
+    let session_info = router_client
+        .session
+        .as_ref()
+        .expect("session info is recorded");
+    assert_eq!(session_info.title, "Refactor auth middleware");
+    assert_eq!(session_info.key_id, None);
     assert_eq!(router_client.state, State::Idle);
     assert!(
         !router_client
@@ -347,7 +1138,7 @@ async fn resume_session_maps_messages_and_resets_state() {
 async fn usage_handler_emits_current_session_usage() {
     let router = MockRouter::start().await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Usage session", None));
 
     router_client.get_usage().await;
 
@@ -370,7 +1161,7 @@ async fn trace_handler_emits_plaintext_events() {
         .start()
         .await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", None));
 
     router_client.get_traces().await;
 
@@ -408,7 +1199,7 @@ async fn trace_handler_deserializes_decrypted_payload_json() {
         .await;
     let (mut router_client, mut msg_rx) =
         router_client_for_mock_with_credentials(&router, cwd, credentials).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", Some(key_id)));
 
     router_client.get_traces().await;
 
@@ -443,7 +1234,7 @@ async fn trace_handler_rejects_missing_active_session_before_requesting_router()
 async fn trace_handler_emits_empty_trace_for_empty_response() {
     let router = MockRouter::start().await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", None));
 
     router_client.get_traces().await;
 
@@ -465,7 +1256,7 @@ async fn trace_handler_reports_decryption_errors_and_skips_payload() {
         .start()
         .await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", None));
 
     router_client.get_traces().await;
 
@@ -495,7 +1286,7 @@ async fn trace_handler_reports_invalid_decrypted_payload_json() {
         .await;
     let (mut router_client, mut msg_rx) =
         router_client_for_mock_with_credentials(&router, cwd, credentials).await;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", Some(key_id)));
 
     router_client.get_traces().await;
 
@@ -511,7 +1302,7 @@ async fn clear_interrupts_active_run_resets_state_and_emits_idle() {
     let router = MockRouter::start().await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
     router_client.state = State::Streaming;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
     router_client
         .approvals
         .approve("git commit -m test")
@@ -521,7 +1312,7 @@ async fn clear_interrupts_active_run_resets_state_and_emits_idle() {
 
     assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
     assert_eq!(router_client.state, State::Idle);
-    assert_eq!(router_client.session_id, None);
+    assert_eq!(router_client.session, None);
     assert!(
         !router_client
             .approvals
@@ -545,14 +1336,14 @@ async fn clear_reports_interrupt_errors_then_resets_state_and_emits_idle() {
         .await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
     router_client.state = State::Streaming;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
 
     router_client.clear_session().await;
 
     assert_error_contains(&mut msg_rx, "Failed to terminate active run").await;
     assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
     assert_eq!(router_client.state, State::Idle);
-    assert_eq!(router_client.session_id, None);
+    assert_eq!(router_client.session, None);
 }
 
 #[tokio::test]
@@ -563,7 +1354,7 @@ async fn resume_session_reports_interrupt_errors_then_loads_session() {
         .await;
     let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
     router_client.state = State::Streaming;
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
 
     router_client.resume_session(Uuid::nil()).await;
 
@@ -573,7 +1364,7 @@ async fn resume_session_reports_interrupt_errors_then_loads_session() {
     };
     assert_eq!(session.id, Uuid::nil());
     assert_eq!(router_client.state, State::Idle);
-    assert_eq!(router_client.session_id, Some(Uuid::nil()));
+    assert_eq!(router_client.session_id(), Some(Uuid::nil()));
 }
 
 #[tokio::test]
@@ -609,6 +1400,15 @@ async fn resume_session_reports_decryption_errors_and_skips_messages() {
     assert_eq!(session.messages.len(), 1);
     assert_eq!(session.messages[0].role, "assistant");
     assert_eq!(session.messages[0].content, "visible reply");
+    assert_eq!(
+        router_client
+            .session
+            .as_ref()
+            .expect("session info is recorded")
+            .key_id
+            .as_deref(),
+        Some("kf_ab12")
+    );
 }
 
 #[tokio::test]
@@ -640,15 +1440,15 @@ async fn handlers_emit_errors_for_router_failures_and_missing_sessions() {
     router_client.get_usage().await;
     assert_error_contains(&mut msg_rx, "No active session").await;
 
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Usage session", None));
     router_client.get_usage().await;
     assert_error_contains(&mut msg_rx, "Failed to get usage statistics").await;
-    router_client.session_id = None;
+    router_client.session = None;
 
     router_client.resume_session(Uuid::nil()).await;
     assert_error_contains(&mut msg_rx, "Failed to get session").await;
 
-    router_client.session_id = Some(Uuid::nil());
+    router_client.session = Some(session_info(Uuid::nil(), "Trace session", None));
     router_client.get_traces().await;
     assert_error_contains(&mut msg_rx, "Failed to get execution trace").await;
 }
@@ -691,6 +1491,17 @@ fn router_client_with_state(state: State) -> RouterClient {
     let mut router_client = RouterClient::new(cmd_rx, msg_tx, context);
     router_client.state = state;
     router_client
+}
+
+fn router_client_with_receiver(state: State) -> (RouterClient, Receiver<Msg>) {
+    let exit = CancellationToken::new();
+    let context = app_context(exit);
+    let (_cmd_tx, cmd_rx) = tokio::sync::mpsc::channel(1);
+    let (msg_tx, msg_rx) = tokio::sync::mpsc::channel(8);
+    let mut router_client = RouterClient::new(cmd_rx, msg_tx, context);
+    router_client.state = state;
+
+    (router_client, msg_rx)
 }
 
 async fn router_client_for_mock(router: &MockRouter) -> (RouterClient, Receiver<Msg>) {
@@ -764,6 +1575,42 @@ async fn assert_error_contains(msg_rx: &mut Receiver<Msg>, expected: &str) {
     );
 }
 
+fn completed_turn_response(message: &str, trace_id: &str) -> TurnResponse {
+    TurnResponse {
+        outcome: TurnOutcome::Completed(Box::new(CompletedTurn {
+            message: smista_sdk::core::message::Message {
+                role: MessageRole::Assistant,
+                content: message.to_owned(),
+                provider: Some(CoreProvider::Anthropic),
+                model: Some("claude-sonnet".to_owned()),
+            },
+            classification: smista_sdk::core::policy::Classification {
+                intent: TaskIntent::Chat,
+                source: smista_sdk::core::policy::IntentSource::Inferred,
+                reason: "test fixture".to_owned(),
+                matched_rule: None,
+                confidence: Some(smista_sdk::core::policy::Confidence::Low),
+            },
+            routing: smista_sdk::core::api::RoutingOutcome {
+                task_type: TaskIntent::Chat,
+                provider: CoreProvider::Anthropic,
+                model: "claude-sonnet".to_owned(),
+                matched_rule: None,
+                fallback_used: false,
+                override_used: false,
+            },
+            context: ContextOutcome {
+                included: Vec::new(),
+                excluded: Vec::new(),
+            },
+            usage: smista_sdk::core::usage::Usage::default(),
+            to_encrypt: std::collections::BTreeMap::new(),
+            trace_id: trace_id.to_owned(),
+        })),
+        allowed_continuations: Vec::new(),
+    }
+}
+
 fn routing_payload() -> Payload {
     Payload::RoutingDecision(RoutingDecisionPayload {
         provider: CoreProvider::Anthropic,
@@ -785,13 +1632,36 @@ fn invalid_encrypted_payload() -> EncryptedPayload {
     }
 }
 
+fn session_info(id: Uuid, title: &str, key_id: Option<String>) -> SessionInfo {
+    SessionInfo {
+        id,
+        title: title.to_owned(),
+        key_id,
+    }
+}
+
+fn created_session_response(key_id: Option<String>) -> CreateSessionResponse {
+    CreateSessionResponse {
+        session: SessionSummary {
+            id: Uuid::nil(),
+            title: Some("Created session".to_owned()),
+            scope: Some("/tmp/project".to_owned()),
+            encrypted: key_id.is_some(),
+            key_id,
+            created_at: "2026-05-25T09:00:00Z".parse().expect("timestamp parses"),
+            updated_at: "2026-05-25T09:00:00Z".parse().expect("timestamp parses"),
+            archived: false,
+        },
+    }
+}
+
 fn session_response_with_messages(messages: Vec<SessionMessageDetail>) -> GetSessionResponse {
     GetSessionResponse {
         session: SessionDetail {
             id: Uuid::nil(),
             title: "Encrypted transcript".to_owned(),
             scope: None,
-            encrypted: true,
+            key_id: Some("kf_ab12".to_owned()),
             created_at: "2026-05-25T09:00:00Z".parse().expect("timestamp parses"),
             updated_at: "2026-05-25T09:00:00Z".parse().expect("timestamp parses"),
             messages,
