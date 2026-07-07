@@ -1,5 +1,6 @@
 //! All types of messages with their payloads sent by the router client to the UI to notify about the status of the execution.
 
+use smista_sdk::core::api::SessionUsageResponse;
 use uuid::Uuid;
 
 /// Messages are sent by the router client to the UI to notify about the status of the execution.
@@ -17,12 +18,16 @@ pub enum Msg {
     ApprovalPrompt(ApprovalPrompt),
     /// The router is waiting for the client to run tools.
     ToolRequestPrompt(Vec<ToolRequestPrompt>),
+    /// The router returned the list of models available for this user.
+    ModelsList(Vec<Model>),
+    /// The router returned the list of providers available for this user.
+    ProvidersList(Vec<Provider>),
     /// The router returned the user's sessions.
     SessionsList(Vec<SessionListItem>),
     /// The router returned a resumed session.
     ResumedSession(ResumedSession),
     /// The router returned usage statistics.
-    Usage(UsageSummary),
+    Usage(SessionUsageResponse),
     /// The router returned an execution trace.
     Trace(TraceSummary),
     /// The router returned a preview.
@@ -58,6 +63,34 @@ pub struct ApprovalPrompt {
     pub detail: String,
     /// Session-policy wildcard alias, for example `git commit *`.
     pub wildcard_alias: Option<String>,
+}
+
+/// Information about a model available on the router for this user, reduced for UI rendering.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Model {
+    /// Provider name
+    pub provider: String,
+    /// Model identifier
+    pub id: String,
+    /// Model display name
+    pub display_name: String,
+    /// Maximum number of context tokens the model accepts.
+    pub max_context_tokens: u32,
+    /// Maximum number of tokens the model emits, if bounded.
+    pub max_output_tokens: Option<u32>,
+    /// Input price per million tokens, serialized as a string for exact precision.
+    pub input_cost_per_million_tokens: Option<rust_decimal::Decimal>,
+    /// Output price per million tokens, serialized as a string for exact precision.
+    pub output_cost_per_million_tokens: Option<rust_decimal::Decimal>,
+}
+
+/// Information about a provider available on the router for this user, reduced for UI rendering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Provider {
+    /// Provider name
+    pub name: String,
+    /// Whether the provider is local
+    pub local: bool,
 }
 
 /// Tool request data reduced for UI approval and execution.
@@ -107,22 +140,30 @@ pub struct SessionMessage {
     pub content: String,
 }
 
-/// Usage data reduced for UI rendering.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UsageSummary {
-    /// Main usage line.
-    pub total: String,
-    /// Per-model usage lines.
-    pub by_model: Vec<String>,
-    /// Per-task usage lines.
-    pub by_task_type: Vec<String>,
-}
-
 /// Trace data reduced for UI rendering.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraceSummary {
-    /// Human-readable trace event lines.
-    pub events: Vec<String>,
+    /// A list of [`TraceEvent`].
+    pub events: Vec<TraceEvent>,
+}
+
+/// A single event in a trace, reduced for UI rendering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraceEvent {
+    /// Kind of trace event.
+    pub event_type: &'static str,
+    /// Detected intent that drove routing for this event's task.
+    pub task_type: &'static str,
+    /// Provider that served the task.
+    pub provider: String,
+    /// Model that served the task.
+    pub model: String,
+    /// Description of the routing rule that matched, if any.
+    pub matched_rule: Option<String>,
+    /// When the event occurred.
+    pub created_at: String,
+    /// Typed event payload, in clear or sealed.
+    pub payload: String,
 }
 
 /// Preview data reduced for UI rendering.

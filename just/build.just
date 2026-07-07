@@ -12,6 +12,11 @@ build_crates args="":
 build_crates_release:
   just build_crates "--release"
 
+# Update Cargo.lock; pass cargo update arguments to scope the update.
+[group('build')]
+update_lock args="":
+  cargo update {{ args }}
+
 # Build the TypeScript SDK
 [group('build')]
 build_sdk: _generate_sdk_bindings sdk_build
