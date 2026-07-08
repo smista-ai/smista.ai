@@ -70,6 +70,8 @@ pub struct ApprovalPrompt {
     pub title: String,
     /// Human-readable detail to show in the prompt.
     pub detail: String,
+    /// Tool name when this approval gates a client-side tool.
+    pub tool_name: Option<String>,
     /// Session-policy wildcard alias, for example `git commit *`.
     pub wildcard_alias: Option<String>,
 }
@@ -193,6 +195,7 @@ mod tests {
             id: "approval-1".to_owned(),
             title: "Run git command".to_owned(),
             detail: "git commit -a -m something".to_owned(),
+            tool_name: Some("shell".to_owned()),
             wildcard_alias: Some("git commit *".to_owned()),
         });
 
@@ -200,5 +203,6 @@ mod tests {
             panic!("approval prompt expected");
         };
         assert_eq!(prompt.wildcard_alias.as_deref(), Some("git commit *"));
+        assert_eq!(prompt.tool_name.as_deref(), Some("shell"));
     }
 }

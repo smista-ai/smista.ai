@@ -39,6 +39,7 @@ fn main() -> anyhow::Result<()> {
 async fn tokio_main() -> anyhow::Result<()> {
     // parse CLI args and env vars
     let args = args::Args::parse();
+    let is_interactive_cli = args.command.is_none();
 
     // The foreground router configures its own telemetry — it may enable
     // OpenTelemetry export from the router configuration — so it initializes
@@ -46,6 +47,8 @@ async fn tokio_main() -> anyhow::Result<()> {
     // uses plain logging, set up here and kept alive for the process lifetime.
     let _telemetry = if args.is_foreground_start() {
         None
+    } else if is_interactive_cli && args.log_file.is_none() {
+        Some(log::init_quiet(&args.log_filter)?)
     } else {
         Some(log::init(&args.log_filter, args.log_file.as_deref(), None)?)
     };

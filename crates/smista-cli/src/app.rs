@@ -7,11 +7,13 @@ mod tui;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use ratatui::backend::Backend;
 use smista_sdk::client::ReqwestClient;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
+use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 
 use crate::app::input_listener::{InputEvent, InputListener};
@@ -20,6 +22,8 @@ use crate::app::tui::Tui;
 use crate::config::Config;
 use crate::credentials::{ApiKeyStorage, E2eeKeysCredentials, ProvidersCredentials};
 use crate::skills::SkillStore;
+
+const TUI_REFRESH_INTERVAL: Duration = Duration::from_millis(120);
 
 /// Shared CLI application dependencies.
 ///
@@ -94,14 +98,15 @@ impl App {
         let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel(100);
         let (input_event_tx, input_event_rx) = tokio::sync::mpsc::channel(100);
         tracing::debug!("Channels setup complete");
-        // setup event listener
-        tracing::debug!("Setting up input listener");
-        let input_listener = InputListener::new(self.context.exit.clone(), input_event_tx).run();
-        tracing::debug!("Input listener setup complete");
         // setup tui
         tracing::debug!("Setting up tui");
         let (tui, _terminal_restore) = Tui::new(self.context.clone(), initial_prompt.clone())?;
         tracing::debug!("Tui setup complete");
+        // setup event listener after TUI initialization so crossterm's event stream cannot consume
+        // cursor-position responses used by Ratatui's inline viewport setup.
+        tracing::debug!("Setting up input listener");
+        let input_listener = InputListener::new(self.context.exit.clone(), input_event_tx).run();
+        tracing::debug!("Input listener setup complete");
         // setup router client
         tracing::debug!("Setting up router client");
         let router_client = RouterClient::new(cmd_rx, msg_tx, self.context.clone()).run();
@@ -195,6 +200,11 @@ impl App {
                 .await?;
         }
 
+        // view the TUI before entering the loop to ensure the initial state is rendered
+        tui.view()?;
+        let mut refresh_tick = tokio::time::interval(TUI_REFRESH_INTERVAL);
+        refresh_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
             tokio::select! {
                 _ = self.context.exit.cancelled() => {
@@ -222,6 +232,14 @@ impl App {
                                 "failed to handle input event"
                             );
                         }
+                    }
+                }
+                _ = refresh_tick.tick() => {
+                    if let Err(err) = tui.refresh() {
+                        tracing::error!(
+                            error = %err,
+                            "failed to refresh tui"
+                        );
                     }
                 }
                 Some(msg) = msg_rx.recv() => {

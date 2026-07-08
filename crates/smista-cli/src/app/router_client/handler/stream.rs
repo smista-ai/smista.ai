@@ -11,7 +11,7 @@ use smista_sdk::core::api::{
 use crate::app::router_client::approvals::ApprovalsStorage;
 use crate::app::router_client::msg::{ApprovalPrompt, AssistantTurn, ToolCallStarted};
 use crate::app::router_client::state::State;
-use crate::app::router_client::{Msg, RouterClient};
+use crate::app::router_client::{Msg, RouterClient, tool_changes_files};
 use crate::tools::{ToolCall, ToolExecutor};
 
 impl RouterClient {
@@ -207,6 +207,9 @@ impl RouterClient {
     ) -> Option<Option<ApiApprovalDecision>> {
         match request.requires_approval {
             ToolApproval::Allow => Some(None),
+            ToolApproval::Ask if self.accept_edits && tool_changes_files(&request.name) => {
+                Some(Some(ApiApprovalDecision::Approved))
+            }
             ToolApproval::Ask => {
                 let command = shell_command(&request.arguments)?;
                 match self.approvals.approved(command) {
@@ -447,6 +450,7 @@ fn approval_prompt(approval: PendingApproval) -> ApprovalPrompt {
         id: approval.approval_id,
         title: format!("Approve {:?}", approval.kind),
         detail: format_json_detail(&approval.detail),
+        tool_name: None,
         wildcard_alias: None,
     }
 }
@@ -467,6 +471,7 @@ fn tool_approval_prompt(approvals: &ApprovalsStorage, request: &ToolRequest) -> 
         detail: command
             .map(str::to_owned)
             .unwrap_or_else(|| format_json_detail(&request.arguments)),
+        tool_name: Some(request.name.clone()),
         wildcard_alias,
     }
 }

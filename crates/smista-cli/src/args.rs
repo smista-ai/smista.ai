@@ -31,7 +31,7 @@ pub struct Args {
     /// unavailable.
     #[clap(long = "enforce-keyring")]
     pub enforce_keyring: bool,
-    /// Set log file path. If not set, logs will be printed to stdout. Can also be set via the `SMISTA_ROUTER_LOG_FILE` environment variable.
+    /// Set log file path. If not set, subcommands print logs to stderr while the interactive CLI suppresses terminal logs. Can also be set via the `SMISTA_ROUTER_LOG_FILE` environment variable.
     #[clap(
         short = 'L',
         global = true,
