@@ -39,20 +39,25 @@ impl Drop for TerminalRestoreGuard {
 impl Tui<CrosstermBackend<Stdout>> {
     /// Creates a TUI scaffold backed by the process terminal.
     ///
-    /// `initial_prompt` is accepted now so the public constructor already has
-    /// the shape needed by the future renderer.
+    /// `initial_prompt` is logged here and dispatched by the application run
+    /// loop after the router client starts.
     ///
     /// # Errors
     ///
     /// Returns an error if the process terminal cannot be initialized.
     pub fn new(
         context: AppContext,
-        _initial_prompt: Option<String>,
+        initial_prompt: Option<String>,
     ) -> anyhow::Result<(Self, TerminalRestoreGuard)> {
         tracing::debug!("initializing terminal");
         let terminal = ratatui::try_init()?;
         tracing::debug!("terminal initialized");
-        // TODO: handle initial prompt; push to ui
+        if let Some(prompt) = initial_prompt {
+            tracing::debug!(
+                prompt.bytes = prompt.len(),
+                "initial prompt will be dispatched by the application run loop",
+            );
+        }
         Ok((Self { context, terminal }, TerminalRestoreGuard))
     }
 }
@@ -80,7 +85,6 @@ impl<B: Backend> Tui<B> {
             "handling input event {{input.event}}",
         );
 
-        // TODO: Replace this once the TUI has a real event-to-command mapping.
         if let InputEvent::Interrupt = event {
             self.context.exit.cancel();
         }
@@ -105,7 +109,6 @@ fn message_name(msg: &Msg) -> &'static str {
         Msg::StreamedReasoningChunk(_) => "streamed_reasoning_chunk",
         Msg::ToolCallStarted(_) => "tool_call_started",
         Msg::ApprovalPrompt(_) => "approval_prompt",
-        Msg::ToolRequestPrompt(_) => "tool_request_prompt",
         Msg::ModelsList(_) => "models_list",
         Msg::ProvidersList(_) => "providers_list",
         Msg::SessionsList(_) => "sessions_list",

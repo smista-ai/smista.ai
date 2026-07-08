@@ -13,13 +13,6 @@ pub struct ApprovalsStorage {
     approvals: HashSet<CommandAlias>,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "approval storage methods are scaffolded before router prompts are wired."
-    )
-)]
 impl ApprovalsStorage {
     /// Creates an empty approval store.
     #[must_use]
