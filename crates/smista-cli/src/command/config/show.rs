@@ -702,7 +702,7 @@ mod tests {
 
             [routing.default]
             model = "openai/gpt-5.5-mini"
-            fallbacks = ["ollama/qwen2.5-coder"]
+            fallbacks = ["ollama/qwen2.5-coder:7b"]
 
             [[routing.rules]]
             name = "plan remotely"
@@ -726,7 +726,7 @@ mod tests {
         assert!(output.contains("    api_key: [redacted]"));
         assert!(output.contains("Routing"));
         assert!(output.contains("  default: openai/gpt-5.5-mini"));
-        assert!(output.contains("    fallbacks: ollama/qwen2.5-coder"));
+        assert!(output.contains("    fallbacks: ollama/qwen2.5-coder:7b"));
         assert!(output.contains("    - plan remotely"));
         assert!(output.contains("      priority: 10"));
         assert!(output.contains("      intent: plan"));

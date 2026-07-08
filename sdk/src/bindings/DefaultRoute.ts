@@ -13,7 +13,7 @@ import type { ModelReference } from "./ModelReference.js";
  *
  * let route: DefaultRoute = serde_json::from_value(serde_json::json!({
  *     "model": "openai/gpt-5.5-mini",
- *     "fallbacks": ["ollama/qwen2.5-coder"],
+ *     "fallbacks": ["ollama/qwen2.5-coder:7b"],
  * }))
  * .unwrap();
  * assert_eq!(route.model.to_string(), "openai/gpt-5.5-mini");

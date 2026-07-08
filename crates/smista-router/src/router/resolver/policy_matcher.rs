@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn should_fall_back_to_default_route_when_no_rule_matches() {
         let routing = policy(json!({
-            "default": { "model": "openai/gpt-5.5-mini", "fallbacks": ["ollama/qwen2.5-coder"] },
+            "default": { "model": "openai/gpt-5.5-mini", "fallbacks": ["ollama/qwen2.5-coder:7b"] },
             "rules": [{ "name": "auth", "paths": ["src/auth/**"], "model": "ollama/llama3" }],
         }));
         let task = task_with(TaskIntent::Chat, &["docs/readme.md"]);
@@ -319,7 +319,7 @@ mod tests {
         assert_eq!(matched.model(), &model("openai/gpt-5.5-mini"));
         assert_eq!(
             matched.fallbacks().to_vec(),
-            vec![model("ollama/qwen2.5-coder")]
+            vec![model("ollama/qwen2.5-coder:7b")]
         );
         assert!(matched.matched_rule().is_none());
         assert!(!matched.override_used());

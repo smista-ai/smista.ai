@@ -112,7 +112,7 @@ async fn execute_and_preview_commands_accept_explicit_model_overrides() {
             files: HashSet::default(),
             plan: true,
             explicit_model: Some(
-                "ollama/qwen2.5-coder"
+                "ollama/qwen2.5-coder:7b"
                     .parse()
                     .expect("model reference parses"),
             ),
@@ -1846,8 +1846,8 @@ async fn catalog_handlers_emit_models_and_providers() {
     };
     assert_eq!(models.len(), 1);
     assert_eq!(models[0].provider, "ollama");
-    assert_eq!(models[0].id, "qwen2.5-coder");
-    assert_eq!(models[0].display_name, "qwen2.5-coder");
+    assert_eq!(models[0].id, "qwen2.5-coder:7b");
+    assert_eq!(models[0].display_name, "qwen2.5-coder:7b");
 
     let Msg::ProvidersList(providers) = recv_msg(&mut msg_rx).await else {
         panic!("providers list message expected");

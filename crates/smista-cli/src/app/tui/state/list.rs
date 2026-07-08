@@ -1,5 +1,7 @@
 //! Selectable list state shared by replacement views.
 
+const PAGE_STEP: usize = 8;
+
 /// State for a selectable list of entries.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListState<T> {
@@ -64,6 +66,26 @@ impl<T> ListState<T> {
         self.current_index = self.current_index.saturating_sub(1);
     }
 
+    /// Selects the first entry.
+    pub fn first(&mut self) {
+        self.current_index = 0;
+    }
+
+    /// Selects the last entry.
+    pub fn last(&mut self) {
+        self.current_index = self.clamp_index(usize::MAX);
+    }
+
+    /// Moves selection one page toward the start.
+    pub fn page_previous(&mut self) {
+        self.current_index = self.current_index.saturating_sub(PAGE_STEP);
+    }
+
+    /// Moves selection one page toward the end.
+    pub fn page_next(&mut self) {
+        self.select(self.current_index.saturating_add(PAGE_STEP));
+    }
+
     /// Replaces entries and preserves the nearest valid selection.
     pub fn replace_entries(&mut self, entries: Vec<T>) {
         self.entries = entries;
@@ -104,11 +126,34 @@ mod tests {
     }
 
     #[test]
+    fn home_end_and_page_selection_clamp_to_existing_entries() {
+        let mut state = ListState::new((0..20).collect::<Vec<_>>());
+
+        state.last();
+        assert_eq!(state.current_index(), 19);
+
+        state.page_previous();
+        assert_eq!(state.current_index(), 11);
+
+        state.first();
+        assert_eq!(state.current_index(), 0);
+
+        state.page_next();
+        assert_eq!(state.current_index(), 8);
+
+        state.page_next();
+        state.page_next();
+        assert_eq!(state.current_index(), 19);
+    }
+
+    #[test]
     fn empty_list_has_no_selected_entry() {
         let mut state = ListState::<String>::default();
 
         state.select(10);
         state.next();
+        state.last();
+        state.page_next();
 
         assert_eq!(state.current_index(), 0);
         assert_eq!(state.selected(), None);

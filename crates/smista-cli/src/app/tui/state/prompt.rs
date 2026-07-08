@@ -134,6 +134,24 @@ impl PromptState {
         }
     }
 
+    /// Moves the cursor to the beginning of the prompt.
+    pub fn move_home(&mut self) {
+        match self {
+            Self::Empty => {}
+            Self::Text(state) => state.move_home(),
+            Self::Command(state) => state.move_home(),
+        }
+    }
+
+    /// Moves the cursor to the end of the prompt.
+    pub fn move_end(&mut self) {
+        match self {
+            Self::Empty => {}
+            Self::Text(state) => state.move_end(),
+            Self::Command(state) => state.move_end(),
+        }
+    }
+
     /// Moves the cursor to the same column on the previous logical row.
     pub fn move_up(&mut self) {
         match self {
@@ -185,6 +203,14 @@ impl PromptState {
         }
     }
 
+    /// Accepts the selected command suggestion.
+    pub fn accept_suggestion(&mut self) -> bool {
+        match self {
+            Self::Command(state) => state.accept_suggestion(),
+            _ => false,
+        }
+    }
+
     /// Advances the selected command suggestion.
     pub fn next_suggestion(&mut self) {
         if let Self::Command(state) = self {
@@ -213,6 +239,10 @@ impl TextPromptState {
         Self { input, cursor }
     }
 
+    pub fn text(&self) -> &str {
+        &self.input
+    }
+
     fn insert(&mut self, char: char) {
         let byte_index = char_to_byte_index(&self.input, self.cursor);
         self.input.insert(byte_index, char);
@@ -238,6 +268,14 @@ impl TextPromptState {
 
     fn move_right(&mut self) {
         self.cursor = (self.cursor + 1).min(char_len(&self.input));
+    }
+
+    fn move_home(&mut self) {
+        self.cursor = 0;
+    }
+
+    fn move_end(&mut self) {
+        self.cursor = char_len(&self.input);
     }
 
     fn move_up(&mut self) {
@@ -303,9 +341,34 @@ impl CommandPromptState {
 
     /// Advances to the next command suggestion.
     pub fn next_suggestion(&mut self) {
-        if !self.suggestions.is_empty() {
-            self.index = (self.index + 1) % self.suggestions.len();
+        if self.suggestions.is_empty() {
+            return;
         }
+
+        self.index = (self.index + 1) % self.suggestions.len();
+    }
+
+    /// Accepts the currently selected command suggestion.
+    pub fn accept_suggestion(&mut self) -> bool {
+        if self.cursor != char_len(&self.command_name) {
+            return false;
+        }
+
+        let Some(suggestion) = self.current_suggestion().map(ToOwned::to_owned) else {
+            return false;
+        };
+        let Some(command) = suggestion.strip_prefix('/') else {
+            return false;
+        };
+
+        self.input = if self.args.is_empty() {
+            command.to_owned()
+        } else {
+            format!("{command} {}", self.args)
+        };
+        self.cursor = self.input.chars().count();
+        self.reparse();
+        true
     }
 
     fn insert(&mut self, char: char) {
@@ -333,6 +396,14 @@ impl CommandPromptState {
 
     fn move_right(&mut self) {
         self.cursor = (self.cursor + 1).min(char_len(&self.input));
+    }
+
+    fn move_home(&mut self) {
+        self.cursor = 0;
+    }
+
+    fn move_end(&mut self) {
+        self.cursor = char_len(&self.input);
     }
 
     fn move_up(&mut self) {
@@ -485,7 +556,9 @@ fn command_suggestions(prefix: &str) -> Vec<String> {
 
     COMMAND_SPECS
         .iter()
-        .filter_map(|(name, _)| name.starts_with(prefix).then_some(format!("/{name}")))
+        .filter_map(|(name, _)| {
+            (name.starts_with(prefix) && *name != prefix).then_some(format!("/{name}"))
+        })
         .collect()
 }
 
@@ -532,13 +605,13 @@ mod tests {
                 command_name: COMMAND_MODELS.to_owned(),
                 command: Command::ListModels,
                 args: String::new(),
-                suggestions: vec![MODELS_SUGGESTION.to_owned()],
+                suggestions: Vec::new(),
                 index: 0,
                 cursor: COMMAND_MODELS.chars().count(),
             })
         );
         assert_eq!(state.input(), MODELS_SUGGESTION);
-        assert_eq!(state.current_suggestion(), Some(MODELS_SUGGESTION));
+        assert_eq!(state.current_suggestion(), None);
     }
 
     #[test]
@@ -554,7 +627,7 @@ mod tests {
                 command_name: COMMAND_QUIT.to_owned(),
                 command: Command::Quit,
                 args: QUIT_ARGUMENTS.to_owned(),
-                suggestions: vec![QUIT_SUGGESTION.to_owned()],
+                suggestions: Vec::new(),
                 index: 0,
                 cursor: QUIT_COMMAND_INPUT.chars().count(),
             })
@@ -562,14 +635,45 @@ mod tests {
     }
 
     #[test]
-    fn tab_cycles_command_suggestions() {
+    fn command_suggestions_are_visible_while_typing() {
         let mut state = PromptState::default();
 
         state.push('/');
         assert_eq!(state.current_suggestion(), None);
         state.push('q');
-        assert_eq!(state.current_suggestion(), Some("/q"));
+        assert_eq!(state.current_suggestion(), Some("/quit"));
+    }
+
+    #[test]
+    fn tab_cycles_command_suggestions() {
+        let mut state = PromptState::default();
+
+        state.push_str("/e");
+        assert_eq!(state.current_suggestion(), Some("/exit"));
         state.next_suggestion();
+        assert_eq!(state.current_suggestion(), Some("/exit"));
+    }
+
+    #[test]
+    fn accepts_command_suggestion() {
+        let mut state = PromptState::default();
+
+        state.push_str("/q");
+
+        assert!(state.accept_suggestion());
+        assert_eq!(state.input(), "/quit");
+        assert_eq!(state.current_suggestion(), None);
+    }
+
+    #[test]
+    fn does_not_accept_suggestion_inside_command_word() {
+        let mut state = PromptState::default();
+
+        state.push_str("/qu");
+        state.move_left();
+
+        assert!(!state.accept_suggestion());
+        assert_eq!(state.input(), "/qu");
         assert_eq!(state.current_suggestion(), Some("/quit"));
     }
 
@@ -580,6 +684,67 @@ mod tests {
         state.push('/');
 
         assert_eq!(state.current_suggestion(), None);
+    }
+
+    #[test]
+    fn empty_prompt_editing_is_noop() {
+        let mut state = PromptState::default();
+
+        assert!(state.is_empty());
+        assert_eq!(state.backspace(), None);
+        assert_eq!(state.delete(), None);
+        state.move_left();
+        state.move_right();
+        state.move_home();
+        state.move_end();
+        state.move_up();
+        state.move_down();
+        state.next_suggestion();
+
+        assert_eq!(state.cursor_position(), 0);
+        assert_eq!(state.command(), None);
+        assert_eq!(state.command_args(), None);
+        assert_eq!(state.current_suggestion(), None);
+        assert!(!state.accept_suggestion());
+        assert_eq!(state.command_input(), "");
+    }
+
+    #[test]
+    fn command_accessors_expose_command_and_args() {
+        let mut state = PromptState::default();
+
+        state.push_str(QUIT_INPUT);
+
+        assert!(!state.is_empty());
+        assert_eq!(state.command(), Some(&Command::Quit));
+        assert_eq!(state.command_args(), Some(QUIT_ARGUMENTS));
+        assert_eq!(state.command_input(), QUIT_COMMAND_INPUT);
+
+        let PromptState::Command(command) = &state else {
+            panic!("command prompt expected");
+        };
+        assert_eq!(command.input(), QUIT_COMMAND_INPUT);
+        assert_eq!(command.command_name(), COMMAND_QUIT);
+        assert_eq!(command.command(), &Command::Quit);
+        assert_eq!(command.args(), QUIT_ARGUMENTS);
+        assert_eq!(command.command().input_name(), COMMAND_QUIT);
+
+        state.clear();
+        state.push_str("/unknown");
+        assert_eq!(state.command().map(Command::input_name), Some("unknown"));
+    }
+
+    #[test]
+    fn accepting_command_suggestion_preserves_arguments() {
+        let mut state = PromptState::default();
+
+        state.push_str("/q now");
+        state.move_home();
+        state.move_right();
+
+        assert!(state.accept_suggestion());
+        assert_eq!(state.input(), QUIT_INPUT);
+        assert_eq!(state.command_args(), Some(QUIT_ARGUMENTS));
     }
 
     #[test]
@@ -659,6 +824,24 @@ mod tests {
         assert_eq!(state.cursor_position(), 1);
         state.move_right();
         assert_eq!(state.cursor_position(), 2);
+    }
+
+    #[test]
+    fn home_and_end_move_cursor_to_prompt_boundaries() {
+        let mut state = PromptState::default();
+
+        state.push_str("abc");
+        state.move_home();
+        assert_eq!(state.cursor_position(), 0);
+        state.move_end();
+        assert_eq!(state.cursor_position(), 3);
+
+        state.clear();
+        state.push_str("/quit");
+        state.move_home();
+        assert_eq!(state.cursor_position(), 1);
+        state.move_end();
+        assert_eq!(state.cursor_position(), 5);
     }
 
     #[test]
