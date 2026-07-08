@@ -2,10 +2,12 @@
 
 mod catalog;
 mod clear;
+mod continuation;
 mod execute;
 mod preview;
 mod session;
 mod status;
+mod stream;
 mod trace;
 mod usage;
 
@@ -19,7 +21,9 @@ impl RouterClient {
     pub(in crate::app::router_client) fn reset_session_state(&mut self) {
         self.session = None;
         self.approvals.clear();
+        self.pending_seals.clear();
         self.pending_tool_prompts.clear();
+        self.pending_tool_requests.clear();
         self.pending_tool_results.clear();
         self.state = State::Idle;
     }

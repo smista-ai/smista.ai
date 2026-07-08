@@ -264,7 +264,6 @@ fn message_name(msg: &Msg) -> &'static str {
         Msg::StreamedReasoningChunk(_) => "streamed_reasoning_chunk",
         Msg::ToolCallStarted(_) => "tool_call_started",
         Msg::ApprovalPrompt(_) => "approval_prompt",
-        Msg::ToolRequestPrompt(_) => "tool_request_prompt",
         Msg::ModelsList(_) => "models_list",
         Msg::ProvidersList(_) => "providers_list",
         Msg::SessionsList(_) => "sessions_list",

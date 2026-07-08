@@ -4,10 +4,6 @@ use smista_sdk::core::api::SessionUsageResponse;
 use uuid::Uuid;
 
 /// Messages are sent by the router client to the UI to notify about the status of the execution.
-#[expect(
-    dead_code,
-    reason = "Router message variants are defined before real router execution is wired."
-)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Msg {
     /// The router completed an assistant turn.
@@ -20,8 +16,6 @@ pub enum Msg {
     ToolCallStarted(ToolCallStarted),
     /// The router is waiting for the user to approve or reject an action.
     ApprovalPrompt(ApprovalPrompt),
-    /// The router is waiting for the client to run tools.
-    ToolRequestPrompt(Vec<ToolRequestPrompt>),
     /// The router returned the list of models available for this user.
     ModelsList(Vec<Model>),
     /// The router returned the list of providers available for this user.
@@ -104,20 +98,6 @@ pub struct Provider {
     pub name: String,
     /// Whether the provider is local
     pub local: bool,
-}
-
-/// Tool request data reduced for UI approval and execution.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ToolRequestPrompt {
-    /// Identifier used when sending a [`ToolResult`](crate::app::router_client::cmd::ToolResult)
-    /// or [`ApprovalDecision`](crate::app::router_client::cmd::ApprovalDecision).
-    pub call_id: String,
-    /// Tool name.
-    pub name: String,
-    /// Human-readable call summary.
-    pub detail: String,
-    /// Session-policy wildcard alias, for example `git commit *`.
-    pub wildcard_alias: Option<String>,
 }
 
 /// One session row for the UI session list.

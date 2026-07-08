@@ -1,3 +1,9 @@
+//! Worker-side router API integration for the interactive CLI.
+//!
+//! The router client owns the command receiver, sends UI messages, keeps the
+//! current session state, executes client-side tools, and handles end-to-end
+//! encryption continuations required by `smista-router`.
+
 mod approvals;
 pub mod cmd;
 mod handler;
@@ -9,7 +15,7 @@ mod tests;
 use std::collections::{BTreeMap, HashSet};
 
 use smista_sdk::client::Client;
-use smista_sdk::core::api::{CreateSessionRequest, ToolResult as ApiToolResult};
+use smista_sdk::core::api::{ContentRef, CreateSessionRequest, ToolRequest, ToolResult};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -37,9 +43,13 @@ pub struct RouterClient {
     /// Channel to send messages to the UI.
     msg_tx: Sender<Msg>,
     /// Tool calls that have run locally and are waiting for a turn end.
-    pending_tool_results: BTreeMap<String, ApiToolResult>,
+    pending_tool_results: BTreeMap<String, ToolResult>,
+    /// Tool calls waiting for an explicit user approval decision.
+    pending_tool_requests: BTreeMap<String, ToolRequest>,
     /// Tool calls already surfaced to the user for approval.
     pending_tool_prompts: HashSet<String>,
+    /// Router-authored content that must be sealed on the next continuation.
+    pending_seals: BTreeMap<ContentRef, String>,
     /// Current session id, if any.
     session: Option<SessionInfo>,
     /// Current state of the router client.
@@ -62,7 +72,9 @@ impl RouterClient {
             cmd_rx,
             msg_tx,
             pending_tool_results: BTreeMap::new(),
+            pending_tool_requests: BTreeMap::new(),
             pending_tool_prompts: HashSet::new(),
+            pending_seals: BTreeMap::new(),
             context,
             session: None,
             state: State::Idle,
@@ -172,54 +184,6 @@ impl RouterClient {
         }
     }
 
-    async fn continue_execution(&mut self, continue_execution: cmd::ContinueExecution) -> bool {
-        match (&self.state, continue_execution) {
-            (State::AwaitingTool, cmd::ContinueExecution::ToolResults { results }) => {
-                tracing::debug!(
-                    result.count = results.len(),
-                    "router client scaffold placeholder: submit tool results",
-                );
-                true // TODO: impl
-            }
-            (State::AwaitingApproval, cmd::ContinueExecution::ApprovalDecisions { decisions }) => {
-                tracing::debug!(
-                    decision.count = decisions.len(),
-                    "router client scaffold placeholder: submit approval decisions",
-                );
-                true // TODO: impl
-            }
-            (
-                state @ (State::AwaitingTool | State::AwaitingApproval | State::Streaming),
-                cmd::ContinueExecution::Break,
-            ) => {
-                tracing::debug!(
-                    ?state,
-                    "router client scaffold placeholder: break active run",
-                );
-                true // TODO: impl
-            }
-            (
-                state @ (State::AwaitingTool | State::AwaitingApproval | State::Streaming),
-                cmd::ContinueExecution::Inject { messages },
-            ) => {
-                tracing::debug!(
-                    ?state,
-                    message.count = messages.len(),
-                    "router client scaffold placeholder: inject user input into active run",
-                );
-                true // TODO: impl
-            }
-            (state, continue_execution) => {
-                tracing::warn!(
-                    continuation = continuation_name(&continue_execution),
-                    ?state,
-                    "received continuation in state, ignoring",
-                );
-                false // TODO: impl
-            }
-        }
-    }
-
     /// Initializes a new session with the router client.
     ///
     /// If successful, sets the `session_id` field to the new session's ID. If a session is already active, it will be replaced.
@@ -264,8 +228,16 @@ impl RouterClient {
         Ok(response.session.id)
     }
 
+    /// Returns the session ID of the current session, if any.
     fn session_id(&self) -> Option<Uuid> {
         self.session.as_ref().map(|info| info.id)
+    }
+
+    /// Returns the key ID associated with the current session, if any.
+    fn key_id(&self) -> Option<&str> {
+        self.session
+            .as_ref()
+            .and_then(|info| info.key_id.as_deref())
     }
 
     /// Computes the session list scope from the current working directory.

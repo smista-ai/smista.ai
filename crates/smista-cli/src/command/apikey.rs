@@ -111,3 +111,82 @@ fn set_api_key(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use uuid::Uuid;
+
+    use super::*;
+
+    fn storage(cwd: &Path) -> Arc<ApiKeyStorage> {
+        let credentials = CredentialsStorage::new_file_for_tests(cwd.join("global-secrets.toml"))
+            .expect("create test credentials storage");
+
+        Arc::new(ApiKeyStorage::new(Arc::new(credentials), cwd))
+    }
+
+    fn api_key(secret: &str) -> ApiKey {
+        ApiKey::from_parts(&Uuid::nil(), secret)
+    }
+
+    #[test]
+    fn should_set_check_and_remove_local_api_key() {
+        let tempdir = tempfile::tempdir().expect("create tempdir");
+        let storage = storage(tempdir.path());
+        let api_key = api_key("local-secret");
+
+        set_api_key(Arc::clone(&storage), api_key.expose().to_owned(), false)
+            .expect("set local API key");
+        check_api_key(Arc::clone(&storage)).expect("check local API key");
+
+        assert_eq!(
+            storage
+                .get()
+                .expect("read local API key")
+                .expect("local API key exists")
+                .expose(),
+            api_key.expose()
+        );
+
+        remove_api_key(Arc::clone(&storage), false).expect("remove local API key");
+
+        assert!(storage.get().expect("read removed API key").is_none());
+    }
+
+    #[test]
+    fn should_set_check_and_remove_global_api_key() {
+        let tempdir = tempfile::tempdir().expect("create tempdir");
+        let storage = storage(tempdir.path());
+        let api_key = api_key("global-secret");
+
+        set_api_key(Arc::clone(&storage), api_key.expose().to_owned(), true)
+            .expect("set global API key");
+        check_api_key(Arc::clone(&storage)).expect("check global API key");
+
+        assert_eq!(
+            storage
+                .get()
+                .expect("read global API key")
+                .expect("global API key exists")
+                .expose(),
+            api_key.expose()
+        );
+
+        remove_api_key(Arc::clone(&storage), true).expect("remove global API key");
+
+        assert!(storage.get().expect("read removed API key").is_none());
+    }
+
+    #[test]
+    fn should_reject_invalid_api_key() {
+        let tempdir = tempfile::tempdir().expect("create tempdir");
+        let storage = storage(tempdir.path());
+
+        set_api_key(Arc::clone(&storage), "not-an-api-key".to_string(), false)
+            .expect_err("reject invalid API key");
+
+        assert!(storage.get().expect("read missing API key").is_none());
+    }
+}

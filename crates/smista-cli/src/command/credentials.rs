@@ -96,3 +96,87 @@ fn remove_credentials(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use secrecy::ExposeSecret as _;
+
+    use super::*;
+
+    fn providers(cwd: &Path) -> Arc<ProvidersCredentials> {
+        let credentials = CredentialsStorage::new_file_for_tests(cwd.join("global-secrets.toml"))
+            .expect("create test credentials storage");
+
+        Arc::new(ProvidersCredentials::new(Arc::new(credentials), cwd))
+    }
+
+    #[test]
+    fn should_add_check_and_remove_local_credentials() {
+        let tempdir = tempfile::tempdir().expect("create tempdir");
+        let providers = providers(tempdir.path());
+
+        add_credentials(
+            Arc::clone(&providers),
+            Provider::OpenAI,
+            "local-secret".to_string(),
+            false,
+        )
+        .expect("add local credentials");
+        check_credentials(Arc::clone(&providers), Provider::OpenAI)
+            .expect("check local credentials");
+
+        let stored = providers
+            .get_provider_api_key(&Provider::OpenAI)
+            .expect("read local credentials")
+            .expect("local credentials exist");
+        assert_eq!(stored.expose_secret(), "local-secret");
+
+        remove_credentials(Arc::clone(&providers), Provider::OpenAI, false)
+            .expect("remove local credentials");
+        check_credentials(Arc::clone(&providers), Provider::OpenAI)
+            .expect("check missing local credentials");
+
+        assert!(
+            providers
+                .get_provider_api_key(&Provider::OpenAI)
+                .expect("read removed local credentials")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn should_add_check_and_remove_global_credentials() {
+        let tempdir = tempfile::tempdir().expect("create tempdir");
+        let providers = providers(tempdir.path());
+
+        add_credentials(
+            Arc::clone(&providers),
+            Provider::Anthropic,
+            "global-secret".to_string(),
+            true,
+        )
+        .expect("add global credentials");
+        check_credentials(Arc::clone(&providers), Provider::Anthropic)
+            .expect("check global credentials");
+
+        let stored = providers
+            .get_provider_api_key(&Provider::Anthropic)
+            .expect("read global credentials")
+            .expect("global credentials exist");
+        assert_eq!(stored.expose_secret(), "global-secret");
+
+        remove_credentials(Arc::clone(&providers), Provider::Anthropic, true)
+            .expect("remove global credentials");
+        check_credentials(Arc::clone(&providers), Provider::Anthropic)
+            .expect("check missing global credentials");
+
+        assert!(
+            providers
+                .get_provider_api_key(&Provider::Anthropic)
+                .expect("read removed global credentials")
+                .is_none()
+        );
+    }
+}

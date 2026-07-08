@@ -3,13 +3,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::StreamExt as _;
 use smista_mock_web_server::{
     Endpoint, EndpointStatus, MockRouter, ResponseTemplate, defaults, sse,
 };
 use smista_sdk::client::{Client as _, ReqwestClient, RouterClientConfig};
 use smista_sdk::core::api::{
-    ApiErrorBody, ApprovalDecision as ApiApprovalDecision, ApprovalKind, CompletedTurn,
-    ContextOutcome, CreateSessionRequest, CreateSessionResponse, EncryptedPayload,
+    ApiErrorBody, ApprovalDecision as ApiApprovalDecision, ApprovalKind, CompletedTurn, ContentRef,
+    ContextOutcome, ContinueRequest, CreateSessionRequest, CreateSessionResponse, EncryptedPayload,
     GetSessionResponse, MessageContent, PendingApproval, SessionDetail, SessionMessageDetail,
     SessionSummary, ToolApproval, ToolRequest, TraceResponse, TurnEvent, TurnOutcome, TurnResponse,
 };
@@ -248,12 +249,12 @@ async fn build_execute_request_reads_unborn_git_branch_without_shelling_out() {
 #[tokio::test]
 async fn break_and_inject_are_valid_from_every_non_idle_state() {
     for state in non_idle_states() {
-        let mut break_client = router_client_with_state(state.clone());
+        let mut break_client = router_client_with_session_state(state.clone());
         let break_handled = break_client
             .continue_execution(cmd::ContinueExecution::Break)
             .await;
 
-        let mut inject_client = router_client_with_state(state);
+        let mut inject_client = router_client_with_session_state(state);
         let inject_handled = inject_client
             .continue_execution(cmd::ContinueExecution::Inject {
                 messages: Vec::new(),
@@ -268,7 +269,7 @@ async fn break_and_inject_are_valid_from_every_non_idle_state() {
 #[tokio::test]
 async fn tool_results_only_match_awaiting_tool() {
     for state in all_states() {
-        let mut router_client = router_client_with_state(state.clone());
+        let mut router_client = router_client_with_session_state(state.clone());
 
         let handled = router_client
             .continue_execution(cmd::ContinueExecution::ToolResults {
@@ -283,7 +284,7 @@ async fn tool_results_only_match_awaiting_tool() {
 #[tokio::test]
 async fn approval_decisions_only_match_awaiting_approval() {
     for state in all_states() {
-        let mut router_client = router_client_with_state(state.clone());
+        let mut router_client = router_client_with_session_state(state.clone());
 
         let handled = router_client
             .continue_execution(cmd::ContinueExecution::ApprovalDecisions {
@@ -291,8 +292,231 @@ async fn approval_decisions_only_match_awaiting_approval() {
             })
             .await;
 
-        assert_eq!(handled, state == State::AwaitingApproval);
+        assert_eq!(
+            handled,
+            matches!(state, State::AwaitingTool | State::AwaitingApproval)
+        );
     }
+}
+
+#[tokio::test]
+async fn continue_without_session_is_not_handled() {
+    let mut router_client = router_client_with_state(State::Streaming);
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::Break)
+        .await;
+
+    assert!(!handled);
+}
+
+#[tokio::test]
+async fn tool_results_continuation_reports_seal_errors() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::AwaitingTool);
+    router_client.session = Some(session_info(Uuid::nil(), "Plain session", None));
+    router_client.pending_seals.insert(
+        ContentRef::Message("message-1".to_owned()),
+        "pending content".to_owned(),
+    );
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::ToolResults {
+            results: vec![cmd::ToolResult {
+                call_id: "call-1".to_owned(),
+                content: "tool output".to_owned(),
+                is_error: false,
+            }],
+        })
+        .await;
+
+    assert!(handled);
+    assert_error_contains(&mut msg_rx, "failed to build continuation request").await;
+}
+
+#[tokio::test]
+async fn tool_approval_decision_reports_missing_request() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::AwaitingTool);
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::ApprovalDecisions {
+            decisions: vec![cmd::ApprovalDecision {
+                id: "call-missing".to_owned(),
+                outcome: cmd::ApprovalOutcome::Approved,
+                scope: cmd::ApprovalScope::Once,
+                reason: None,
+            }],
+        })
+        .await;
+
+    assert!(handled);
+    assert_error_contains(&mut msg_rx, "no pending tool request matched decision").await;
+}
+
+#[tokio::test]
+async fn rejected_tool_approval_returns_rejection_result() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::ContinueRun,
+            sse(&[TurnEvent::TurnEnd(Box::new(defaults::turn()))]),
+        )
+        .start()
+        .await;
+    let (mut router_client, _msg_rx) = router_client_for_mock(&router).await;
+    router_client.state = State::AwaitingTool;
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
+    router_client.pending_tool_requests.insert(
+        "call-1".to_owned(),
+        ToolRequest {
+            call_id: "call-1".to_owned(),
+            name: "shell".to_owned(),
+            arguments: serde_json::json!({ "command": "printf should-not-run" }),
+            requires_approval: ToolApproval::Ask,
+        },
+    );
+    router_client
+        .pending_tool_prompts
+        .insert("call-1".to_owned());
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::ApprovalDecisions {
+            decisions: vec![cmd::ApprovalDecision {
+                id: "call-1".to_owned(),
+                outcome: cmd::ApprovalOutcome::Rejected,
+                scope: cmd::ApprovalScope::Once,
+                reason: Some("not safe".to_owned()),
+            }],
+        })
+        .await;
+
+    assert!(handled);
+    let ContinueRequest::ToolResults { results, encrypted } = continue_request_body(&router).await
+    else {
+        panic!("tool results continuation expected");
+    };
+    assert!(encrypted.is_empty());
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].call_id, "call-1");
+    assert_eq!(results[0].content, "not safe");
+    assert!(results[0].is_error);
+    assert_eq!(results[0].decision, Some(ApiApprovalDecision::Rejected));
+}
+
+#[tokio::test]
+async fn approval_decision_continuation_seals_pending_content() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::ContinueRun,
+            sse(&[TurnEvent::TurnEnd(Box::new(defaults::turn()))]),
+        )
+        .start()
+        .await;
+    let cwd = temp_cwd();
+    let credentials = file_credentials(&cwd);
+    let (mut router_client, _msg_rx) =
+        router_client_for_mock_with_credentials(&router, cwd, credentials).await;
+    let key_id = router_client
+        .context
+        .e2ee_keys
+        .create_key()
+        .expect("E2EE key is created");
+    router_client.state = State::AwaitingApproval;
+    router_client.session = Some(session_info(
+        Uuid::nil(),
+        "Encrypted session",
+        Some(key_id.clone()),
+    ));
+    router_client.pending_seals.insert(
+        ContentRef::Message("message-1".to_owned()),
+        "approval transcript".to_owned(),
+    );
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::ApprovalDecisions {
+            decisions: vec![cmd::ApprovalDecision {
+                id: "approval-1".to_owned(),
+                outcome: cmd::ApprovalOutcome::Approved,
+                scope: cmd::ApprovalScope::Once,
+                reason: Some("ok".to_owned()),
+            }],
+        })
+        .await;
+
+    assert!(handled);
+    assert!(router_client.pending_seals.is_empty());
+    let ContinueRequest::ApprovalDecisions {
+        decisions,
+        encrypted,
+    } = continue_request_body(&router).await
+    else {
+        panic!("approval decisions continuation expected");
+    };
+    assert_eq!(decisions.len(), 1);
+    assert_eq!(decisions[0].decision, ApiApprovalDecision::Approved);
+    let payload = encrypted
+        .get(&ContentRef::Message("message-1".to_owned()))
+        .expect("pending approval content is sealed");
+    assert_eq!(
+        router_client
+            .context
+            .e2ee_keys
+            .decrypt_payload(payload)
+            .expect("pending content decrypts"),
+        "approval transcript"
+    );
+}
+
+#[tokio::test]
+async fn inject_continuation_encrypts_messages_when_session_has_key() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::ContinueRun,
+            sse(&[TurnEvent::TurnEnd(Box::new(defaults::turn()))]),
+        )
+        .start()
+        .await;
+    let cwd = temp_cwd();
+    let credentials = file_credentials(&cwd);
+    let (mut router_client, _msg_rx) =
+        router_client_for_mock_with_credentials(&router, cwd, credentials).await;
+    let key_id = router_client
+        .context
+        .e2ee_keys
+        .create_key()
+        .expect("E2EE key is created");
+    router_client.state = State::Streaming;
+    router_client.session = Some(session_info(
+        Uuid::nil(),
+        "Encrypted session",
+        Some(key_id.clone()),
+    ));
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::Inject {
+            messages: vec![cmd::UserMessage {
+                text: "extra context".to_owned(),
+            }],
+        })
+        .await;
+
+    assert!(handled);
+    let ContinueRequest::Inject { messages } = continue_request_body(&router).await else {
+        panic!("inject continuation expected");
+    };
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].text, "extra context");
+    let ciphertext = messages[0]
+        .ciphertext
+        .as_ref()
+        .expect("injected message is encrypted");
+    assert_eq!(
+        router_client
+            .context
+            .e2ee_keys
+            .decrypt_payload(ciphertext)
+            .expect("injected message decrypts"),
+        "extra context"
+    );
 }
 
 #[tokio::test]
@@ -370,6 +594,62 @@ async fn tool_call_requested_executes_shell_when_session_alias_is_approved() {
 }
 
 #[tokio::test]
+async fn tool_approval_decision_executes_request_and_folds_decision_into_result() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::ContinueRun,
+            sse(&[TurnEvent::TurnEnd(Box::new(defaults::turn()))]),
+        )
+        .start()
+        .await;
+    let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
+    router_client.state = State::Streaming;
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
+
+    router_client
+        .on_exec_stream_event(Ok(TurnEvent::ToolCallRequested {
+            call_id: "call-1".to_owned(),
+            name: "shell".to_owned(),
+            arguments: serde_json::json!({ "command": "printf approved" }),
+            requires_approval: ToolApproval::Ask,
+        }))
+        .await;
+    assert!(matches!(
+        recv_msg(&mut msg_rx).await,
+        Msg::ApprovalPrompt(_)
+    ));
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::ApprovalDecisions {
+            decisions: vec![cmd::ApprovalDecision {
+                id: "call-1".to_owned(),
+                outcome: cmd::ApprovalOutcome::Approved,
+                scope: cmd::ApprovalScope::AlwaysForSession,
+                reason: None,
+            }],
+        })
+        .await;
+
+    assert!(handled);
+    let request = continue_request_body(&router).await;
+    let ContinueRequest::ToolResults { results, encrypted } = request else {
+        panic!("tool results continuation expected");
+    };
+    assert!(encrypted.is_empty());
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].call_id, "call-1");
+    assert_eq!(results[0].content, "approved");
+    assert!(!results[0].is_error);
+    assert_eq!(results[0].decision, Some(ApiApprovalDecision::Approved));
+    assert!(
+        router_client
+            .approvals
+            .approved("printf approved")
+            .expect("approval lookup succeeds")
+    );
+}
+
+#[tokio::test]
 async fn turn_end_completed_sends_assistant_turn_and_returns_idle() {
     let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
 
@@ -437,6 +717,33 @@ async fn stream_errors_emit_error_and_return_idle() {
 }
 
 #[tokio::test]
+async fn handle_turn_stream_returns_when_stream_is_empty() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+
+    router_client
+        .handle_turn_stream(futures::stream::empty().boxed())
+        .await;
+
+    assert!(msg_rx.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn handle_turn_stream_returns_when_cancelled() {
+    let exit = CancellationToken::new();
+    let context = app_context(exit.clone());
+    let (_cmd_tx, cmd_rx) = tokio::sync::mpsc::channel(1);
+    let (msg_tx, mut msg_rx) = tokio::sync::mpsc::channel(1);
+    let mut router_client = RouterClient::new(cmd_rx, msg_tx, context);
+    exit.cancel();
+
+    router_client
+        .handle_turn_stream(futures::stream::pending().boxed())
+        .await;
+
+    assert!(msg_rx.try_recv().is_err());
+}
+
+#[tokio::test]
 async fn turn_end_idle_clears_pending_tool_state() {
     let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
     router_client
@@ -495,6 +802,34 @@ async fn turn_end_error_clears_pending_state_and_emits_error() {
 }
 
 #[tokio::test]
+async fn completed_turn_with_content_to_seal_reports_missing_session() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    let mut response = completed_turn_response("done", "trace-1");
+    let TurnOutcome::Completed(turn) = &mut response.outcome else {
+        panic!("completed fixture expected");
+    };
+    turn.to_encrypt.insert(
+        ContentRef::Message("message-1".to_owned()),
+        "seal me".to_owned(),
+    );
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(response))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::AssistantTurn(msg::AssistantTurn {
+            message: "done".to_owned(),
+            trace_id: Some("trace-1".to_owned()),
+        })
+    );
+    assert_error_contains(&mut msg_rx, "Cannot submit sealed content").await;
+    assert_eq!(router_client.state, State::Idle);
+}
+
+#[tokio::test]
 async fn turn_end_awaiting_approval_emits_approval_prompt() {
     let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
 
@@ -527,32 +862,289 @@ async fn turn_end_awaiting_approval_emits_approval_prompt() {
 }
 
 #[tokio::test]
-async fn encrypted_turn_outcomes_emit_not_implemented_error() {
-    let encrypted_outcomes = [
-        TurnOutcome::AwaitingEncrypt {
-            to_encrypt: Default::default(),
-            trace_id: "trace-1".to_owned(),
-        },
-        TurnOutcome::AwaitingDecrypt {
-            to_decrypt: Default::default(),
-            to_encrypt: Default::default(),
-            trace_id: "trace-1".to_owned(),
-        },
-    ];
+async fn awaiting_decrypt_without_session_reports_error() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
 
-    for outcome in encrypted_outcomes {
-        let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
-        let next_stream = router_client
-            .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
-                outcome,
-                allowed_continuations: Vec::new(),
-            }))))
-            .await;
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingDecrypt {
+                to_decrypt: Default::default(),
+                to_encrypt: Default::default(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
 
-        assert!(next_stream.is_none());
-        assert_eq!(router_client.state, State::Idle);
-        assert_error_contains(&mut msg_rx, "Encrypted execution continuations").await;
-    }
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert_error_contains(&mut msg_rx, "Cannot submit decrypted content").await;
+}
+
+#[tokio::test]
+async fn awaiting_decrypt_reports_decrypt_errors() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    router_client.session = Some(session_info(Uuid::nil(), "Encrypted session", None));
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingDecrypt {
+                to_decrypt: [(
+                    ContentRef::Message("history-1".to_owned()),
+                    invalid_encrypted_payload(),
+                )]
+                .into_iter()
+                .collect(),
+                to_encrypt: Default::default(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert_error_contains(&mut msg_rx, "Failed to decrypt continuation content").await;
+}
+
+#[tokio::test]
+async fn awaiting_decrypt_reports_seal_errors() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    router_client.session = Some(session_info(Uuid::nil(), "Plain session", None));
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingDecrypt {
+                to_decrypt: Default::default(),
+                to_encrypt: [(
+                    ContentRef::RunInput(Uuid::nil().to_string()),
+                    "run input".to_owned(),
+                )]
+                .into_iter()
+                .collect(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert_error_contains(&mut msg_rx, "Failed to seal continuation content").await;
+}
+
+#[tokio::test]
+async fn awaiting_encrypt_submits_sealed_content() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::ContinueRun,
+            sse(&[TurnEvent::TurnEnd(Box::new(defaults::turn()))]),
+        )
+        .start()
+        .await;
+    let cwd = temp_cwd();
+    let credentials = file_credentials(&cwd);
+    let (mut router_client, _msg_rx) =
+        router_client_for_mock_with_credentials(&router, cwd, credentials).await;
+    let key_id = router_client
+        .context
+        .e2ee_keys
+        .create_key()
+        .expect("E2EE key is created");
+    router_client.state = State::Streaming;
+    router_client.session = Some(session_info(
+        Uuid::nil(),
+        "Encrypted session",
+        Some(key_id.clone()),
+    ));
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingEncrypt {
+                to_encrypt: [(
+                    ContentRef::Message("message-1".to_owned()),
+                    "sealed text".to_owned(),
+                )]
+                .into_iter()
+                .collect(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_some());
+    let request = continue_request_body(&router).await;
+    let ContinueRequest::Sealed { encrypted } = request else {
+        panic!("sealed continuation expected");
+    };
+    let payload = encrypted
+        .get(&ContentRef::Message("message-1".to_owned()))
+        .expect("message content is sealed");
+    assert_eq!(
+        router_client
+            .context
+            .e2ee_keys
+            .decrypt_payload(payload)
+            .expect("sealed content decrypts"),
+        "sealed text"
+    );
+}
+
+#[tokio::test]
+async fn awaiting_encrypt_without_session_reports_error() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingEncrypt {
+                to_encrypt: [(
+                    ContentRef::Message("message-1".to_owned()),
+                    "seal me".to_owned(),
+                )]
+                .into_iter()
+                .collect(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert_error_contains(&mut msg_rx, "Cannot submit sealed content").await;
+}
+
+#[tokio::test]
+async fn awaiting_encrypt_reports_seal_errors() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    router_client.session = Some(session_info(Uuid::nil(), "Plain session", None));
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingEncrypt {
+                to_encrypt: [(
+                    ContentRef::Message("message-1".to_owned()),
+                    "seal me".to_owned(),
+                )]
+                .into_iter()
+                .collect(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert_error_contains(&mut msg_rx, "Failed to seal continuation content").await;
+}
+
+#[tokio::test]
+async fn continuation_stream_open_failure_reports_error() {
+    let router = MockRouter::builder()
+        .endpoint_status(Endpoint::ContinueRun, EndpointStatus::ServerError)
+        .start()
+        .await;
+    let cwd = temp_cwd();
+    let credentials = file_credentials(&cwd);
+    let (mut router_client, mut msg_rx) =
+        router_client_for_mock_with_credentials(&router, cwd, credentials).await;
+    let key_id = router_client
+        .context
+        .e2ee_keys
+        .create_key()
+        .expect("E2EE key is created");
+    router_client.state = State::Streaming;
+    router_client.session = Some(session_info(Uuid::nil(), "Encrypted session", Some(key_id)));
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingEncrypt {
+                to_encrypt: Default::default(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::Idle);
+    assert_error_contains(&mut msg_rx, "Failed to submit sealed content").await;
+}
+
+#[tokio::test]
+async fn awaiting_decrypt_submits_plaintext_and_sealed_content() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::ContinueRun,
+            sse(&[TurnEvent::TurnEnd(Box::new(defaults::turn()))]),
+        )
+        .start()
+        .await;
+    let cwd = temp_cwd();
+    let credentials = file_credentials(&cwd);
+    let (mut router_client, _msg_rx) =
+        router_client_for_mock_with_credentials(&router, cwd, credentials).await;
+    let key_id = router_client
+        .context
+        .e2ee_keys
+        .create_key()
+        .expect("E2EE key is created");
+    let history_payload = router_client
+        .context
+        .e2ee_keys
+        .encrypt_payload(&key_id, "history text")
+        .expect("history encrypts");
+    router_client.state = State::Streaming;
+    router_client.session = Some(session_info(
+        Uuid::nil(),
+        "Encrypted session",
+        Some(key_id.clone()),
+    ));
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(TurnResponse {
+            outcome: TurnOutcome::AwaitingDecrypt {
+                to_decrypt: [(ContentRef::Message("history-1".to_owned()), history_payload)]
+                    .into_iter()
+                    .collect(),
+                to_encrypt: [(
+                    ContentRef::RunInput(Uuid::nil().to_string()),
+                    "run input".to_owned(),
+                )]
+                .into_iter()
+                .collect(),
+                trace_id: "trace-1".to_owned(),
+            },
+            allowed_continuations: Vec::new(),
+        }))))
+        .await;
+
+    assert!(next_stream.is_some());
+    let request = continue_request_body(&router).await;
+    let ContinueRequest::Decrypted {
+        plaintext,
+        encrypted,
+    } = request
+    else {
+        panic!("decrypted continuation expected");
+    };
+    assert_eq!(
+        plaintext.get(&ContentRef::Message("history-1".to_owned())),
+        Some(&"history text".to_owned())
+    );
+    let payload = encrypted
+        .get(&ContentRef::RunInput(Uuid::nil().to_string()))
+        .expect("run input content is sealed");
+    assert_eq!(
+        router_client
+            .context
+            .e2ee_keys
+            .decrypt_payload(payload)
+            .expect("sealed content decrypts"),
+        "run input"
+    );
 }
 
 #[tokio::test]
@@ -586,6 +1178,32 @@ async fn duplicate_tool_requests_do_not_prompt_twice() {
 }
 
 #[tokio::test]
+async fn invalid_shell_approval_request_prompts_without_alias() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::ToolCallRequested {
+            call_id: "call-1".to_owned(),
+            name: "shell".to_owned(),
+            arguments: serde_json::json!({ "command": "&& rm -rf target" }),
+            requires_approval: ToolApproval::Ask,
+        }))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert_eq!(router_client.state, State::AwaitingTool);
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::ApprovalPrompt(msg::ApprovalPrompt {
+            id: "call-1".to_owned(),
+            title: "Approve shell".to_owned(),
+            detail: "&& rm -rf target".to_owned(),
+            wildcard_alias: None,
+        })
+    );
+}
+
+#[tokio::test]
 async fn awaiting_tool_with_all_results_opens_continue_stream() {
     let events = vec![TurnEvent::TurnEnd(Box::new(defaults::turn()))];
     let router = MockRouter::builder()
@@ -616,6 +1234,166 @@ async fn awaiting_tool_with_all_results_opens_continue_stream() {
     assert_eq!(router_client.state, State::Streaming);
     assert!(router_client.pending_tool_prompts.is_empty());
     assert!(router_client.pending_tool_results.is_empty());
+}
+
+#[tokio::test]
+async fn execute_with_encrypted_tool_usage_seals_tool_result_and_pending_content() {
+    let execute_events = vec![TurnEvent::TurnEnd(Box::new(TurnResponse {
+        outcome: TurnOutcome::AwaitingTool {
+            tool_requests: vec![ToolRequest {
+                call_id: "call-1".to_owned(),
+                name: "read_file".to_owned(),
+                arguments: serde_json::json!({ "path": "README.md" }),
+                requires_approval: ToolApproval::Allow,
+            }],
+            to_encrypt: [(
+                ContentRef::Message("message-1".to_owned()),
+                "tool request transcript".to_owned(),
+            )]
+            .into_iter()
+            .collect(),
+            trace_id: "trace-1".to_owned(),
+        },
+        allowed_continuations: Vec::new(),
+    }))];
+    let router = MockRouter::builder()
+        .respond(Endpoint::Execute, sse(&execute_events))
+        .respond(
+            Endpoint::ContinueRun,
+            sse(&[TurnEvent::TurnEnd(Box::new(defaults::turn()))]),
+        )
+        .start()
+        .await;
+    let cwd = temp_cwd();
+    tokio::fs::write(cwd.join("README.md"), "encrypted tool output")
+        .await
+        .expect("tool fixture is written");
+    let credentials = file_credentials(&cwd);
+    let (mut router_client, mut msg_rx) =
+        router_client_for_mock_with_credentials(&router, cwd, credentials).await;
+    let key_id = router_client
+        .context
+        .e2ee_keys
+        .create_key()
+        .expect("E2EE key is created");
+    router_client.session = Some(session_info(
+        Uuid::nil(),
+        "Encrypted session",
+        Some(key_id.clone()),
+    ));
+
+    router_client
+        .execute("read the file".to_owned(), HashSet::new(), false, None)
+        .await;
+
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Thinking);
+    assert!(matches!(recv_msg(&mut msg_rx).await, Msg::AssistantTurn(_)));
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
+    let request = continue_request_body(&router).await;
+    let ContinueRequest::ToolResults { results, encrypted } = request else {
+        panic!("tool results continuation expected");
+    };
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].call_id, "call-1");
+    assert_eq!(results[0].content, "encrypted tool output");
+    assert!(!results[0].is_error);
+
+    let tool_payload = encrypted
+        .get(&ContentRef::ToolCall("call-1".to_owned()))
+        .expect("tool result content is sealed");
+    assert_eq!(
+        router_client
+            .context
+            .e2ee_keys
+            .decrypt_payload(tool_payload)
+            .expect("tool result decrypts"),
+        "encrypted tool output"
+    );
+    let pending_payload = encrypted
+        .get(&ContentRef::Message("message-1".to_owned()))
+        .expect("pending router content is sealed");
+    assert_eq!(
+        router_client
+            .context
+            .e2ee_keys
+            .decrypt_payload(pending_payload)
+            .expect("pending content decrypts"),
+        "tool request transcript"
+    );
+}
+
+#[tokio::test]
+async fn execute_runs_tool_and_continues_to_completed_turn() {
+    let execute_events = vec![TurnEvent::TurnEnd(Box::new(TurnResponse {
+        outcome: TurnOutcome::AwaitingTool {
+            tool_requests: vec![ToolRequest {
+                call_id: "call-1".to_owned(),
+                name: "read_file".to_owned(),
+                arguments: serde_json::json!({ "path": "README.md" }),
+                requires_approval: ToolApproval::Allow,
+            }],
+            to_encrypt: Default::default(),
+            trace_id: "trace-1".to_owned(),
+        },
+        allowed_continuations: Vec::new(),
+    }))];
+    let continue_events = vec![TurnEvent::TurnEnd(Box::new(completed_turn_response(
+        "I read the file.",
+        "trace-2",
+    )))];
+    let router = MockRouter::builder()
+        .respond(Endpoint::Execute, sse(&execute_events))
+        .respond(Endpoint::ContinueRun, sse(&continue_events))
+        .start()
+        .await;
+    let cwd = temp_cwd();
+    tokio::fs::write(cwd.join("README.md"), "plain tool output")
+        .await
+        .expect("tool fixture is written");
+    let credentials = file_credentials(&cwd);
+    let (mut router_client, mut msg_rx) =
+        router_client_for_mock_with_credentials(&router, cwd, credentials).await;
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
+
+    router_client
+        .execute("read the file".to_owned(), HashSet::new(), false, None)
+        .await;
+
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Thinking);
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::AssistantTurn(msg::AssistantTurn {
+            message: "I read the file.".to_owned(),
+            trace_id: Some("trace-2".to_owned()),
+        })
+    );
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
+
+    let requests = router.received_requests().await;
+    let execute_index = requests
+        .iter()
+        .position(|request| request.url.path().ends_with("/execute"))
+        .expect("execute request was sent");
+    let continue_index = requests
+        .iter()
+        .position(|request| request.url.path().ends_with("/continue"))
+        .expect("continue request was sent");
+    assert!(
+        execute_index < continue_index,
+        "execute must precede the tool-results continuation"
+    );
+
+    let request = requests[continue_index]
+        .body_json::<ContinueRequest>()
+        .expect("continue request body decodes");
+    let ContinueRequest::ToolResults { results, encrypted } = request else {
+        panic!("tool results continuation expected");
+    };
+    assert!(encrypted.is_empty());
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].call_id, "call-1");
+    assert_eq!(results[0].content, "plain tool output");
+    assert!(!results[0].is_error);
 }
 
 #[tokio::test]
@@ -1467,6 +2245,63 @@ async fn send_msg_cancels_exit_when_receiver_is_gone() {
     assert!(exit.is_cancelled());
 }
 
+#[test]
+fn should_name_commands_and_truncate_overlong_titles() {
+    assert_eq!(
+        command_name(&Cmd::Execute {
+            prompt: "run".to_owned(),
+            files: HashSet::default(),
+            plan: false,
+            explicit_model: None,
+        }),
+        "execute"
+    );
+    assert_eq!(command_name(&Cmd::Clear), "clear");
+    assert_eq!(command_name(&Cmd::ListModels), "list_models");
+    assert_eq!(command_name(&Cmd::ListProviders), "list_providers");
+    assert_eq!(command_name(&Cmd::ListSessions), "list_sessions");
+    assert_eq!(
+        command_name(&Cmd::ResumeSession(Uuid::nil())),
+        "resume_session"
+    );
+    assert_eq!(command_name(&Cmd::GetUsage), "get_usage");
+    assert_eq!(command_name(&Cmd::GetTrace), "get_trace");
+    assert_eq!(
+        command_name(&Cmd::Preview {
+            prompt: "preview".to_owned(),
+            files: HashSet::default(),
+            plan: true,
+            explicit_model: None,
+        }),
+        "preview"
+    );
+    assert_eq!(command_name(&Cmd::GetRouterStatus), "get_router_status");
+    assert_eq!(
+        command_name(&Cmd::Continue(cmd::ContinueExecution::ToolResults {
+            results: Vec::new(),
+        })),
+        "continue_tool_results"
+    );
+    assert_eq!(
+        continuation_name(&cmd::ContinueExecution::ApprovalDecisions {
+            decisions: Vec::new(),
+        }),
+        "continue_approval_decisions"
+    );
+    assert_eq!(
+        continuation_name(&cmd::ContinueExecution::Inject {
+            messages: Vec::new(),
+        }),
+        "continue_inject"
+    );
+    assert_eq!(
+        continuation_name(&cmd::ContinueExecution::Break),
+        "continue_break"
+    );
+    assert_eq!(session_title("  short   title  "), "short title");
+    assert_eq!(session_title(&"word ".repeat(40)), "");
+}
+
 fn all_states() -> Vec<State> {
     vec![
         State::Idle,
@@ -1490,6 +2325,12 @@ fn router_client_with_state(state: State) -> RouterClient {
     let (msg_tx, _msg_rx) = tokio::sync::mpsc::channel(1);
     let mut router_client = RouterClient::new(cmd_rx, msg_tx, context);
     router_client.state = state;
+    router_client
+}
+
+fn router_client_with_session_state(state: State) -> RouterClient {
+    let mut router_client = router_client_with_state(state);
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
     router_client
 }
 
@@ -1573,6 +2414,17 @@ async fn assert_error_contains(msg_rx: &mut Receiver<Msg>, expected: &str) {
         error.contains(expected),
         "expected error to contain {expected:?}, got {error:?}"
     );
+}
+
+async fn continue_request_body(router: &MockRouter) -> ContinueRequest {
+    router
+        .received_requests()
+        .await
+        .into_iter()
+        .find(|request| request.url.path().ends_with("/continue"))
+        .expect("continue request was sent")
+        .body_json()
+        .expect("continue request body decodes")
 }
 
 fn completed_turn_response(message: &str, trace_id: &str) -> TurnResponse {
