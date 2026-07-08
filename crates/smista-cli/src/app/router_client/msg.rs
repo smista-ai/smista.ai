@@ -38,6 +38,8 @@ pub enum Msg {
     Idle,
     /// The router is processing a turn. Sent to the UI whenever a request is sent to the router and a response is awaited.
     Thinking,
+    /// Interrupted
+    Interrupted,
 }
 
 /// Assistant turn data reduced for UI rendering.

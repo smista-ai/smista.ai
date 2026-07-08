@@ -1,0 +1,406 @@
+//! Active replacement view state for the TUI.
+
+use smista_sdk::core::api::SessionUsageResponse;
+
+use super::list::ListState;
+use super::prompt::PromptState;
+use crate::app::router_client::msg::{Model, Provider, SessionListItem, TraceEvent};
+use crate::skills::SkillEntry;
+
+const COMPONENT_MODELS_LIST: &str = "models_list";
+const COMPONENT_PROMPT: &str = "prompt";
+const COMPONENT_PROVIDERS_LIST: &str = "providers_list";
+const COMPONENT_SESSIONS_LIST: &str = "sessions_list";
+const COMPONENT_SKILL_LIST: &str = "skill_list";
+const COMPONENT_TRACING_LIST: &str = "tracing_list";
+const COMPONENT_USAGE: &str = "usage";
+
+/// The state of the active component in the TUI.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ActiveComponentState {
+    /// Main prompt view.
+    Prompt(PromptState),
+    /// Skill list view.
+    SkillList(ListState<SkillEntry>),
+    /// Models list view.
+    ModelsList(ListState<Model>),
+    /// Providers list view.
+    ProvidersList(ListState<Provider>),
+    /// Usage information view.
+    Usage(UsageState),
+    /// Tracing list view.
+    TracingList(ListState<TraceEvent>),
+    /// Sessions list view.
+    SessionsList(ListState<SessionListItem>),
+}
+
+impl ActiveComponentState {
+    /// Returns a stable label for tracing and diagnostics.
+    #[must_use]
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Prompt(_) => COMPONENT_PROMPT,
+            Self::SkillList(_) => COMPONENT_SKILL_LIST,
+            Self::ModelsList(_) => COMPONENT_MODELS_LIST,
+            Self::ProvidersList(_) => COMPONENT_PROVIDERS_LIST,
+            Self::Usage(_) => COMPONENT_USAGE,
+            Self::TracingList(_) => COMPONENT_TRACING_LIST,
+            Self::SessionsList(_) => COMPONENT_SESSIONS_LIST,
+        }
+    }
+
+    /// Returns the prompt state when the prompt view is active.
+    #[must_use]
+    pub fn prompt(&self) -> Option<&PromptState> {
+        match self {
+            Self::Prompt(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the mutable prompt state when the prompt view is active.
+    #[must_use]
+    pub fn prompt_mut(&mut self) -> Option<&mut PromptState> {
+        match self {
+            Self::Prompt(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Pushes a character into the prompt when the prompt view is active.
+    pub fn push_prompt(&mut self, char: char) {
+        if let Self::Prompt(prompt) = self {
+            prompt.push(char);
+        }
+    }
+
+    /// Returns the skill list state when active.
+    #[must_use]
+    pub fn skill_list(&self) -> Option<&ListState<SkillEntry>> {
+        match self {
+            Self::SkillList(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the mutable skill list state when active.
+    #[must_use]
+    pub fn skill_list_mut(&mut self) -> Option<&mut ListState<SkillEntry>> {
+        match self {
+            Self::SkillList(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the models list state when active.
+    #[must_use]
+    pub fn models_list(&self) -> Option<&ListState<Model>> {
+        match self {
+            Self::ModelsList(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the mutable models list state when active.
+    #[must_use]
+    pub fn models_list_mut(&mut self) -> Option<&mut ListState<Model>> {
+        match self {
+            Self::ModelsList(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the providers list state when active.
+    #[must_use]
+    pub fn providers_list(&self) -> Option<&ListState<Provider>> {
+        match self {
+            Self::ProvidersList(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the mutable providers list state when active.
+    #[must_use]
+    pub fn providers_list_mut(&mut self) -> Option<&mut ListState<Provider>> {
+        match self {
+            Self::ProvidersList(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the usage state when active.
+    #[must_use]
+    pub fn usage(&self) -> Option<&UsageState> {
+        match self {
+            Self::Usage(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the mutable usage state when active.
+    #[must_use]
+    pub fn usage_mut(&mut self) -> Option<&mut UsageState> {
+        match self {
+            Self::Usage(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the tracing list state when active.
+    #[must_use]
+    pub fn tracing_list(&self) -> Option<&ListState<TraceEvent>> {
+        match self {
+            Self::TracingList(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the mutable tracing list state when active.
+    #[must_use]
+    pub fn tracing_list_mut(&mut self) -> Option<&mut ListState<TraceEvent>> {
+        match self {
+            Self::TracingList(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the sessions list state when active.
+    #[must_use]
+    pub fn sessions_list(&self) -> Option<&ListState<SessionListItem>> {
+        match self {
+            Self::SessionsList(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the mutable sessions list state when active.
+    #[must_use]
+    pub fn sessions_list_mut(&mut self) -> Option<&mut ListState<SessionListItem>> {
+        match self {
+            Self::SessionsList(state) => Some(state),
+            _ => None,
+        }
+    }
+}
+
+impl Default for ActiveComponentState {
+    fn default() -> Self {
+        Self::Prompt(PromptState::default())
+    }
+}
+
+/// State for the usage information view.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UsageState {
+    usage: SessionUsageResponse,
+}
+
+impl UsageState {
+    /// Creates usage view state.
+    #[must_use]
+    pub fn new(usage: SessionUsageResponse) -> Self {
+        Self { usage }
+    }
+
+    /// Returns usage information.
+    #[must_use]
+    pub fn usage(&self) -> &SessionUsageResponse {
+        &self.usage
+    }
+
+    /// Replaces usage information.
+    pub fn replace(&mut self, usage: SessionUsageResponse) {
+        self.usage = usage;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use smista_sdk::core::api::SessionUsageResponse;
+    use smista_sdk::core::usage::Usage;
+    use uuid::Uuid;
+
+    use super::*;
+
+    const MODEL_DISPLAY_NAME: &str = "GPT-4.1";
+    const MODEL_ID: &str = "gpt-4.1";
+    const PROVIDER_NAME: &str = "openai";
+    const SESSION_UPDATED_AT: &str = "2026-07-08T10:00:00Z";
+    const TRACE_CREATED_AT: &str = "2026-07-08T10:00:00Z";
+    const TRACE_EVENT_TYPE: &str = "route";
+    const TRACE_MODEL: &str = "gpt-4.1";
+    const TRACE_PAYLOAD: &str = "{}";
+    const TRACE_TASK_TYPE: &str = "plan";
+
+    fn usage_response(input_tokens: u64) -> SessionUsageResponse {
+        SessionUsageResponse {
+            total: Usage {
+                input_tokens: Some(input_tokens),
+                ..Default::default()
+            },
+            by_model: Vec::new(),
+            by_task_type: Vec::new(),
+        }
+    }
+
+    fn model() -> Model {
+        Model {
+            provider: PROVIDER_NAME.to_owned(),
+            id: MODEL_ID.to_owned(),
+            display_name: MODEL_DISPLAY_NAME.to_owned(),
+            max_context_tokens: 128_000,
+            max_output_tokens: Some(16_000),
+            input_cost_per_million_tokens: None,
+            output_cost_per_million_tokens: None,
+        }
+    }
+
+    fn trace_event() -> TraceEvent {
+        TraceEvent {
+            event_type: TRACE_EVENT_TYPE,
+            task_type: TRACE_TASK_TYPE,
+            provider: PROVIDER_NAME.to_owned(),
+            model: TRACE_MODEL.to_owned(),
+            matched_rule: None,
+            created_at: TRACE_CREATED_AT.to_owned(),
+            payload: TRACE_PAYLOAD.to_owned(),
+        }
+    }
+
+    #[test]
+    fn default_component_is_prompt() {
+        let state = ActiveComponentState::default();
+
+        assert_eq!(state.kind(), COMPONENT_PROMPT);
+        assert!(state.prompt().is_some());
+    }
+
+    #[test]
+    fn prompt_accessors_only_match_prompt_component() {
+        let mut state = ActiveComponentState::Prompt(PromptState::default());
+
+        state.push_prompt('h');
+        state.prompt_mut().expect("prompt state").push('i');
+
+        assert_eq!(
+            state.prompt().expect("prompt state"),
+            &PromptState::Text("hi".to_owned())
+        );
+
+        let mut models = ActiveComponentState::ModelsList(ListState::new(vec![model()]));
+        models.push_prompt('x');
+
+        assert!(models.prompt().is_none());
+        assert!(models.prompt_mut().is_none());
+    }
+
+    #[test]
+    fn list_accessors_only_match_their_component() {
+        let mut skills = ActiveComponentState::SkillList(ListState::default());
+        assert_eq!(skills.kind(), COMPONENT_SKILL_LIST);
+        assert!(skills.skill_list().expect("skill list").is_empty());
+        skills.skill_list_mut().expect("skill list").next();
+
+        let mut models = ActiveComponentState::ModelsList(ListState::new(vec![model()]));
+        assert_eq!(models.kind(), COMPONENT_MODELS_LIST);
+        assert_eq!(
+            models.models_list().expect("models list").entries().len(),
+            1
+        );
+        models.models_list_mut().expect("models list").next();
+
+        let mut providers = ActiveComponentState::ProvidersList(ListState::new(vec![Provider {
+            name: PROVIDER_NAME.to_owned(),
+            local: false,
+        }]));
+        assert_eq!(providers.kind(), COMPONENT_PROVIDERS_LIST);
+        assert_eq!(
+            providers
+                .providers_list()
+                .expect("providers list")
+                .selected()
+                .expect("provider")
+                .name,
+            PROVIDER_NAME
+        );
+        providers
+            .providers_list_mut()
+            .expect("providers list")
+            .next();
+
+        let mut traces = ActiveComponentState::TracingList(ListState::new(vec![trace_event()]));
+        assert_eq!(traces.kind(), COMPONENT_TRACING_LIST);
+        assert_eq!(
+            traces
+                .tracing_list()
+                .expect("tracing list")
+                .selected()
+                .expect("trace")
+                .model,
+            TRACE_MODEL
+        );
+        traces.tracing_list_mut().expect("tracing list").next();
+
+        let mut sessions =
+            ActiveComponentState::SessionsList(ListState::new(vec![SessionListItem {
+                id: Uuid::nil(),
+                title: None,
+                scope: None,
+                updated_at: SESSION_UPDATED_AT.to_owned(),
+            }]));
+        assert_eq!(sessions.kind(), COMPONENT_SESSIONS_LIST);
+        assert_eq!(
+            sessions
+                .sessions_list()
+                .expect("sessions list")
+                .selected()
+                .expect("session")
+                .id,
+            Uuid::nil()
+        );
+        sessions.sessions_list_mut().expect("sessions list").next();
+
+        assert!(skills.models_list().is_none());
+        assert!(models.providers_list().is_none());
+        assert!(providers.tracing_list().is_none());
+        assert!(traces.sessions_list().is_none());
+        assert!(sessions.skill_list().is_none());
+    }
+
+    #[test]
+    fn usage_state_can_be_read_and_replaced() {
+        let mut state = ActiveComponentState::Usage(UsageState::new(usage_response(10)));
+
+        assert_eq!(state.kind(), COMPONENT_USAGE);
+        assert_eq!(
+            state
+                .usage()
+                .expect("usage state")
+                .usage()
+                .total
+                .input_tokens,
+            Some(10)
+        );
+
+        state
+            .usage_mut()
+            .expect("usage state")
+            .replace(usage_response(20));
+
+        assert_eq!(
+            state
+                .usage()
+                .expect("usage state")
+                .usage()
+                .total
+                .input_tokens,
+            Some(20)
+        );
+
+        assert!(
+            ActiveComponentState::Prompt(PromptState::default())
+                .usage()
+                .is_none()
+        );
+    }
+}

@@ -1,9 +1,17 @@
+//! TUI (Terminal User Interface) module for smista-cli.
+
+mod state;
+#[cfg(test)]
+mod tests;
+mod view;
+
 use std::io::Stdout;
 
 #[cfg(test)]
 use ratatui::backend::TestBackend;
 use ratatui::backend::{Backend, CrosstermBackend};
 
+use self::state::State;
 use crate::app::AppContext;
 use crate::app::input_listener::InputEvent;
 use crate::app::router_client::{Cmd, Msg};
@@ -15,11 +23,9 @@ use crate::app::router_client::{Cmd, Msg};
 pub struct Tui<B: Backend> {
     /// The application context for the TUI.
     context: AppContext,
+    /// The TUI state for rendering and input handling.
+    state: State,
     /// The terminal instance for rendering.
-    #[expect(
-        dead_code,
-        reason = "The TUI terminal is reserved for future rendering and command handling."
-    )]
     terminal: ratatui::Terminal<B>,
 }
 
@@ -58,7 +64,14 @@ impl Tui<CrosstermBackend<Stdout>> {
                 "initial prompt will be dispatched by the application run loop",
             );
         }
-        Ok((Self { context, terminal }, TerminalRestoreGuard))
+        Ok((
+            Self {
+                context,
+                state: State::default(),
+                terminal,
+            },
+            TerminalRestoreGuard,
+        ))
     }
 }
 
@@ -70,7 +83,11 @@ impl Tui<TestBackend> {
         let terminal = ratatui::Terminal::new(TestBackend::new(80, 24))
             .expect("test backend terminal is infallible");
 
-        Self { context, terminal }
+        Self {
+            context,
+            state: State::default(),
+            terminal,
+        }
     }
 }
 
@@ -78,8 +95,7 @@ impl<B: Backend> Tui<B> {
     /// Handles one input event and optionally produces a router command.
     ///
     /// This scaffold does not map keys to commands yet.
-    #[must_use]
-    pub fn handle_input_event(&self, event: InputEvent) -> Option<Cmd> {
+    pub fn handle_input_event(&mut self, event: InputEvent) -> anyhow::Result<Option<Cmd>> {
         tracing::debug!(
             input.event = event.kind(),
             "handling input event {{input.event}}",
@@ -89,36 +105,24 @@ impl<B: Backend> Tui<B> {
             self.context.exit.cancel();
         }
 
-        None
+        self.view()?;
+
+        Ok(None)
     }
 
     /// Handles one router message and optionally produces a follow-up command.
     ///
     /// This scaffold does not update UI state yet.
-    #[must_use]
-    pub fn handle_client_msg(&self, msg: Msg) -> Option<Cmd> {
-        tracing::debug!(message = message_name(&msg), "handling client message");
-        None
-    }
-}
+    pub fn handle_client_msg(&mut self, msg: Msg) -> anyhow::Result<()> {
+        tracing::debug!(
+            message = super::message_name(&msg),
+            "handling client message"
+        );
 
-fn message_name(msg: &Msg) -> &'static str {
-    match msg {
-        Msg::AssistantTurn(_) => "assistant_turn",
-        Msg::StreamedContentChunk(_) => "streamed_content_chunk",
-        Msg::StreamedReasoningChunk(_) => "streamed_reasoning_chunk",
-        Msg::ToolCallStarted(_) => "tool_call_started",
-        Msg::ApprovalPrompt(_) => "approval_prompt",
-        Msg::ModelsList(_) => "models_list",
-        Msg::ProvidersList(_) => "providers_list",
-        Msg::SessionsList(_) => "sessions_list",
-        Msg::ResumedSession(_) => "resumed_session",
-        Msg::Usage(_) => "usage",
-        Msg::Trace(_) => "trace",
-        Msg::Preview(_) => "preview",
-        Msg::RouterStatus(_) => "router_status",
-        Msg::Error(_) => "error",
-        Msg::Idle => "idle",
-        Msg::Thinking => "thinking",
+        // apply the message to the TUI state
+        self.state.apply_msg(msg);
+
+        // then view
+        self.view()
     }
 }

@@ -174,7 +174,7 @@ impl App {
             input_listener,
             mut msg_rx,
             router_client,
-            tui,
+            mut tui,
         }: RunLoopArgs<B>,
     ) -> anyhow::Result<()> {
         tracing::debug!("starting run loop");
@@ -205,12 +205,23 @@ impl App {
                         input.event = input_event.kind(),
                         "received input event {{input.event}}",
                     );
-                    if let Some(cmd) = tui.handle_input_event(input_event) {
-                        tracing::debug!(
-                            command = command_name(&cmd),
-                            "sending command to router client"
-                        );
-                        cmd_tx.send(cmd).await?;
+                    match tui.handle_input_event(input_event) {
+                        Ok(Some(cmd)) => {
+                            tracing::debug!(
+                                command = command_name(&cmd),
+                                "sending command to router client"
+                            );
+                            cmd_tx.send(cmd).await?;
+                        }
+                        Ok(None) => {
+                            tracing::debug!("no command produced by input event");
+                        }
+                        Err(err) => {
+                            tracing::error!(
+                                error = %err,
+                                "failed to handle input event"
+                            );
+                        }
                     }
                 }
                 Some(msg) = msg_rx.recv() => {
@@ -218,12 +229,11 @@ impl App {
                         message = message_name(&msg),
                         "received message from router client"
                     );
-                    if let Some(cmd) = tui.handle_client_msg(msg) {
-                        tracing::debug!(
-                            command = command_name(&cmd),
-                            "sending command to router client"
+                    if let Err(err) = tui.handle_client_msg(msg) {
+                        tracing::error!(
+                            error = %err,
+                            "failed to handle client message"
                         );
-                        cmd_tx.send(cmd).await?;
                     }
                 }
             }
@@ -275,6 +285,7 @@ fn message_name(msg: &Msg) -> &'static str {
         Msg::Error(_) => "error",
         Msg::Idle => "idle",
         Msg::Thinking => "thinking",
+        Msg::Interrupted => "interrupted",
     }
 }
 
