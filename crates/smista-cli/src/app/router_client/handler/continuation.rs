@@ -71,6 +71,7 @@ impl RouterClient {
                 cmd::ContinueExecution::Break,
             ) => {
                 tracing::debug!(?state, "break active run",);
+                self.send_msg(Msg::Interrupted).await;
                 ContinueRequest::Break
             }
             (

@@ -267,6 +267,19 @@ async fn break_and_inject_are_valid_from_every_non_idle_state() {
 }
 
 #[tokio::test]
+async fn break_emits_interrupted_before_contacting_router() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::Break)
+        .await;
+
+    assert!(handled);
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Interrupted);
+}
+
+#[tokio::test]
 async fn tool_results_only_match_awaiting_tool() {
     for state in all_states() {
         let mut router_client = router_client_with_session_state(state.clone());
