@@ -10,7 +10,7 @@ use smista_sdk::core::api::{
 };
 
 use crate::app::router_client::state::State;
-use crate::app::router_client::{Msg, RouterClient, cmd, continuation_name};
+use crate::app::router_client::{Msg, RouterClient, cmd, continuation_name, tool_changes_files};
 use crate::tools::{ToolCall, ToolExecutor};
 
 impl RouterClient {
@@ -166,6 +166,13 @@ impl RouterClient {
                 bail!("no pending tool request matched decision `{}`", decision.id);
             };
             self.pending_tool_prompts.remove(&decision.id);
+
+            if decision.outcome == cmd::ApprovalOutcome::Approved
+                && decision.scope == cmd::ApprovalScope::AlwaysForSession
+                && tool_changes_files(&request.name)
+            {
+                self.accept_edits = true;
+            }
 
             if decision.outcome == cmd::ApprovalOutcome::Approved
                 && decision.scope == cmd::ApprovalScope::AlwaysForSession

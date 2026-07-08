@@ -56,6 +56,25 @@ pub fn init(
     Ok(guard)
 }
 
+/// Initializes tracing without writing formatted logs to the terminal.
+///
+/// This is used by the interactive CLI when no log file was requested. The
+/// inline terminal UI owns stdout and stderr, so formatted logs must not share
+/// the same terminal stream.
+///
+/// # Errors
+///
+/// Returns an error if `filter` is not a valid `EnvFilter` directive or a
+/// global subscriber is already set.
+pub fn init_quiet(filter: &str) -> anyhow::Result<TelemetryGuard> {
+    tracing_subscriber::registry()
+        .with(fmt_sink_layer(filter)?)
+        .try_init()
+        .context("failed to set the global tracing subscriber")?;
+
+    Ok(TelemetryGuard::disabled())
+}
+
 /// Parses an `EnvFilter` directive, mapping failures to a clear error.
 fn env_filter(filter: &str) -> anyhow::Result<EnvFilter> {
     EnvFilter::try_new(filter).with_context(|| format!("invalid log filter `{filter}`"))
@@ -94,6 +113,18 @@ fn fmt_layer(
         .boxed())
 }
 
+/// Builds a formatting layer that preserves filtering but discards output.
+fn fmt_sink_layer(filter: &str) -> anyhow::Result<Box<dyn Layer<Registry> + Send + Sync>> {
+    Ok(fmt::layer()
+        .with_span_events(FmtSpan::CLOSE)
+        .with_target(true)
+        .with_line_number(true)
+        .with_ansi(false)
+        .with_writer(std::io::sink)
+        .with_filter(env_filter(filter)?)
+        .boxed())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,6 +156,11 @@ mod tests {
     #[test]
     fn should_build_the_stderr_formatting_layer() {
         assert!(fmt_layer("info", None).is_ok());
+    }
+
+    #[test]
+    fn should_build_the_quiet_formatting_layer() {
+        assert!(fmt_sink_layer("info").is_ok());
     }
 
     #[test]

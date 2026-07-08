@@ -27,6 +27,8 @@ use self::state::State;
 use crate::app::AppContext;
 
 const MAX_SESSION_TITLE_LENGTH: usize = 100;
+const EDIT_FILE_TOOL: &str = "edit_file";
+const WRITE_FILE_TOOL: &str = "write_file";
 
 /// Worker responsible for communicating with `smista-router`.
 ///
@@ -34,6 +36,8 @@ const MAX_SESSION_TITLE_LENGTH: usize = 100;
 /// execute router requests yet. Future tasks will translate [`Cmd`] values into
 /// authenticated HTTP calls and emit [`Msg`] updates.
 pub struct RouterClient {
+    /// Whether file edits are accepted without prompting for the current session.
+    accept_edits: bool,
     /// Storage for pending approvals, indexed by approval id.
     approvals: ApprovalsStorage,
     /// Channel to receive commands from the UI.
@@ -67,7 +71,9 @@ impl RouterClient {
     /// Creates a router client worker from its command and message channels.
     #[must_use]
     pub fn new(cmd_rx: Receiver<Cmd>, msg_tx: Sender<Msg>, context: AppContext) -> Self {
+        let accept_edits = context.config.local.auto_apply.unwrap_or_default();
         Self {
+            accept_edits,
             approvals: ApprovalsStorage::new(),
             cmd_rx,
             msg_tx,
@@ -245,6 +251,11 @@ impl RouterClient {
     fn scope(&self) -> String {
         self.context.cwd.to_string_lossy().to_string()
     }
+
+    /// Returns the configured default for accepting edit tools.
+    fn default_accept_edits(&self) -> bool {
+        self.context.config.local.auto_apply.unwrap_or_default()
+    }
 }
 
 fn session_title(prompt: &str) -> String {
@@ -262,6 +273,10 @@ fn session_title(prompt: &str) -> String {
             }
         })
         .unwrap_or_else(|_| String::new())
+}
+
+fn tool_changes_files(name: &str) -> bool {
+    matches!(name, WRITE_FILE_TOOL | EDIT_FILE_TOOL)
 }
 
 fn command_name(cmd: &Cmd) -> &'static str {

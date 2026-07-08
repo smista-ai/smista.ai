@@ -19,6 +19,26 @@ pub enum InputEvent {
     Interrupt,
     /// Printable character input.
     Char(char),
+    /// Backspace
+    Backspace,
+    /// Delete
+    Delete,
+    /// Enter key
+    Enter,
+    /// Tab key
+    Tab,
+    /// Escape key
+    Escape,
+    /// Arrow key up
+    Up,
+    /// Arrow key down
+    Down,
+    /// Arrow key left
+    Left,
+    /// Arrow key right
+    Right,
+    /// Modified Enter that inserts a line break into the prompt.
+    Newline,
     /// Pasted terminal content.
     Paste(String),
     /// Terminal resize notification.
@@ -34,6 +54,16 @@ impl InputEvent {
             Self::Char(_) => "char",
             Self::Paste(_) => "paste",
             Self::Resize => "resize",
+            Self::Enter => "enter",
+            Self::Tab => "tab",
+            Self::Escape => "escape",
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Backspace => "backspace",
+            Self::Delete => "delete",
+            Self::Newline => "newline",
         }
     }
 }
@@ -103,6 +133,16 @@ impl InputListener {
             InputEvent::Char(_) => tracing::trace!("InputListener received character input"),
             InputEvent::Paste(_) => tracing::trace!("InputListener received pasted content"),
             InputEvent::Resize => tracing::trace!("InputListener received terminal resize"),
+            InputEvent::Enter => tracing::trace!("InputListener received enter key"),
+            InputEvent::Tab => tracing::trace!("InputListener received tab key"),
+            InputEvent::Escape => tracing::trace!("InputListener received escape key"),
+            InputEvent::Up => tracing::trace!("InputListener received arrow up key"),
+            InputEvent::Down => tracing::trace!("InputListener received arrow down key"),
+            InputEvent::Left => tracing::trace!("InputListener received arrow left key"),
+            InputEvent::Right => tracing::trace!("InputListener received arrow right key"),
+            InputEvent::Backspace => tracing::trace!("InputListener received backspace key"),
+            InputEvent::Delete => tracing::trace!("InputListener received delete key"),
+            InputEvent::Newline => tracing::trace!("InputListener received newline key"),
         }
 
         if let Err(err) = self.tx.send(out_event).await {
@@ -121,15 +161,117 @@ fn decode_event(event: Event) -> Option<InputEvent> {
             state: _,
         }) if modifiers.intersects(KeyModifiers::CONTROL) => Some(InputEvent::Interrupt),
         Event::Key(KeyEvent {
+            code: KeyCode::Char('j' | 'm'),
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.intersects(KeyModifiers::CONTROL) && is_edit_key_event(kind) => {
+            Some(InputEvent::Newline)
+        }
+        Event::Key(KeyEvent {
+            code: KeyCode::Char('\n' | '\r'),
+            modifiers,
+            kind,
+            state: _,
+        }) if (modifiers.is_empty() || modifiers.intersects(KeyModifiers::CONTROL))
+            && is_edit_key_event(kind) =>
+        {
+            Some(InputEvent::Newline)
+        }
+        Event::Key(KeyEvent {
+            code: KeyCode::Char(' '),
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers
+            .intersects(KeyModifiers::ALT | KeyModifiers::SUPER | KeyModifiers::META)
+            && is_edit_key_event(kind) =>
+        {
+            Some(InputEvent::Newline)
+        }
+        Event::Key(KeyEvent {
             code: KeyCode::Char(char),
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Char(char)),
+        Event::Key(KeyEvent {
+            code: KeyCode::Backspace,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Backspace),
+        Event::Key(KeyEvent {
+            code: KeyCode::Delete,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Delete),
+        Event::Key(KeyEvent {
+            code: KeyCode::Enter,
             modifiers,
             kind: KeyEventKind::Press,
             state: _,
-        }) if modifiers.is_empty() => Some(InputEvent::Char(char)),
+        }) if modifiers.intersects(
+            KeyModifiers::ALT
+                | KeyModifiers::SUPER
+                | KeyModifiers::META
+                | KeyModifiers::SHIFT
+                | KeyModifiers::CONTROL,
+        ) =>
+        {
+            Some(InputEvent::Newline)
+        }
+        Event::Key(KeyEvent {
+            code: KeyCode::Enter,
+            modifiers,
+            kind: KeyEventKind::Press,
+            state: _,
+        }) if modifiers.is_empty() => Some(InputEvent::Enter),
+        Event::Key(KeyEvent {
+            code: KeyCode::Tab,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Tab),
+        Event::Key(KeyEvent {
+            code: KeyCode::Esc,
+            modifiers,
+            kind: KeyEventKind::Press,
+            state: _,
+        }) if modifiers.is_empty() => Some(InputEvent::Escape),
+        Event::Key(KeyEvent {
+            code: KeyCode::Up,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Up),
+        Event::Key(KeyEvent {
+            code: KeyCode::Down,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Down),
+        Event::Key(KeyEvent {
+            code: KeyCode::Left,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Left),
+        Event::Key(KeyEvent {
+            code: KeyCode::Right,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Right),
         Event::Paste(content) => Some(InputEvent::Paste(content)),
         Event::Resize(_, _) => Some(InputEvent::Resize),
         _ => None,
     }
+}
+
+fn is_edit_key_event(kind: KeyEventKind) -> bool {
+    matches!(kind, KeyEventKind::Press | KeyEventKind::Repeat)
 }
 
 #[cfg(test)]
@@ -148,6 +290,90 @@ mod tests {
             (
                 Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty())),
                 InputEvent::Char('x'),
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::ALT)),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL)),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::CONTROL)),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Char('\n'), KeyModifiers::empty())),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Char('\r'), KeyModifiers::empty())),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty())),
+                InputEvent::Backspace,
+            ),
+            (
+                Event::Key(KeyEvent::new_with_kind(
+                    KeyCode::Backspace,
+                    KeyModifiers::empty(),
+                    KeyEventKind::Repeat,
+                )),
+                InputEvent::Backspace,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Delete, KeyModifiers::empty())),
+                InputEvent::Delete,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty())),
+                InputEvent::Enter,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT)),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::SUPER)),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::META)),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT)),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL)),
+                InputEvent::Newline,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::empty())),
+                InputEvent::Tab,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::empty())),
+                InputEvent::Escape,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::empty())),
+                InputEvent::Up,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::empty())),
+                InputEvent::Down,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
+                InputEvent::Left,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+                InputEvent::Right,
             ),
             (
                 Event::Paste("hello".to_owned()),

@@ -574,6 +574,7 @@ async fn tool_call_requested_prompts_when_shell_approval_is_missing() {
             id: "call-1".to_owned(),
             title: "Approve shell".to_owned(),
             detail: "cargo test -p smista-cli".to_owned(),
+            tool_name: Some("shell".to_owned()),
             wildcard_alias: Some("cargo test *".to_owned()),
         })
     );
@@ -660,6 +661,90 @@ async fn tool_approval_decision_executes_request_and_folds_decision_into_result(
             .approved("printf approved")
             .expect("approval lookup succeeds")
     );
+}
+
+#[tokio::test]
+async fn edit_approval_can_accept_later_edits_for_session() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::ContinueRun,
+            sse(&[TurnEvent::TurnEnd(Box::new(defaults::turn()))]),
+        )
+        .start()
+        .await;
+    let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
+    router_client.state = State::Streaming;
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
+    let path = router_client.context.cwd.join("src.txt");
+    std::fs::write(&path, "before\n").expect("fixture file is written");
+
+    router_client
+        .on_exec_stream_event(Ok(TurnEvent::ToolCallRequested {
+            call_id: "edit-1".to_owned(),
+            name: "edit_file".to_owned(),
+            arguments: serde_json::json!({
+                "path": "src.txt",
+                "old": "before",
+                "new": "after",
+            }),
+            requires_approval: ToolApproval::Ask,
+        }))
+        .await;
+    assert!(matches!(
+        recv_msg(&mut msg_rx).await,
+        Msg::ApprovalPrompt(_)
+    ));
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::ApprovalDecisions {
+            decisions: vec![cmd::ApprovalDecision {
+                id: "edit-1".to_owned(),
+                outcome: cmd::ApprovalOutcome::Approved,
+                scope: cmd::ApprovalScope::AlwaysForSession,
+                reason: None,
+            }],
+        })
+        .await;
+
+    assert!(handled);
+    assert!(router_client.accept_edits);
+    assert_eq!(
+        std::fs::read_to_string(path).expect("fixture file is readable"),
+        "after\n"
+    );
+}
+
+#[tokio::test]
+async fn accepted_edit_session_runs_later_edit_without_prompt() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    router_client.accept_edits = true;
+    let path = router_client.context.cwd.join("src.txt");
+    std::fs::write(&path, "before\n").expect("fixture file is written");
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::ToolCallRequested {
+            call_id: "edit-1".to_owned(),
+            name: "edit_file".to_owned(),
+            arguments: serde_json::json!({
+                "path": "src.txt",
+                "old": "before",
+                "new": "after",
+            }),
+            requires_approval: ToolApproval::Ask,
+        }))
+        .await;
+
+    assert!(next_stream.is_none());
+    assert!(msg_rx.try_recv().is_err());
+    assert_eq!(
+        std::fs::read_to_string(path).expect("fixture file is readable"),
+        "after\n"
+    );
+    let result = router_client
+        .pending_tool_results
+        .get("edit-1")
+        .expect("edit result is stored");
+    assert_eq!(result.decision, Some(ApiApprovalDecision::Approved));
 }
 
 #[tokio::test]
@@ -869,6 +954,7 @@ async fn turn_end_awaiting_approval_emits_approval_prompt() {
             id: "approval-1".to_owned(),
             title: "Approve RemoteDisclosure".to_owned(),
             detail: "{\n  \"provider\": \"anthropic\"\n}".to_owned(),
+            tool_name: None,
             wildcard_alias: None,
         })
     );
@@ -1211,6 +1297,7 @@ async fn invalid_shell_approval_request_prompts_without_alias() {
             id: "call-1".to_owned(),
             title: "Approve shell".to_owned(),
             detail: "&& rm -rf target".to_owned(),
+            tool_name: Some("shell".to_owned()),
             wildcard_alias: None,
         })
     );

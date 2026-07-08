@@ -88,6 +88,7 @@ mod tests {
             id: APPROVAL_ID.to_owned(),
             title: APPROVAL_TITLE.to_owned(),
             detail: APPROVAL_DETAIL.to_owned(),
+            tool_name: None,
             wildcard_alias: None,
         });
         approval.push_content(CONTENT_CHUNK);

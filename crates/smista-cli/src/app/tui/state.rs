@@ -6,6 +6,7 @@
 )]
 
 mod active_component;
+mod console;
 mod history;
 mod list;
 mod prompt;
@@ -15,6 +16,7 @@ mod turn;
 use smista_sdk::core::model::ModelReference;
 
 pub use self::active_component::{ActiveComponentState, UsageState};
+pub use self::console::ConsoleState;
 pub use self::history::HistoryEntry;
 pub use self::list::ListState;
 pub use self::prompt::PromptState;
@@ -25,13 +27,12 @@ use crate::app::router_client::msg::{Model, Provider, SessionListItem, TraceEven
 use crate::skills::SkillEntry;
 
 const COMPONENT_MODELS_LIST: &str = "models_list";
-const COMPONENT_PROMPT: &str = "prompt";
+const COMPONENT_CONSOLE: &str = "console";
 const COMPONENT_PROVIDERS_LIST: &str = "providers_list";
 const COMPONENT_SESSIONS_LIST: &str = "sessions_list";
 const COMPONENT_SKILL_LIST: &str = "skill_list";
 const COMPONENT_TRACING_LIST: &str = "tracing_list";
 const COMPONENT_USAGE: &str = "usage";
-const INTERRUPTED_NOTICE: &str = "Interrupted. What should the LLM do instead?";
 const MESSAGE_APPROVAL_PROMPT: &str = "approval_prompt";
 const MESSAGE_ASSISTANT_TURN: &str = "assistant_turn";
 const MESSAGE_ERROR: &str = "error";
@@ -116,10 +117,10 @@ impl State {
         );
     }
 
-    /// Restores the main prompt view without changing history.
-    pub fn show_prompt(&mut self) {
-        self.active_component = ActiveComponentState::Prompt(PromptState::default());
-        self.trace_active_component(COMPONENT_PROMPT, None);
+    /// Restores the main console view without changing history.
+    pub fn show_console(&mut self) {
+        self.active_component = ActiveComponentState::Console(ConsoleState::default());
+        self.trace_active_component(COMPONENT_CONSOLE, None);
     }
 
     /// Shows the skill list view without changing history.
@@ -212,7 +213,7 @@ impl State {
             }
             Msg::ResumedSession(session) => {
                 self.clear_history();
-                self.show_prompt();
+                self.show_console();
                 self.history.extend(
                     session
                         .messages
@@ -245,13 +246,11 @@ impl State {
                 self.execution_turn = None;
             }
             Msg::Thinking => {
-                self.router = RouterState::Thinking;
+                self.router = RouterState::Thinking(std::time::Instant::now());
             }
             Msg::Interrupted => {
                 self.router = RouterState::Interrupted;
                 self.execution_turn = None;
-                self.history
-                    .push(HistoryEntry::Notice(INTERRUPTED_NOTICE.to_owned()));
             }
         }
 
@@ -458,10 +457,10 @@ mod tests {
             ActiveComponentState::SessionsList(_)
         ));
 
-        state.show_prompt();
+        state.show_console();
         assert!(matches!(
             state.active_component,
-            ActiveComponentState::Prompt(_)
+            ActiveComponentState::Console(_)
         ));
 
         assert_eq!(
@@ -510,6 +509,7 @@ mod tests {
             id: "approval-1".to_owned(),
             title: "Approve command".to_owned(),
             detail: "run shell".to_owned(),
+            tool_name: Some("shell".to_owned()),
             wildcard_alias: None,
         };
         state.apply_msg(Msg::ApprovalPrompt(approval.clone()));
@@ -541,7 +541,7 @@ mod tests {
 
         assert!(matches!(
             state.active_component,
-            ActiveComponentState::Prompt(_)
+            ActiveComponentState::Console(_)
         ));
         assert_eq!(
             state.history,
@@ -613,7 +613,7 @@ mod tests {
         assert!(state.execution_turn.is_none());
         assert_eq!(
             state.history.last(),
-            Some(&HistoryEntry::Notice(INTERRUPTED_NOTICE.to_owned()))
+            Some(&HistoryEntry::Error(ERROR_MESSAGE.to_owned()))
         );
 
         state.execution_turn = Some(ExecutionTurn::streaming());

@@ -3,12 +3,12 @@
 use smista_sdk::core::api::SessionUsageResponse;
 
 use super::list::ListState;
-use super::prompt::PromptState;
 use crate::app::router_client::msg::{Model, Provider, SessionListItem, TraceEvent};
+use crate::app::tui::state::console::ConsoleState;
 use crate::skills::SkillEntry;
 
 const COMPONENT_MODELS_LIST: &str = "models_list";
-const COMPONENT_PROMPT: &str = "prompt";
+const COMPONENT_CONSOLE: &str = "console";
 const COMPONENT_PROVIDERS_LIST: &str = "providers_list";
 const COMPONENT_SESSIONS_LIST: &str = "sessions_list";
 const COMPONENT_SKILL_LIST: &str = "skill_list";
@@ -18,8 +18,8 @@ const COMPONENT_USAGE: &str = "usage";
 /// The state of the active component in the TUI.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ActiveComponentState {
-    /// Main prompt view.
-    Prompt(PromptState),
+    /// Main console view.
+    Console(ConsoleState),
     /// Skill list view.
     SkillList(ListState<SkillEntry>),
     /// Models list view.
@@ -39,7 +39,7 @@ impl ActiveComponentState {
     #[must_use]
     pub fn kind(&self) -> &'static str {
         match self {
-            Self::Prompt(_) => COMPONENT_PROMPT,
+            Self::Console(_) => COMPONENT_CONSOLE,
             Self::SkillList(_) => COMPONENT_SKILL_LIST,
             Self::ModelsList(_) => COMPONENT_MODELS_LIST,
             Self::ProvidersList(_) => COMPONENT_PROVIDERS_LIST,
@@ -49,28 +49,28 @@ impl ActiveComponentState {
         }
     }
 
-    /// Returns the prompt state when the prompt view is active.
+    /// Returns the console state when the console view is active.
     #[must_use]
-    pub fn prompt(&self) -> Option<&PromptState> {
+    pub fn console(&self) -> Option<&ConsoleState> {
         match self {
-            Self::Prompt(state) => Some(state),
+            Self::Console(state) => Some(state),
             _ => None,
         }
     }
 
-    /// Returns the mutable prompt state when the prompt view is active.
+    /// Returns the mutable console state when the console view is active.
     #[must_use]
-    pub fn prompt_mut(&mut self) -> Option<&mut PromptState> {
+    pub fn console_mut(&mut self) -> Option<&mut ConsoleState> {
         match self {
-            Self::Prompt(state) => Some(state),
+            Self::Console(state) => Some(state),
             _ => None,
         }
     }
 
-    /// Pushes a character into the prompt when the prompt view is active.
-    pub fn push_prompt(&mut self, char: char) {
-        if let Self::Prompt(prompt) = self {
-            prompt.push(char);
+    /// Pushes a character into the console when the console view is active.
+    pub fn push_console(&mut self, char: char) {
+        if let Self::Console(console) = self {
+            console.prompt.push(char);
         }
     }
 
@@ -185,7 +185,7 @@ impl ActiveComponentState {
 
 impl Default for ActiveComponentState {
     fn default() -> Self {
-        Self::Prompt(PromptState::default())
+        Self::Console(ConsoleState::default())
     }
 }
 
@@ -271,27 +271,26 @@ mod tests {
     fn default_component_is_prompt() {
         let state = ActiveComponentState::default();
 
-        assert_eq!(state.kind(), COMPONENT_PROMPT);
-        assert!(state.prompt().is_some());
+        assert_eq!(state.kind(), COMPONENT_CONSOLE);
+        assert!(state.console().is_some());
     }
 
     #[test]
-    fn prompt_accessors_only_match_prompt_component() {
-        let mut state = ActiveComponentState::Prompt(PromptState::default());
+    fn console_accessors_only_match_console_component() {
+        let mut state = ActiveComponentState::Console(ConsoleState::default());
 
-        state.push_prompt('h');
-        state.prompt_mut().expect("prompt state").push('i');
+        state.push_console('h');
+        state.console_mut().expect("console state").prompt.push('i');
 
-        assert_eq!(
-            state.prompt().expect("prompt state"),
-            &PromptState::Text("hi".to_owned())
-        );
+        let prompt = &state.console().expect("console state").prompt;
+        assert_eq!(prompt.input(), "hi");
+        assert_eq!(prompt.cursor_position(), 2);
 
         let mut models = ActiveComponentState::ModelsList(ListState::new(vec![model()]));
-        models.push_prompt('x');
+        models.push_console('x');
 
-        assert!(models.prompt().is_none());
-        assert!(models.prompt_mut().is_none());
+        assert!(models.console().is_none());
+        assert!(models.console_mut().is_none());
     }
 
     #[test]
@@ -398,7 +397,7 @@ mod tests {
         );
 
         assert!(
-            ActiveComponentState::Prompt(PromptState::default())
+            ActiveComponentState::Console(ConsoleState::default())
                 .usage()
                 .is_none()
         );
