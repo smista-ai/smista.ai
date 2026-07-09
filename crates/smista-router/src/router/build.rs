@@ -2,10 +2,10 @@
 //!
 //! [`Router::init`](super::Router::init) delegates here. This module turns the
 //! validated configuration into the live, long-lived providers a router routes
-//! to: Ollama's local daemon from `[router.ollama]`, and every opt-in provider
-//! declared under `[router.providers.<id>]`. All providers share one memory
-//! backend and the base [`PREAMBLE`]; credentials are supplied per request, not
-//! held here.
+//! to: Ollama's local daemon from `[router.ollama]`, every built-in known
+//! provider seeded by default, and every extra provider declared under
+//! `[router.providers.<id>]`. All providers share one memory backend and the
+//! base [`PREAMBLE`]; credentials are supplied per request, not held here.
 
 use std::sync::Arc;
 
@@ -63,8 +63,8 @@ impl Router {
             router = router.with_local(ProviderId::Ollama, Box::new(provider));
         }
 
-        // Every other provider is opt-in: registered only when it appears under
-        // `[router.providers.<id>]`.
+        // Register each configured provider. The default config seeds built-ins;
+        // user-authored config may also add OpenAI-compatible endpoints.
         for (provider_id, provider_config) in &config.providers {
             router = router.with_configured_provider(provider_id, provider_config, &storage)?;
         }
@@ -235,24 +235,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_list_only_configured_providers() {
-        let mut providers = BTreeMap::new();
-        providers.insert(ProviderId::Anthropic, RouterProviderConfig::default());
-        providers.insert(ProviderId::OpenAI, RouterProviderConfig::default());
-        let config = RouterConfig {
-            providers,
-            ..RouterConfig::default()
-        };
+    async fn should_list_default_known_providers() {
+        let config = RouterConfig::default();
 
         let listed = router_from(config).await.list_providers();
 
-        // The two configured providers are listed; Gemini and Ollama, left out
-        // of the configuration, are absent.
-        assert_eq!(listed.len(), 2);
+        assert_eq!(listed.len(), 4);
         assert!(listed.contains_key(&ProviderId::Anthropic));
+        assert!(listed.contains_key(&ProviderId::Gemini));
+        assert!(listed.contains_key(&ProviderId::Ollama));
         assert!(listed.contains_key(&ProviderId::OpenAI));
-        assert!(!listed.contains_key(&ProviderId::Gemini));
-        assert!(!listed.contains_key(&ProviderId::Ollama));
     }
 
     #[tokio::test]
@@ -271,10 +263,27 @@ mod tests {
 
         let listed = router_from(config).await.list_providers();
 
-        // Only the provider with a usable base URL is listed.
+        // This config replaces the provider map, so only the provider with a
+        // usable base URL is listed.
         assert_eq!(listed.len(), 1);
         assert!(listed.contains_key(&ready));
         assert!(!listed.contains_key(&unconfigured));
+    }
+
+    #[tokio::test]
+    async fn should_add_configured_openai_compatible_provider_to_defaults() {
+        let ready = ProviderId::OpenAICompatible("ready".to_string());
+        let mut config = RouterConfig::default();
+        config.providers.insert(ready.clone(), available(false));
+
+        let listed = router_from(config).await.list_providers();
+
+        assert_eq!(listed.len(), 5);
+        assert!(listed.contains_key(&ProviderId::Anthropic));
+        assert!(listed.contains_key(&ProviderId::Gemini));
+        assert!(listed.contains_key(&ProviderId::Ollama));
+        assert!(listed.contains_key(&ProviderId::OpenAI));
+        assert!(listed.contains_key(&ready));
     }
 
     #[tokio::test]

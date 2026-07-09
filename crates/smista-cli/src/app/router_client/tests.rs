@@ -28,9 +28,7 @@ use url::Url;
 
 use super::*;
 use crate::config::Config;
-use crate::credentials::{
-    ApiKeyStorage, CredentialBackend, CredentialsStorage, E2eeKeysCredentials, ProvidersCredentials,
-};
+use crate::credentials::{CredentialBackend, CredentialsStorage, E2eeKeysCredentials};
 use crate::skills::SkillStore;
 use crate::tools::{ToolCall, ToolExecutor};
 
@@ -2478,12 +2476,10 @@ async fn app_context_for_router(
         .expect("mock router signs in the test client");
 
     AppContext {
-        api_key: Arc::new(ApiKeyStorage::new(credentials.clone(), &cwd)),
         config: Arc::new(Config::default()),
         cwd: cwd.clone(),
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
         exit,
-        providers_credentials: Arc::new(ProvidersCredentials::new(credentials, &cwd)),
         router_client: Arc::new(router_client),
         skills_store: Arc::new(SkillStore::discover(&cwd)),
     }
@@ -2653,12 +2649,10 @@ fn app_context(exit: CancellationToken) -> AppContext {
     .expect("test router client builds");
 
     AppContext {
-        api_key: Arc::new(ApiKeyStorage::new(credentials.clone(), &cwd)),
         config: Arc::new(Config::default()),
         cwd: cwd.clone(),
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
         exit,
-        providers_credentials: Arc::new(ProvidersCredentials::new(credentials, &cwd)),
         router_client: Arc::new(router_client),
         skills_store: Arc::new(SkillStore::discover(&cwd)),
     }

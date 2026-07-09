@@ -69,14 +69,19 @@ pub async fn run(
         .await
         .context("Failed to sign in to router")?;
 
+    // inject credentials into router client
+    let providers_credentials = ProvidersCredentials::new(credentials.clone(), &cwd);
+    let router_client =
+        crate::client::inject_credentials(router_client, &providers_credentials, &config)
+            .await
+            .context("Failed to inject credentials into router client")?;
+
     // build context
     tracing::info!("app initialization completed; building app context");
     let context = AppContext {
-        api_key,
         config: Arc::new(config),
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
         exit: CancellationToken::new(),
-        providers_credentials: Arc::new(ProvidersCredentials::new(credentials, &cwd)),
         router_client: Arc::new(router_client),
         skills_store: Arc::new(SkillStore::discover(&cwd)),
         cwd,

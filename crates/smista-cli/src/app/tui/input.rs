@@ -541,10 +541,7 @@ mod tests {
     use crate::app::router_client::msg::{Model, Provider, SessionListItem};
     use crate::app::tui::state::{ActiveComponentState, RouterState, UsageState};
     use crate::config::Config;
-    use crate::credentials::{
-        ApiKeyStorage, CredentialBackend, CredentialsStorage, E2eeKeysCredentials,
-        ProvidersCredentials,
-    };
+    use crate::credentials::{CredentialBackend, CredentialsStorage, E2eeKeysCredentials};
     use crate::skills::SkillStore;
 
     const MODEL_DISPLAY_NAME: &str = "GPT-4.1";
@@ -567,12 +564,10 @@ mod tests {
         .expect("test router client builds");
 
         AppContext {
-            api_key: Arc::new(ApiKeyStorage::new(credentials.clone(), &cwd)),
             config: Arc::new(Config::default()),
             cwd: cwd.clone(),
             e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
             exit,
-            providers_credentials: Arc::new(ProvidersCredentials::new(credentials, &cwd)),
             router_client: Arc::new(router_client),
             skills_store: Arc::new(SkillStore::discover(&cwd)),
         }

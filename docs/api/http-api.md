@@ -796,9 +796,13 @@ GET /api/v1/sessions/{session_id}/traces?limit=50&offset=0
 GET /api/v1/llm/providers
 ```
 
-Lists the providers that are currently **available**: those configured with
-usable credentials (or a base URL, for local providers). A provider that is not
-available is omitted entirely, so every entry returned is ready to route to.
+Lists the provider registry the router can route through. The default router
+configuration includes the known built-in providers (`anthropic`, `gemini`,
+`ollama` and `openai`); additional OpenAI-compatible instances appear when they
+are configured with a usable `base_url`. This endpoint does not prove model
+credentials are present. Use `GET /api/v1/llm/models` to see which providers can
+list models with the credentials supplied on that request.
+
 Each entry carries a `local` flag: `true` when the provider serves its models on
 your own host or network with no request leaving the machine (a local Ollama, a
 self-hosted OpenAI-compatible endpoint), and `false` for a cloud API. This is

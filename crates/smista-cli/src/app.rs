@@ -20,7 +20,7 @@ use crate::app::input_listener::{InputEvent, InputListener};
 use crate::app::router_client::{Cmd, Msg, RouterClient};
 use crate::app::tui::Tui;
 use crate::config::Config;
-use crate::credentials::{ApiKeyStorage, E2eeKeysCredentials, ProvidersCredentials};
+use crate::credentials::E2eeKeysCredentials;
 use crate::skills::SkillStore;
 
 const TUI_REFRESH_INTERVAL: Duration = Duration::from_millis(120);
@@ -30,14 +30,8 @@ const TUI_REFRESH_INTERVAL: Duration = Duration::from_millis(120);
 /// The context is cloned into each worker so the input listener, router client,
 /// and TUI can share configuration, credentials, the authenticated router
 /// client, and the cancellation token without owning each other.
-#[expect(
-    dead_code,
-    reason = "Most context fields are scaffolded before the workers consume them."
-)]
 #[derive(Clone)]
 pub struct AppContext {
-    /// Storage for the router API key.
-    pub api_key: Arc<ApiKeyStorage>,
     /// Effective CLI configuration.
     pub config: Arc<Config>,
     /// Working directory used for project-local config, secrets, and skills.
@@ -46,8 +40,6 @@ pub struct AppContext {
     pub e2ee_keys: Arc<E2eeKeysCredentials>,
     /// Shared cancellation token used to shut down all workers.
     pub exit: CancellationToken,
-    /// Storage for provider API keys.
-    pub providers_credentials: Arc<ProvidersCredentials>,
     /// Authenticated router HTTP client.
     pub router_client: Arc<ReqwestClient>,
     /// Discovered project and global skills.
@@ -317,10 +309,7 @@ mod tests {
     use url::Url;
 
     use super::*;
-    use crate::credentials::{
-        ApiKeyStorage, CredentialBackend, CredentialsStorage, E2eeKeysCredentials,
-        ProvidersCredentials,
-    };
+    use crate::credentials::{CredentialBackend, CredentialsStorage, E2eeKeysCredentials};
 
     #[tokio::test]
     async fn should_terminate_when_cancelled() {
@@ -349,12 +338,10 @@ mod tests {
         .expect("test router client builds");
 
         AppContext {
-            api_key: Arc::new(ApiKeyStorage::new(credentials.clone(), &cwd)),
             config: Arc::new(Config::default()),
             cwd: cwd.clone(),
             e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
             exit,
-            providers_credentials: Arc::new(ProvidersCredentials::new(credentials, &cwd)),
             router_client: Arc::new(router_client),
             skills_store: Arc::new(SkillStore::discover(&cwd)),
         }

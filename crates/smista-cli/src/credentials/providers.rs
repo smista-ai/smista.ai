@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use secrecy::SecretString;
 use smista_sdk::core::model::Provider;
+use smista_sdk::core::secret::SecretRef;
 
 use crate::credentials::CredentialsStorage;
 
@@ -80,6 +81,33 @@ impl ProvidersCredentials {
         let key_name = provider.to_string();
         tracing::debug!("Retrieving API key for provider {key_name}");
         self.storage.get(&self.cwd, &key_name)
+    }
+
+    /// Resolves a config secret reference into an API key value.
+    ///
+    /// Environment variables take precedence over local and global secrets,
+    /// matching the CLI configuration contract.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an environment value is not valid Unicode or the
+    /// selected credential backend cannot read the referenced secret.
+    pub fn get_config_api_key(
+        &self,
+        secret_ref: &SecretRef,
+    ) -> anyhow::Result<Option<SecretString>> {
+        match std::env::var(secret_ref.key()) {
+            Ok(value) => return Ok(Some(SecretString::from(value))),
+            Err(std::env::VarError::NotPresent) => {}
+            Err(std::env::VarError::NotUnicode(_)) => {
+                anyhow::bail!(
+                    "secret reference `{key}` resolved to non-Unicode environment data",
+                    key = secret_ref.key()
+                );
+            }
+        }
+
+        self.storage.get(&self.cwd, secret_ref.key())
     }
 
     /// Removes the API key for `provider` from the selected scope.
