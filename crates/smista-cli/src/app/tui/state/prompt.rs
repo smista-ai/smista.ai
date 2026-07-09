@@ -4,12 +4,14 @@ const COMMAND_EXIT: &str = "exit";
 const COMMAND_Q: &str = "q";
 const COMMAND_QUIT: &str = "quit";
 const COMMAND_RESUME: &str = "resume";
+const COMMAND_SKILLS: &str = "skills";
 
 const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_EXIT, Command::Quit),
     (COMMAND_Q, Command::Quit),
     (COMMAND_QUIT, Command::Quit),
     (COMMAND_RESUME, Command::Resume),
+    (COMMAND_SKILLS, Command::Skills),
 ];
 
 /// State for prompt input.
@@ -423,6 +425,8 @@ impl CommandPromptState {
 pub enum Command {
     /// `/resume` command. Lists sessions, or resumes a session when an ID is passed.
     Resume,
+    /// `/skills` command, lists available skills.
+    Skills,
     /// `/quit`, `/q`, or `/exit` command, exits the application.
     Quit,
     /// Still unresolved
@@ -436,6 +440,7 @@ impl Command {
         match self {
             Self::Quit => COMMAND_QUIT,
             Self::Resume => COMMAND_RESUME,
+            Self::Skills => COMMAND_SKILLS,
             Self::Unresolved(command) => command,
         }
     }
@@ -550,7 +555,9 @@ fn command_suggestion(prefix: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{COMMAND_QUIT, COMMAND_RESUME, Command, PromptState, TextPromptState};
+    use super::{
+        COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS, Command, PromptState, TextPromptState,
+    };
 
     const HELLO_INPUT: &str = "hello";
     const HELLO_SUFFIX: &str = "ello";
@@ -559,6 +566,7 @@ mod tests {
     const QUIT_INPUT: &str = "/quit now";
     const QUIT_ARGUMENTS: &str = "now";
     const QUIT_SUGGESTION: &str = "/quit";
+    const SKILLS_SUGGESTION: &str = "/skills";
     const SESSION_ID: &str = "00000000-0000-0000-0000-000000000001";
 
     #[test]
@@ -658,6 +666,15 @@ mod tests {
 
         state.push_str("/e");
         assert_eq!(state.current_suggestion(), Some("/exit"));
+    }
+
+    #[test]
+    fn command_suggestion_includes_skills_command() {
+        let mut state = PromptState::default();
+
+        state.push_str("/s");
+
+        assert_eq!(state.current_suggestion(), Some(SKILLS_SUGGESTION));
     }
 
     #[test]
@@ -954,6 +971,21 @@ mod tests {
         assert_eq!(state.command(), Some(&Command::Resume));
         assert_eq!(state.command_args(), Some(""));
         assert_eq!(state.input(), "/resume");
+    }
+
+    #[test]
+    fn should_parse_skills() {
+        let mut state = PromptState::default();
+
+        state.push_str("/skills");
+
+        assert_eq!(state.command(), Some(&Command::Skills));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/skills");
+        assert_eq!(
+            state.command().map(Command::input_name),
+            Some(COMMAND_SKILLS)
+        );
     }
 
     #[test]

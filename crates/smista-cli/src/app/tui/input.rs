@@ -161,11 +161,22 @@ where
 
     fn handle_command(&mut self, command: Command, args: Vec<String>) -> Option<Cmd> {
         match command {
-            Command::Resume => self.handle_resume_command(&args),
             Command::Quit => {
                 tracing::debug!("input event is quit command, producing exit command");
                 self.context.exit.cancel();
 
+                None
+            }
+            Command::Resume => self.handle_resume_command(&args),
+            Command::Skills => {
+                tracing::debug!("input event is skills command, producing list skills command");
+                self.state.show_skill_list(
+                    self.context
+                        .skills_store
+                        .skills()
+                        .map(|(name, entry)| (name.to_owned(), entry.clone()))
+                        .collect(),
+                );
                 None
             }
             Command::Unresolved(unresolved) => {
@@ -537,6 +548,7 @@ enum ApprovalOption {
 
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use std::time::Instant;
 
@@ -561,11 +573,17 @@ mod tests {
     const APPROVAL_ID: &str = "approval-1";
     const PROVIDER_OPENAI: &str = "openai";
     const SESSION_UPDATED_AT: &str = "2026-07-08T10:00:00Z";
+    const SKILL_DESCRIPTION: &str = "List available skills.";
+    const SKILL_NAME: &str = "list-skills";
 
     fn app_context(exit: CancellationToken) -> AppContext {
         let cwd = tempfile::tempdir()
             .expect("temporary directory is created")
             .keep();
+        app_context_for_cwd(exit, cwd)
+    }
+
+    fn app_context_for_cwd(exit: CancellationToken, cwd: PathBuf) -> AppContext {
         let credentials = CredentialsStorage::new_file_for_tests(cwd.join("global-secrets"))
             .expect("test credentials storage builds");
         assert_eq!(credentials.backend(), CredentialBackend::File);
@@ -583,6 +601,16 @@ mod tests {
             router_client: Arc::new(router_client),
             skills_store: Arc::new(SkillStore::discover(&cwd)),
         }
+    }
+
+    fn write_project_skill(cwd: &Path, name: &str, description: &str) {
+        let skill_dir = cwd.join(".agents").join("skills").join(name);
+        std::fs::create_dir_all(&skill_dir).expect("skill directory is created");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {description}\n---\n\nUse this skill.\n"),
+        )
+        .expect("skill descriptor is written");
     }
 
     fn model(id: &str) -> Model {
@@ -1027,6 +1055,56 @@ mod tests {
                 "Expected at most one session id after /resume".to_owned()
             ))
         );
+    }
+
+    #[test]
+    fn handle_command_skills_shows_discovered_skill_names() {
+        let exit = CancellationToken::new();
+        let cwd = tempfile::tempdir()
+            .expect("temporary directory is created")
+            .keep();
+        write_project_skill(&cwd, SKILL_NAME, SKILL_DESCRIPTION);
+        let mut tui = Tui::<TestBackend>::new_test(app_context_for_cwd(exit, cwd));
+
+        assert_eq!(tui.handle_command(Command::Skills, Vec::new()), None);
+
+        let skills = tui
+            .state
+            .active_component
+            .skill_list()
+            .expect("skill list is active");
+        let (_name, entry) = skills
+            .entries()
+            .iter()
+            .find(|(name, _entry)| name == SKILL_NAME)
+            .expect("project skill is listed");
+        assert_eq!(entry.description(), SKILL_DESCRIPTION);
+        assert!(tui.state.history.is_empty());
+    }
+
+    #[test]
+    fn enter_on_skills_command_shows_discovered_skill_names() {
+        let exit = CancellationToken::new();
+        let cwd = tempfile::tempdir()
+            .expect("temporary directory is created")
+            .keep();
+        write_project_skill(&cwd, SKILL_NAME, SKILL_DESCRIPTION);
+        let mut tui = Tui::<TestBackend>::new_test(app_context_for_cwd(exit, cwd));
+
+        tui.on_input(InputEvent::Paste("/skills".to_owned()));
+        assert_eq!(tui.on_input(InputEvent::Enter), None);
+
+        let skills = tui
+            .state
+            .active_component
+            .skill_list()
+            .expect("skill list is active");
+        let (_name, entry) = skills
+            .entries()
+            .iter()
+            .find(|(name, _entry)| name == SKILL_NAME)
+            .expect("project skill is listed");
+        assert_eq!(entry.description(), SKILL_DESCRIPTION);
     }
 
     #[test]

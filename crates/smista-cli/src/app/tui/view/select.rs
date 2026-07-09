@@ -1,7 +1,5 @@
 //! Selectable list component for replacement TUI views.
 
-use std::path::Path;
-
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Color, Modifier, Style};
@@ -46,6 +44,7 @@ pub(in crate::app::tui) fn view_select<'a, T, F>(
     };
     let list = List::new(lines)
         .block(Block::new().title(title).borders(Borders::BOTTOM))
+        .scroll_padding(8)
         .highlight_style(palette().selected.add_modifier(Modifier::BOLD))
         .highlight_symbol("› ");
     let mut widget_state = RatatuiListState::default()
@@ -59,11 +58,11 @@ pub(in crate::app::tui) fn string_line(entry: &str) -> Line<'static> {
     Line::from(entry.to_owned())
 }
 
-pub(in crate::app::tui) fn skill_line(skill: &SkillEntry) -> Line<'static> {
+pub(in crate::app::tui) fn skill_line((name, entry): &(String, SkillEntry)) -> Line<'static> {
     Line::from(vec![
-        Span::styled(path_file_name(skill.path()), palette().name),
+        Span::styled(name.to_owned(), palette().name),
         Span::raw(" "),
-        Span::styled(skill.description().to_owned(), palette().dim),
+        Span::styled(entry.description().to_owned(), palette().dim),
     ])
 }
 
@@ -128,12 +127,6 @@ pub(in crate::app::tui) fn trace_line(trace: &TraceEvent) -> Line<'static> {
     ])
 }
 
-fn path_file_name(path: &Path) -> String {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .map_or_else(|| path.display().to_string(), ToOwned::to_owned)
-}
-
 #[derive(Debug, Clone, Copy)]
 struct Palette {
     dim: Style,
@@ -165,8 +158,11 @@ mod tests {
 
     use super::*;
     use crate::app::router_client::msg::{Model, Provider, TraceEvent};
+    use crate::skills::SkillStore;
 
     const SESSION_UPDATED_AT: &str = "2026-07-08T10:00:00Z";
+    const SKILL_DESCRIPTION: &str = "Review code changes.";
+    const SKILL_NAME: &str = "code-review";
     const TRACE_CREATED_AT: &str = "2026-07-08T11:00:00Z";
 
     #[test]
@@ -217,6 +213,19 @@ mod tests {
             .collect::<String>();
 
         assert_eq!(rendered, "log entry");
+    }
+
+    #[test]
+    fn skill_line_renders_explicit_name_and_description() {
+        let root = tempfile::tempdir().expect("temporary directory is created");
+        write_skill(root.path(), SKILL_NAME, SKILL_DESCRIPTION);
+        let store = SkillStore::discover(root.path());
+        let entry = store.get(SKILL_NAME).expect("skill is discovered").clone();
+
+        let rendered = line_text(skill_line(&(SKILL_NAME.to_owned(), entry)));
+
+        assert!(rendered.contains(SKILL_NAME));
+        assert!(rendered.contains(SKILL_DESCRIPTION));
     }
 
     #[test]
@@ -330,20 +339,6 @@ mod tests {
     }
 
     #[test]
-    fn path_file_name_prefers_final_path_component() {
-        let name = path_file_name(Path::new("/tmp/skill-name"));
-
-        assert_eq!(name, "skill-name");
-    }
-
-    #[test]
-    fn path_file_name_falls_back_to_display_path() {
-        let name = path_file_name(Path::new("/"));
-
-        assert_eq!(name, "/");
-    }
-
-    #[test]
     fn selected_row_style_preserves_entry_colors() {
         assert_eq!(palette().selected.fg, None);
     }
@@ -353,5 +348,15 @@ mod tests {
             .iter()
             .map(|span| span.content.as_ref())
             .collect()
+    }
+
+    fn write_skill(root: &std::path::Path, name: &str, description: &str) {
+        let skill_dir = root.join(".agents").join("skills").join(name);
+        std::fs::create_dir_all(&skill_dir).expect("skill directory is created");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {description}\n---\n\nUse this skill.\n"),
+        )
+        .expect("skill descriptor is written");
     }
 }
