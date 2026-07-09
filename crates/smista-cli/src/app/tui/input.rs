@@ -386,6 +386,12 @@ where
         approval_command(prompt, approval_option(prompt, index))
     }
 
+    /// Handles an interrupt input event (e.g., Ctrl+C) and produces a command to break execution or clear the console prompt.
+    ///
+    /// 1. If there is an active execution turn or the router is thinking,
+    ///    it produces a `Cmd::Continue(ContinueExecution::Break)` command to break the execution.
+    /// 2. If the console prompt is not empty, it clears the prompt input.
+    /// 3. If neither of the above conditions is met, it cancels the application exit.
     fn handle_interrupt(&mut self) -> Option<Cmd> {
         if self.state.execution_turn.is_some()
             || matches!(
@@ -397,6 +403,12 @@ where
                 "input event is interrupt, producing continue command to break execution"
             );
             Some(Cmd::Continue(ContinueExecution::Break))
+        } else if let Some(console) = self.state.active_component.console_mut()
+            && !console.prompt.is_empty()
+        {
+            tracing::debug!("input event is interrupt, clearing console prompt input");
+            console.prompt.clear();
+            None
         } else {
             tracing::debug!("input event is interrupt, but router is not thinking, exiting");
             self.context.exit.cancel();
@@ -899,6 +911,33 @@ mod tests {
             .expect("thinking interrupt produces a command");
 
         assert_eq!(cmd, Cmd::Continue(ContinueExecution::Break));
+    }
+
+    #[test]
+    fn interrupt_clears_console_prompt_without_exiting() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit.clone()));
+        tui.on_input(InputEvent::Paste("draft prompt".to_owned()));
+
+        assert_eq!(tui.on_input(InputEvent::Interrupt), None);
+
+        let console = tui
+            .state
+            .active_component
+            .console()
+            .expect("console view is active");
+        assert_eq!(console.prompt.input(), "");
+        assert!(!exit.is_cancelled());
+    }
+
+    #[test]
+    fn interrupt_on_empty_console_exits_application() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit.clone()));
+
+        assert_eq!(tui.on_input(InputEvent::Interrupt), None);
+
+        assert!(exit.is_cancelled());
     }
 
     #[test]
