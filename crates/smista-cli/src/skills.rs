@@ -25,11 +25,6 @@
 //! [`store`] the discovery and lookup logic, [`warning`] and [`error`] the
 //! reported findings, and [`front_matter`] the `SKILL.md` parsing helpers.
 
-#![expect(
-    dead_code,
-    reason = "skills types are consumed by the interactive CLI in milestone M6"
-)]
-
 mod entry;
 mod error;
 mod front_matter;

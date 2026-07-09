@@ -306,8 +306,12 @@ smista 0.0.0
 
 ## Interactive slash commands
 
-Interactive slash-command documentation will be added as commands are
-implemented.
+Type slash commands at the interactive prompt.
+
+- `/resume [session-id]` resumes a specific session when an ID is provided.
+  Without an ID, it lists existing sessions for the current workspace. Use
+  arrow keys to choose a session, then press Enter to load its transcript.
+- `/quit`, `/q`, or `/exit` closes the interactive CLI.
 
 ## Referencing files
 

@@ -56,11 +56,11 @@ impl RouterClient {
         &mut self,
     ) -> anyhow::Result<()> {
         if self.state == State::Idle {
-            tracing::warn!("tried to interrupt active run, but no active run is present");
+            tracing::debug!("tried to interrupt active run, but no active run is present");
             return Ok(());
         }
         let Some(id) = self.session_id() else {
-            tracing::warn!("tried to interrupt active run, but no session id is present");
+            tracing::debug!("tried to interrupt active run, but no session id is present");
             return Ok(());
         };
         tracing::debug!("interrupting active run");
