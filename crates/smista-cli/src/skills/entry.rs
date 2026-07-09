@@ -1,6 +1,6 @@
 //! The per-skill record produced by discovery.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use super::SKILL_FILE;
 
@@ -20,12 +20,6 @@ impl SkillEntry {
     /// Creates an entry for a skill discovered at `dir`.
     pub(super) fn new(dir: PathBuf, description: String) -> Self {
         Self { dir, description }
-    }
-
-    /// Returns the skill's directory.
-    #[must_use]
-    pub fn path(&self) -> &Path {
-        &self.dir
     }
 
     /// Returns the skill's description from its front matter.

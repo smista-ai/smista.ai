@@ -124,7 +124,7 @@ impl State {
     }
 
     /// Shows the skill list view without changing history.
-    pub fn show_skill_list(&mut self, skills: Vec<SkillEntry>) {
+    pub fn show_skill_list(&mut self, skills: Vec<(String, SkillEntry)>) {
         let entry_count = skills.len();
         self.active_component = ActiveComponentState::SkillList(ListState::new(skills));
         self.trace_active_component(COMPONENT_SKILL_LIST, Some(entry_count));

@@ -184,7 +184,8 @@ fn render_skill_list_select_view() {
     .expect("skill descriptor is written");
     let store = SkillStore::discover(&tui.context.cwd);
     let skill = store.get("example").expect("skill is discovered").clone();
-    tui.state.show_skill_list(vec![skill]);
+    tui.state
+        .show_skill_list(vec![("example".to_string(), skill)]);
 
     tui.view().expect("skill list view renders");
 

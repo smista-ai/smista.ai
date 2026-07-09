@@ -32,7 +32,7 @@ pub enum ActiveComponentState {
     /// Sessions list view.
     SessionsList(ListState<SessionListItem>),
     /// Skill list view.
-    SkillList(ListState<SkillEntry>),
+    SkillList(ListState<(String, SkillEntry)>),
     /// Tracing list view.
     TracingList(ListState<TraceEvent>),
     /// Usage information view.
@@ -110,7 +110,7 @@ impl ActiveComponentState {
 
     /// Returns the skill list state when active.
     #[must_use]
-    pub fn skill_list(&self) -> Option<&ListState<SkillEntry>> {
+    pub fn skill_list(&self) -> Option<&ListState<(String, SkillEntry)>> {
         match self {
             Self::SkillList(state) => Some(state),
             _ => None,
@@ -119,7 +119,7 @@ impl ActiveComponentState {
 
     /// Returns the mutable skill list state when active.
     #[must_use]
-    pub fn skill_list_mut(&mut self) -> Option<&mut ListState<SkillEntry>> {
+    pub fn skill_list_mut(&mut self) -> Option<&mut ListState<(String, SkillEntry)>> {
         match self {
             Self::SkillList(state) => Some(state),
             _ => None,

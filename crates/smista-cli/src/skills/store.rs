@@ -42,6 +42,12 @@ impl SkillStore {
         store
     }
 
+    pub fn skills(&self) -> impl Iterator<Item = (&str, &SkillEntry)> {
+        self.skills
+            .iter()
+            .map(|(name, entry)| (name.as_str(), entry))
+    }
+
     /// Reads `path`'s immediate subdirectories as skills, skipping any name that
     /// is already known (preserving earlier-root precedence and avoiding IO).
     fn ingest(&mut self, path: &Path) {
@@ -308,6 +314,38 @@ mod tests {
             "Enforce Rust style."
         );
         assert!(store.warnings().is_empty());
+    }
+
+    #[test]
+    fn should_iterate_discovered_skills_with_names() {
+        let root = temp_root("iterate");
+        write_skill(
+            &root,
+            "beta",
+            "name: beta\ndescription: Beta skill.",
+            "Beta body.",
+        );
+        write_skill(
+            &root,
+            "alpha",
+            "name: alpha\ndescription: Alpha skill.",
+            "Alpha body.",
+        );
+        let mut store = SkillStore::default();
+        store.ingest(&root);
+
+        let skills = store
+            .skills()
+            .map(|(name, entry)| (name.to_owned(), entry.description().to_owned()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            skills,
+            vec![
+                ("alpha".to_owned(), "Alpha skill.".to_owned()),
+                ("beta".to_owned(), "Beta skill.".to_owned())
+            ]
+        );
     }
 
     #[test]
