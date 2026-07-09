@@ -31,6 +31,7 @@ where
                         &self.context.cwd,
                     );
                 }
+                ActiveComponentState::LogsList(_logs_list) => todo!(),
                 ActiveComponentState::SkillList(_list_state) => todo!(),
                 ActiveComponentState::ModelsList(_list_state) => todo!(),
                 ActiveComponentState::ProvidersList(_list_state) => todo!(),

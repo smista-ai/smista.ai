@@ -198,7 +198,7 @@ pub struct RoutingPolicy {
 ///
 /// let route: DefaultRoute = serde_json::from_value(serde_json::json!({
 ///     "model": "openai/gpt-5.5-mini",
-///     "fallbacks": ["ollama/qwen2.5-coder"],
+///     "fallbacks": ["ollama/qwen2.5-coder:7b"],
 /// }))
 /// .unwrap();
 /// assert_eq!(route.model.to_string(), "openai/gpt-5.5-mini");
@@ -271,12 +271,12 @@ mod tests {
             "name": "summarize on a local model",
             "priority": 20,
             "intent": "summarize",
-            "model": "ollama/qwen2.5-coder",
+            "model": "ollama/qwen2.5-coder:7b",
             "fallbacks": ["openai/gpt-5.5-mini"],
         }))
         .unwrap();
         assert_eq!(rule.intent, Some(TaskIntent::Summarize));
-        assert_eq!(rule.model.to_string(), "ollama/qwen2.5-coder");
+        assert_eq!(rule.model.to_string(), "ollama/qwen2.5-coder:7b");
         assert_eq!(rule.fallbacks.len(), 1);
         assert_eq!(rule.fallbacks[0].to_string(), "openai/gpt-5.5-mini");
     }
@@ -290,7 +290,7 @@ mod tests {
             "intent": "review",
             "paths": ["src/crypto/**", "src/auth/**"],
             "local_only": true,
-            "model": "ollama/qwen2.5-coder",
+            "model": "ollama/qwen2.5-coder:7b",
         }))
         .unwrap();
         assert_eq!(rule.priority, 5);
@@ -308,7 +308,7 @@ mod tests {
         let policy: RoutingPolicy = serde_json::from_value(serde_json::json!({
             "default": {
                 "model": "openai/gpt-5.5-mini",
-                "fallbacks": ["ollama/qwen2.5-coder"],
+                "fallbacks": ["ollama/qwen2.5-coder:7b"],
             },
             "rules": [{
                 "name": "plan with strongest reasoning model",
@@ -344,7 +344,7 @@ mod tests {
             }],
             default: Some(DefaultRoute {
                 model: "openai/gpt-5.5-mini".parse().unwrap(),
-                fallbacks: vec!["ollama/qwen2.5-coder".parse().unwrap()],
+                fallbacks: vec!["ollama/qwen2.5-coder:7b".parse().unwrap()],
             }),
         };
         let json = serde_json::to_string(&policy).unwrap();

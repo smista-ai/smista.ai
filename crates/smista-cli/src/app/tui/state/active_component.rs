@@ -1,5 +1,7 @@
 //! Active replacement view state for the TUI.
 
+use std::fmt;
+
 use smista_sdk::core::api::SessionUsageResponse;
 
 use super::list::ListState;
@@ -7,8 +9,9 @@ use crate::app::router_client::msg::{Model, Provider, SessionListItem, TraceEven
 use crate::app::tui::state::console::ConsoleState;
 use crate::skills::SkillEntry;
 
-const COMPONENT_MODELS_LIST: &str = "models_list";
 const COMPONENT_CONSOLE: &str = "console";
+const COMPONENT_LOGS_LIST: &str = "logs_list";
+const COMPONENT_MODELS_LIST: &str = "models_list";
 const COMPONENT_PROVIDERS_LIST: &str = "providers_list";
 const COMPONENT_SESSIONS_LIST: &str = "sessions_list";
 const COMPONENT_SKILL_LIST: &str = "skill_list";
@@ -20,32 +23,63 @@ const COMPONENT_USAGE: &str = "usage";
 pub enum ActiveComponentState {
     /// Main console view.
     Console(ConsoleState),
-    /// Skill list view.
-    SkillList(ListState<SkillEntry>),
+    /// Logs list view.
+    LogsList(ListState<String>),
     /// Models list view.
     ModelsList(ListState<Model>),
     /// Providers list view.
     ProvidersList(ListState<Provider>),
-    /// Usage information view.
-    Usage(UsageState),
-    /// Tracing list view.
-    TracingList(ListState<TraceEvent>),
     /// Sessions list view.
     SessionsList(ListState<SessionListItem>),
+    /// Skill list view.
+    SkillList(ListState<SkillEntry>),
+    /// Tracing list view.
+    TracingList(ListState<TraceEvent>),
+    /// Usage information view.
+    Usage(UsageState),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActiveComponentKind {
+    Console,
+    SkillList,
+    LogsList,
+    ModelsList,
+    ProvidersList,
+    Usage,
+    TracingList,
+    SessionsList,
+}
+
+impl fmt::Display for ActiveComponentKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let kind_str = match self {
+            Self::Console => COMPONENT_CONSOLE,
+            Self::SkillList => COMPONENT_SKILL_LIST,
+            Self::LogsList => COMPONENT_LOGS_LIST,
+            Self::ModelsList => COMPONENT_MODELS_LIST,
+            Self::ProvidersList => COMPONENT_PROVIDERS_LIST,
+            Self::Usage => COMPONENT_USAGE,
+            Self::TracingList => COMPONENT_TRACING_LIST,
+            Self::SessionsList => COMPONENT_SESSIONS_LIST,
+        };
+        write!(f, "{}", kind_str)
+    }
 }
 
 impl ActiveComponentState {
     /// Returns a stable label for tracing and diagnostics.
     #[must_use]
-    pub fn kind(&self) -> &'static str {
+    pub fn kind(&self) -> ActiveComponentKind {
         match self {
-            Self::Console(_) => COMPONENT_CONSOLE,
-            Self::SkillList(_) => COMPONENT_SKILL_LIST,
-            Self::ModelsList(_) => COMPONENT_MODELS_LIST,
-            Self::ProvidersList(_) => COMPONENT_PROVIDERS_LIST,
-            Self::Usage(_) => COMPONENT_USAGE,
-            Self::TracingList(_) => COMPONENT_TRACING_LIST,
-            Self::SessionsList(_) => COMPONENT_SESSIONS_LIST,
+            Self::Console(_) => ActiveComponentKind::Console,
+            Self::SkillList(_) => ActiveComponentKind::SkillList,
+            Self::LogsList(_) => ActiveComponentKind::LogsList,
+            Self::ModelsList(_) => ActiveComponentKind::ModelsList,
+            Self::ProvidersList(_) => ActiveComponentKind::ProvidersList,
+            Self::Usage(_) => ActiveComponentKind::Usage,
+            Self::TracingList(_) => ActiveComponentKind::TracingList,
+            Self::SessionsList(_) => ActiveComponentKind::SessionsList,
         }
     }
 
@@ -271,7 +305,7 @@ mod tests {
     fn default_component_is_prompt() {
         let state = ActiveComponentState::default();
 
-        assert_eq!(state.kind(), COMPONENT_CONSOLE);
+        assert_eq!(state.kind(), ActiveComponentKind::Console);
         assert!(state.console().is_some());
     }
 
@@ -296,12 +330,12 @@ mod tests {
     #[test]
     fn list_accessors_only_match_their_component() {
         let mut skills = ActiveComponentState::SkillList(ListState::default());
-        assert_eq!(skills.kind(), COMPONENT_SKILL_LIST);
+        assert_eq!(skills.kind(), ActiveComponentKind::SkillList);
         assert!(skills.skill_list().expect("skill list").is_empty());
         skills.skill_list_mut().expect("skill list").next();
 
         let mut models = ActiveComponentState::ModelsList(ListState::new(vec![model()]));
-        assert_eq!(models.kind(), COMPONENT_MODELS_LIST);
+        assert_eq!(models.kind(), ActiveComponentKind::ModelsList);
         assert_eq!(
             models.models_list().expect("models list").entries().len(),
             1
@@ -312,7 +346,7 @@ mod tests {
             name: PROVIDER_NAME.to_owned(),
             local: false,
         }]));
-        assert_eq!(providers.kind(), COMPONENT_PROVIDERS_LIST);
+        assert_eq!(providers.kind(), ActiveComponentKind::ProvidersList);
         assert_eq!(
             providers
                 .providers_list()
@@ -328,7 +362,7 @@ mod tests {
             .next();
 
         let mut traces = ActiveComponentState::TracingList(ListState::new(vec![trace_event()]));
-        assert_eq!(traces.kind(), COMPONENT_TRACING_LIST);
+        assert_eq!(traces.kind(), ActiveComponentKind::TracingList);
         assert_eq!(
             traces
                 .tracing_list()
@@ -347,7 +381,7 @@ mod tests {
                 scope: None,
                 updated_at: SESSION_UPDATED_AT.to_owned(),
             }]));
-        assert_eq!(sessions.kind(), COMPONENT_SESSIONS_LIST);
+        assert_eq!(sessions.kind(), ActiveComponentKind::SessionsList);
         assert_eq!(
             sessions
                 .sessions_list()
@@ -370,7 +404,7 @@ mod tests {
     fn usage_state_can_be_read_and_replaced() {
         let mut state = ActiveComponentState::Usage(UsageState::new(usage_response(10)));
 
-        assert_eq!(state.kind(), COMPONENT_USAGE);
+        assert_eq!(state.kind(), ActiveComponentKind::Usage);
         assert_eq!(
             state
                 .usage()

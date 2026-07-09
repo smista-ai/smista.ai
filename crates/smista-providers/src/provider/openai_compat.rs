@@ -365,7 +365,7 @@ mod tests {
 
     #[tokio::test]
     async fn should_list_configured_models() {
-        let provider = provider_with(&["llama-3.1-70b", "qwen2.5-coder"]);
+        let provider = provider_with(&["llama-3.1-70b", "qwen2.5-coder:7b"]);
 
         let mut listed: Vec<String> = provider
             .list_models(&authentication())
@@ -376,7 +376,7 @@ mod tests {
             .collect();
         listed.sort();
 
-        assert_eq!(listed, vec!["llama-3.1-70b", "qwen2.5-coder"]);
+        assert_eq!(listed, vec!["llama-3.1-70b", "qwen2.5-coder:7b"]);
     }
 
     #[tokio::test]

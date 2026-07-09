@@ -23,6 +23,14 @@ pub enum InputEvent {
     Backspace,
     /// Delete
     Delete,
+    /// Home key
+    Home,
+    /// End key
+    End,
+    /// Page Up key
+    PageUp,
+    /// Page Down key
+    PageDown,
     /// Enter key
     Enter,
     /// Tab key
@@ -63,6 +71,10 @@ impl InputEvent {
             Self::Right => "right",
             Self::Backspace => "backspace",
             Self::Delete => "delete",
+            Self::Home => "home",
+            Self::End => "end",
+            Self::PageUp => "page_up",
+            Self::PageDown => "page_down",
             Self::Newline => "newline",
         }
     }
@@ -142,6 +154,10 @@ impl InputListener {
             InputEvent::Right => tracing::trace!("InputListener received arrow right key"),
             InputEvent::Backspace => tracing::trace!("InputListener received backspace key"),
             InputEvent::Delete => tracing::trace!("InputListener received delete key"),
+            InputEvent::Home => tracing::trace!("InputListener received home key"),
+            InputEvent::End => tracing::trace!("InputListener received end key"),
+            InputEvent::PageUp => tracing::trace!("InputListener received page up key"),
+            InputEvent::PageDown => tracing::trace!("InputListener received page down key"),
             InputEvent::Newline => tracing::trace!("InputListener received newline key"),
         }
 
@@ -207,6 +223,30 @@ fn decode_event(event: Event) -> Option<InputEvent> {
             kind,
             state: _,
         }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Delete),
+        Event::Key(KeyEvent {
+            code: KeyCode::Home,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::Home),
+        Event::Key(KeyEvent {
+            code: KeyCode::End,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::End),
+        Event::Key(KeyEvent {
+            code: KeyCode::PageUp,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::PageUp),
+        Event::Key(KeyEvent {
+            code: KeyCode::PageDown,
+            modifiers,
+            kind,
+            state: _,
+        }) if modifiers.is_empty() && is_edit_key_event(kind) => Some(InputEvent::PageDown),
         Event::Key(KeyEvent {
             code: KeyCode::Enter,
             modifiers,
@@ -326,6 +366,22 @@ mod tests {
             (
                 Event::Key(KeyEvent::new(KeyCode::Delete, KeyModifiers::empty())),
                 InputEvent::Delete,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::Home, KeyModifiers::empty())),
+                InputEvent::Home,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::End, KeyModifiers::empty())),
+                InputEvent::End,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::empty())),
+                InputEvent::PageUp,
+            ),
+            (
+                Event::Key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::empty())),
+                InputEvent::PageDown,
             ),
             (
                 Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::empty())),

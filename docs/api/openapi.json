@@ -1945,7 +1945,7 @@
       },
       "DefaultRoute": {
         "type": "object",
-        "description": "The default route, applied when no routing rule matches.\n\nMirrors the `[routing.default]` table.\n\n# Examples\n\n```\nuse smista_core::policy::DefaultRoute;\n\nlet route: DefaultRoute = serde_json::from_value(serde_json::json!({\n    \"model\": \"openai/gpt-5.5-mini\",\n    \"fallbacks\": [\"ollama/qwen2.5-coder\"],\n}))\n.unwrap();\nassert_eq!(route.model.to_string(), \"openai/gpt-5.5-mini\");\n```",
+        "description": "The default route, applied when no routing rule matches.\n\nMirrors the `[routing.default]` table.\n\n# Examples\n\n```\nuse smista_core::policy::DefaultRoute;\n\nlet route: DefaultRoute = serde_json::from_value(serde_json::json!({\n    \"model\": \"openai/gpt-5.5-mini\",\n    \"fallbacks\": [\"ollama/qwen2.5-coder:7b\"],\n}))\n.unwrap();\nassert_eq!(route.model.to_string(), \"openai/gpt-5.5-mini\");\n```",
         "required": [
           "model"
         ],

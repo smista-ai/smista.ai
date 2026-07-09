@@ -15,7 +15,7 @@ mod turn;
 
 use smista_sdk::core::model::ModelReference;
 
-pub use self::active_component::{ActiveComponentState, UsageState};
+pub use self::active_component::{ActiveComponentKind, ActiveComponentState, UsageState};
 pub use self::console::ConsoleState;
 pub use self::history::HistoryEntry;
 pub use self::list::ListState;
@@ -169,7 +169,7 @@ impl State {
         let message = message_kind(&msg);
         tracing::trace!(
             message,
-            active_component = self.active_component.kind(),
+            active_component = self.active_component.kind().to_string(),
             router.state = self.router.kind(),
             history.entries = self.history.len(),
             "applying tui state message"
@@ -256,7 +256,7 @@ impl State {
 
         tracing::trace!(
             message,
-            active_component = self.active_component.kind(),
+            active_component = self.active_component.kind().to_string(),
             router.state = self.router.kind(),
             history.entries = self.history.len(),
             "applied tui state message"

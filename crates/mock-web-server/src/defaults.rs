@@ -250,7 +250,7 @@ pub fn list_models() -> ListModelsResponse {
     ListModelsResponse {
         models: vec![ModelDescriptor {
             provider: Provider::Ollama,
-            model: "qwen2.5-coder".to_owned(),
+            model: "qwen2.5-coder:7b".to_owned(),
             display_name: None,
             local: true,
             auth: ModelAuthRequirement::None,

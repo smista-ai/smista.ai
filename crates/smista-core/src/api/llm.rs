@@ -18,7 +18,7 @@
 //! let response = ListModelsResponse {
 //!     models: vec![ModelDescriptor {
 //!         provider: Provider::Ollama,
-//!         model: "qwen2.5-coder".to_string(),
+//!         model: "qwen2.5-coder:7b".to_string(),
 //!         display_name: None,
 //!         local: true,
 //!         auth: ModelAuthRequirement::None,
@@ -120,7 +120,7 @@ mod tests {
                 },
                 {
                     "provider": "ollama",
-                    "model": "qwen2.5-coder",
+                    "model": "qwen2.5-coder:7b",
                     "display_name": null,
                     "local": true,
                     "auth": "none",
@@ -146,7 +146,7 @@ mod tests {
         let response = ListModelsResponse {
             models: vec![ModelDescriptor {
                 provider: Provider::Ollama,
-                model: "qwen2.5-coder".to_string(),
+                model: "qwen2.5-coder:7b".to_string(),
                 display_name: None,
                 local: true,
                 auth: crate::model::ModelAuthRequirement::None,

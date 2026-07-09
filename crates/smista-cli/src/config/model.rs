@@ -66,7 +66,7 @@ impl Default for Config {
 fn default_model_reference() -> ModelReference {
     ModelReference {
         provider: Provider::Ollama,
-        model: "qwen2.5-coder".to_string(),
+        model: "qwen2.5-coder:7b".to_string(),
     }
 }
 
@@ -171,7 +171,7 @@ mod tests {
         assert!(config.providers.contains_key(&Provider::Ollama));
         assert_eq!(
             config.routing.default.unwrap().model.to_string(),
-            "ollama/qwen2.5-coder"
+            "ollama/qwen2.5-coder:7b"
         );
     }
 

@@ -112,13 +112,6 @@ pub struct ApprovalDecision {
 }
 
 /// Result of an approval prompt.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Approval outcomes are scaffolded before TUI routing is wired."
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApprovalOutcome {
     /// The user approved the request.
@@ -128,13 +121,6 @@ pub enum ApprovalOutcome {
 }
 
 /// Persistence scope for an approval decision.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Approval scopes are scaffolded before TUI routing is wired."
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApprovalScope {
     /// Apply the approval decision only to the current request.

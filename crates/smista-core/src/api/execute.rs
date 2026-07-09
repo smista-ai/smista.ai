@@ -494,7 +494,7 @@ mod tests {
             "routing": {
                 "default": {
                     "model": "anthropic/claude-sonnet",
-                    "fallbacks": ["openai/gpt-5.5-thinking", "ollama/qwen2.5-coder"]
+                    "fallbacks": ["openai/gpt-5.5-thinking", "ollama/qwen2.5-coder:7b"]
                 },
                 "rules": [
                     {
