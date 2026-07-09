@@ -117,9 +117,20 @@ impl Default for RouterConfig {
             cors: CorsConfig::default(),
             retention: RetentionConfig::default(),
             ollama: OllamaConfig::default(),
-            providers: BTreeMap::new(),
+            providers: default_providers(),
         }
     }
+}
+
+/// Defines the default set of providers the router knows about.
+fn default_providers() -> BTreeMap<Provider, RouterProviderConfig> {
+    let mut map = BTreeMap::new();
+    map.insert(Provider::Anthropic, RouterProviderConfig::default());
+    map.insert(Provider::Gemini, RouterProviderConfig::default());
+    map.insert(Provider::Ollama, RouterProviderConfig::default());
+    map.insert(Provider::OpenAI, RouterProviderConfig::default());
+
+    map
 }
 
 /// Per-provider endpoint configuration on the router.
@@ -727,8 +738,26 @@ mod tests {
     }
 
     #[test]
-    fn should_default_to_empty_providers() {
-        assert!(RouterConfig::default().providers.is_empty());
+    fn should_default_to_known_providers() {
+        let providers = RouterConfig::default().providers;
+
+        assert_eq!(providers.len(), 4);
+        assert_eq!(
+            providers[&Provider::Anthropic],
+            RouterProviderConfig::default()
+        );
+        assert_eq!(
+            providers[&Provider::Gemini],
+            RouterProviderConfig::default()
+        );
+        assert_eq!(
+            providers[&Provider::Ollama],
+            RouterProviderConfig::default()
+        );
+        assert_eq!(
+            providers[&Provider::OpenAI],
+            RouterProviderConfig::default()
+        );
     }
 
     #[test]

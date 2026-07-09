@@ -43,11 +43,11 @@ impl fmt::Debug for Router {
 impl Router {
     /// Builds the router from `config`, opening providers against `database`.
     ///
-    /// Ollama's local daemon is enabled through `[router.ollama]`; every other
-    /// provider is opt-in under `[router.providers.<id>]`, so only the providers
-    /// a deployment configures are registered. All providers share one memory
-    /// backend and the same preamble; credentials are not held here but
-    /// supplied per request when a model is resolved.
+    /// Ollama's local daemon is enabled through `[router.ollama]`; built-in
+    /// cloud providers are seeded by the default router config, and extra
+    /// provider instances are declared under `[router.providers.<id>]`. All
+    /// providers share one memory backend and the same preamble; credentials are
+    /// not held here but supplied per request when a model is resolved.
     ///
     /// # Errors
     ///
