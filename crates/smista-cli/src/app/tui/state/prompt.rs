@@ -1,15 +1,15 @@
 //! Prompt state for the main TUI component.
 
 const COMMAND_EXIT: &str = "exit";
-const COMMAND_MODELS: &str = "models";
 const COMMAND_Q: &str = "q";
 const COMMAND_QUIT: &str = "quit";
+const COMMAND_RESUME: &str = "resume";
 
 const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_EXIT, Command::Quit),
-    (COMMAND_MODELS, Command::ListModels),
     (COMMAND_Q, Command::Quit),
     (COMMAND_QUIT, Command::Quit),
+    (COMMAND_RESUME, Command::Resume),
 ];
 
 /// State for prompt input.
@@ -211,13 +211,6 @@ impl PromptState {
         }
     }
 
-    /// Advances the selected command suggestion.
-    pub fn next_suggestion(&mut self) {
-        if let Self::Command(state) = self {
-            state.next_suggestion();
-        }
-    }
-
     fn command_input(&self) -> String {
         match self {
             Self::Command(state) => state.input.clone(),
@@ -301,8 +294,7 @@ pub struct CommandPromptState {
     command_name: String,
     command: Command,
     args: String,
-    suggestions: Vec<String>,
-    index: usize,
+    suggestion: Option<String>,
     cursor: usize,
 }
 
@@ -311,6 +303,12 @@ impl CommandPromptState {
     #[must_use]
     pub fn input(&self) -> &str {
         &self.input
+    }
+
+    /// Returns the resolved command and arguments.
+    #[must_use]
+    pub fn resolved(&self) -> (Command, Vec<String>) {
+        (self.command.clone(), parsed_args(&self.args))
     }
 
     /// Returns the command name exactly as typed.
@@ -334,18 +332,7 @@ impl CommandPromptState {
     /// Returns the selected command suggestion.
     #[must_use]
     pub fn current_suggestion(&self) -> Option<&str> {
-        self.suggestions
-            .get(self.index.min(self.suggestions.len().saturating_sub(1)))
-            .map(String::as_str)
-    }
-
-    /// Advances to the next command suggestion.
-    pub fn next_suggestion(&mut self) {
-        if self.suggestions.is_empty() {
-            return;
-        }
-
-        self.index = (self.index + 1) % self.suggestions.len();
+        self.suggestion.as_deref()
     }
 
     /// Accepts the currently selected command suggestion.
@@ -354,7 +341,7 @@ impl CommandPromptState {
             return false;
         }
 
-        let Some(suggestion) = self.current_suggestion().map(ToOwned::to_owned) else {
+        let Some(suggestion) = self.suggestion.clone() else {
             return false;
         };
         let Some(command) = suggestion.strip_prefix('/') else {
@@ -419,8 +406,7 @@ impl CommandPromptState {
         self.command_name = command.to_owned();
         self.command = parse_command(command);
         self.args = args.to_owned();
-        self.suggestions = command_suggestions(command);
-        self.index = 0;
+        self.suggestion = command_suggestion(command);
         self.cursor = self.cursor.min(char_len(&self.input));
     }
 
@@ -435,8 +421,8 @@ impl CommandPromptState {
 /// A recognized or in-progress slash command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    /// `/models` command, lists the available models.
-    ListModels,
+    /// `/resume` command. Lists sessions, or resumes a session when an ID is passed.
+    Resume,
     /// `/quit`, `/q`, or `/exit` command, exits the application.
     Quit,
     /// Still unresolved
@@ -448,8 +434,8 @@ impl Command {
     #[must_use]
     pub fn input_name(&self) -> &str {
         match self {
-            Self::ListModels => COMMAND_MODELS,
             Self::Quit => COMMAND_QUIT,
+            Self::Resume => COMMAND_RESUME,
             Self::Unresolved(command) => command,
         }
     }
@@ -464,8 +450,7 @@ fn command_prompt(input: impl AsRef<str>) -> PromptState {
         command_name: command.to_owned(),
         command: parse_command(command),
         args: args.to_owned(),
-        suggestions: command_suggestions(command),
-        index: 0,
+        suggestion: command_suggestion(command),
         cursor: input.chars().count(),
     })
 }
@@ -542,6 +527,10 @@ fn split_command_input(input: &str) -> (&str, &str) {
         .map_or((input, ""), |(command, args)| (command, args.trim_start()))
 }
 
+fn parsed_args(args: &str) -> Vec<String> {
+    args.split_whitespace().map(ToOwned::to_owned).collect()
+}
+
 fn parse_command(command: &str) -> Command {
     COMMAND_SPECS
         .iter()
@@ -549,30 +538,28 @@ fn parse_command(command: &str) -> Command {
         .unwrap_or_else(|| Command::Unresolved(command.to_owned()))
 }
 
-fn command_suggestions(prefix: &str) -> Vec<String> {
+fn command_suggestion(prefix: &str) -> Option<String> {
     if prefix.is_empty() {
-        return Vec::new();
+        return None;
     }
 
-    COMMAND_SPECS
-        .iter()
-        .filter_map(|(name, _)| {
-            (name.starts_with(prefix) && *name != prefix).then_some(format!("/{name}"))
-        })
-        .collect()
+    COMMAND_SPECS.iter().find_map(|(name, _)| {
+        (name.starts_with(prefix) && *name != prefix).then_some(format!("/{name}"))
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{COMMAND_MODELS, COMMAND_QUIT, Command, PromptState, TextPromptState};
+    use super::{COMMAND_QUIT, COMMAND_RESUME, Command, PromptState, TextPromptState};
 
     const HELLO_INPUT: &str = "hello";
     const HELLO_SUFFIX: &str = "ello";
-    const MODELS_SUGGESTION: &str = "/models";
+    const RESUME_SUGGESTION: &str = "/resume";
     const QUIT_COMMAND_INPUT: &str = "quit now";
     const QUIT_INPUT: &str = "/quit now";
     const QUIT_ARGUMENTS: &str = "now";
     const QUIT_SUGGESTION: &str = "/quit";
+    const SESSION_ID: &str = "00000000-0000-0000-0000-000000000001";
 
     #[test]
     fn push_regular_character_starts_text_prompt() {
@@ -596,21 +583,20 @@ mod tests {
         let mut state = PromptState::default();
 
         state.push('/');
-        state.push_str(COMMAND_MODELS);
+        state.push_str(COMMAND_RESUME);
 
         assert_eq!(
             state,
             PromptState::Command(super::CommandPromptState {
-                input: COMMAND_MODELS.to_owned(),
-                command_name: COMMAND_MODELS.to_owned(),
-                command: Command::ListModels,
+                input: COMMAND_RESUME.to_owned(),
+                command_name: COMMAND_RESUME.to_owned(),
+                command: Command::Resume,
                 args: String::new(),
-                suggestions: Vec::new(),
-                index: 0,
-                cursor: COMMAND_MODELS.chars().count(),
+                suggestion: None,
+                cursor: COMMAND_RESUME.chars().count(),
             })
         );
-        assert_eq!(state.input(), MODELS_SUGGESTION);
+        assert_eq!(state.input(), RESUME_SUGGESTION);
         assert_eq!(state.current_suggestion(), None);
     }
 
@@ -627,11 +613,33 @@ mod tests {
                 command_name: COMMAND_QUIT.to_owned(),
                 command: Command::Quit,
                 args: QUIT_ARGUMENTS.to_owned(),
-                suggestions: Vec::new(),
-                index: 0,
+                suggestion: None,
                 cursor: QUIT_COMMAND_INPUT.chars().count(),
             })
         );
+    }
+
+    #[test]
+    fn command_prompt_trims_extra_argument_spacing() {
+        let mut state = PromptState::default();
+
+        state.push_str("/resume    ");
+        state.push_str(SESSION_ID);
+
+        assert_eq!(state.command(), Some(&Command::Resume));
+        assert_eq!(state.command_args(), Some(SESSION_ID));
+    }
+
+    #[test]
+    fn quit_aliases_parse_as_quit() {
+        for input in ["/q", "/exit"] {
+            let mut state = PromptState::default();
+
+            state.push_str(input);
+
+            assert_eq!(state.command(), Some(&Command::Quit));
+            assert_eq!(state.command().map(Command::input_name), Some(COMMAND_QUIT));
+        }
     }
 
     #[test]
@@ -645,12 +653,10 @@ mod tests {
     }
 
     #[test]
-    fn tab_cycles_command_suggestions() {
+    fn command_suggestion_uses_first_matching_command() {
         let mut state = PromptState::default();
 
         state.push_str("/e");
-        assert_eq!(state.current_suggestion(), Some("/exit"));
-        state.next_suggestion();
         assert_eq!(state.current_suggestion(), Some("/exit"));
     }
 
@@ -699,7 +705,6 @@ mod tests {
         state.move_end();
         state.move_up();
         state.move_down();
-        state.next_suggestion();
 
         assert_eq!(state.cursor_position(), 0);
         assert_eq!(state.command(), None);
@@ -732,6 +737,34 @@ mod tests {
         state.clear();
         state.push_str("/unknown");
         assert_eq!(state.command().map(Command::input_name), Some("unknown"));
+    }
+
+    #[test]
+    fn command_delete_reparses_command_name() {
+        let mut state = PromptState::default();
+
+        state.push_str("/resume now");
+        state.move_home();
+        assert_eq!(state.delete(), Some('r'));
+
+        assert_eq!(
+            state.command(),
+            Some(&Command::Unresolved("esume".to_owned()))
+        );
+        assert_eq!(state.command_args(), Some("now"));
+        assert_eq!(state.input(), "/esume now");
+    }
+
+    #[test]
+    fn command_backspace_at_command_start_is_noop() {
+        let mut state = PromptState::default();
+
+        state.push_str("/resume");
+        state.move_home();
+
+        assert_eq!(state.backspace(), None);
+        assert_eq!(state.input(), "/resume");
+        assert_eq!(state.command(), Some(&Command::Resume));
     }
 
     #[test]
@@ -803,6 +836,22 @@ mod tests {
     }
 
     #[test]
+    fn delete_at_end_is_noop() {
+        let mut state = PromptState::default();
+
+        state.push_str("abc");
+
+        assert_eq!(state.delete(), None);
+        assert_eq!(state.input(), "abc");
+
+        state.clear();
+        state.push_str("/resume");
+
+        assert_eq!(state.delete(), None);
+        assert_eq!(state.input(), "/resume");
+    }
+
+    #[test]
     fn backspace_removes_character_before_cursor() {
         let mut state = PromptState::default();
 
@@ -866,5 +915,60 @@ mod tests {
 
         assert_eq!(state.input(), "/acb");
         assert_eq!(state.cursor_position(), 3);
+    }
+
+    #[test]
+    fn unicode_prompt_editing_uses_character_positions() {
+        let mut state = PromptState::default();
+
+        state.push_str("aé");
+        state.move_left();
+        state.push('b');
+
+        assert_eq!(state.input(), "abé");
+        assert_eq!(state.cursor_position(), 2);
+        assert_eq!(state.delete(), Some('é'));
+        assert_eq!(state.input(), "ab");
+    }
+
+    #[test]
+    fn vertical_movement_at_boundaries_is_noop() {
+        let mut state = PromptState::default();
+
+        state.push_str("ab\ncd");
+        state.move_home();
+        state.move_up();
+        assert_eq!(state.cursor_position(), 0);
+
+        state.move_end();
+        state.move_down();
+        assert_eq!(state.cursor_position(), 5);
+    }
+
+    #[test]
+    fn should_parse_resume() {
+        let mut state = PromptState::default();
+
+        state.push_str("/resume");
+
+        assert_eq!(state.command(), Some(&Command::Resume));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/resume");
+    }
+
+    #[test]
+    fn should_return_resolved_command_and_args() {
+        let mut state = PromptState::default();
+
+        state.push_str("/resume ");
+        state.push_str(SESSION_ID);
+
+        let PromptState::Command(command) = state else {
+            panic!("command prompt expected");
+        };
+        assert_eq!(
+            command.resolved(),
+            (Command::Resume, vec![SESSION_ID.to_owned()])
+        );
     }
 }

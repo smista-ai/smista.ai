@@ -200,30 +200,65 @@ impl SkillStore {
     }
 
     /// Returns whether a skill with `name` was discovered.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Skill lookup helpers are part of the interactive skill surface scaffold."
+        )
+    )]
     #[must_use]
     pub fn contains(&self, name: &str) -> bool {
         self.skills.contains_key(name)
     }
 
     /// Returns the entry for `name`, if discovered.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Skill lookup helpers are part of the interactive skill surface scaffold."
+        )
+    )]
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&SkillEntry> {
         self.skills.get(name)
     }
 
     /// Returns the discovery warnings collected while building the store.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Skill lookup helpers are part of the interactive skill surface scaffold."
+        )
+    )]
     #[must_use]
     pub fn warnings(&self) -> &[SkillWarning] {
         &self.warnings
     }
 
     /// Returns the number of discovered skills.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Skill lookup helpers are part of the interactive skill surface scaffold."
+        )
+    )]
     #[must_use]
     pub fn len(&self) -> usize {
         self.skills.len()
     }
 
     /// Returns whether no skills were discovered.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Skill lookup helpers are part of the interactive skill surface scaffold."
+        )
+    )]
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.skills.is_empty()

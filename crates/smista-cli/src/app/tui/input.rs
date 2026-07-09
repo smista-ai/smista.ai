@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use uuid::Uuid;
+
 use super::Tui;
 use crate::app::input_listener::InputEvent;
 use crate::app::router_client::Cmd;
@@ -8,7 +10,7 @@ use crate::app::router_client::cmd::{
 };
 use crate::app::router_client::msg::ApprovalPrompt;
 use crate::app::tui::state::{
-    ActiveComponentKind, ActiveComponentState, ExecutionTurn, HistoryEntry, PromptState,
+    ActiveComponentKind, ActiveComponentState, Command, ExecutionTurn, HistoryEntry, PromptState,
 };
 
 const EDIT_FILE_TOOL: &str = "edit_file";
@@ -27,13 +29,18 @@ where
                 self.handle_input_on_execution_turn(event)
             }
             ActiveComponentKind::Console => self.handle_input_on_console(event),
-            ActiveComponentKind::ModelsList => self.handle_input_on_models_list(event),
+            ActiveComponentKind::ModelsList => self.handle_input_on_list(event, Self::set_model),
             ActiveComponentKind::Usage => self.handle_input_on_usage(event),
             ActiveComponentKind::SkillList
             | ActiveComponentKind::LogsList
             | ActiveComponentKind::ProvidersList
-            | ActiveComponentKind::TracingList
-            | ActiveComponentKind::SessionsList => self.handle_input_on_list(event),
+            | ActiveComponentKind::TracingList => self.handle_input_on_list(event, |tui| {
+                tui.state.show_console();
+                None
+            }),
+            ActiveComponentKind::SessionsList => {
+                self.handle_input_on_list(event, Self::resume_selected_session)
+            }
         }
     }
 
@@ -80,13 +87,18 @@ where
                         })
                     }
                 }
-                PromptState::Command(_command) => {
-                    console.prompt.clear();
-                    None
+                PromptState::Command(command) => {
+                    let (command, args) = command.resolved();
+                    if !matches!(command, Command::Unresolved(_)) {
+                        // clear console only if command is resolved
+                        console.prompt.clear();
+                    }
+
+                    self.handle_command(command, args)
                 }
             },
             InputEvent::Tab => {
-                console.prompt.next_suggestion();
+                console.prompt.accept_suggestion();
 
                 None
             }
@@ -132,7 +144,7 @@ where
 
                 None
             }
-            InputEvent::Interrupt => self.handle_interrupt(),
+            InputEvent::Interrupt | InputEvent::Escape => self.handle_interrupt(),
             InputEvent::Char(char) => {
                 tracing::debug!("input event is character, pushing to prompt input state");
                 console.prompt.push(char);
@@ -141,6 +153,66 @@ where
             }
             _ => {
                 tracing::debug!("input event is not handled by the TUI scaffold");
+
+                None
+            }
+        }
+    }
+
+    fn handle_command(&mut self, command: Command, args: Vec<String>) -> Option<Cmd> {
+        match command {
+            Command::Resume => self.handle_resume_command(&args),
+            Command::Quit => {
+                tracing::debug!("input event is quit command, producing exit command");
+                self.context.exit.cancel();
+
+                None
+            }
+            Command::Unresolved(unresolved) => {
+                tracing::debug!(
+                    "input event is unresolved '{unresolved}' command, producing execute command"
+                );
+                self.state
+                    .push_history(HistoryEntry::Error(format!("Unknown command {unresolved}")));
+
+                None
+            }
+        }
+    }
+
+    fn handle_resume_command(&mut self, args: &[String]) -> Option<Cmd> {
+        match args {
+            [] => {
+                tracing::debug!("input event is resume command, listing sessions");
+
+                Some(Cmd::ListSessions)
+            }
+            [session_id] => match Uuid::parse_str(session_id) {
+                Ok(session_id) => {
+                    tracing::debug!(%session_id, "input event is resume command with session id");
+
+                    Some(Cmd::ResumeSession(session_id))
+                }
+                Err(_) => {
+                    tracing::debug!(
+                        session_id,
+                        "input event is resume command with invalid session id"
+                    );
+                    self.state.push_history(HistoryEntry::Error(format!(
+                        "Invalid session id {session_id}"
+                    )));
+
+                    None
+                }
+            },
+            _ => {
+                tracing::debug!(
+                    args.count = args.len(),
+                    "input event is resume command with invalid argument count"
+                );
+                self.state.push_history(HistoryEntry::Error(
+                    "Expected at most one session id after /resume".to_owned(),
+                ));
 
                 None
             }
@@ -179,7 +251,10 @@ where
         }
     }
 
-    fn handle_input_on_list(&mut self, event: InputEvent) -> Option<Cmd> {
+    fn handle_input_on_list<F>(&mut self, event: InputEvent, on_enter: F) -> Option<Cmd>
+    where
+        F: FnOnce(&mut Self) -> Option<Cmd>,
+    {
         match event {
             InputEvent::Up => self.previous_active_list_entry(),
             InputEvent::Down => self.next_active_list_entry(),
@@ -187,26 +262,7 @@ where
             InputEvent::End => self.last_active_list_entry(),
             InputEvent::PageUp => self.page_previous_active_list_entry(),
             InputEvent::PageDown => self.page_next_active_list_entry(),
-            InputEvent::Enter | InputEvent::Escape => self.state.show_console(),
-            InputEvent::Interrupt => self.context.exit.cancel(),
-            _ => {}
-        }
-
-        None
-    }
-
-    fn handle_input_on_models_list(&mut self, event: InputEvent) -> Option<Cmd> {
-        match event {
-            InputEvent::Up => self.previous_active_list_entry(),
-            InputEvent::Down => self.next_active_list_entry(),
-            InputEvent::Home => self.first_active_list_entry(),
-            InputEvent::End => self.last_active_list_entry(),
-            InputEvent::PageUp => self.page_previous_active_list_entry(),
-            InputEvent::PageDown => self.page_next_active_list_entry(),
-            InputEvent::Enter => {
-                self.set_selected_model_as_preferred();
-                self.state.show_console();
-            }
+            InputEvent::Enter => return on_enter(self),
             InputEvent::Escape => self.state.show_console(),
             InputEvent::Interrupt => self.context.exit.cancel(),
             _ => {}
@@ -377,6 +433,25 @@ where
             }
         }
     }
+
+    fn set_model(&mut self) -> Option<Cmd> {
+        self.set_selected_model_as_preferred();
+        self.state.show_console();
+
+        None
+    }
+
+    fn resume_selected_session(&mut self) -> Option<Cmd> {
+        let selected_session_id = self
+            .state
+            .active_component
+            .sessions_list()
+            .and_then(|list| list.selected())
+            .map(|session| session.id);
+
+        self.state.show_console();
+        selected_session_id.map(Cmd::ResumeSession)
+    }
 }
 
 fn approval_command(prompt: &ApprovalPrompt, option: ApprovalOption) -> Cmd {
@@ -459,10 +534,11 @@ mod tests {
     use smista_sdk::core::usage::Usage;
     use tokio_util::sync::CancellationToken;
     use url::Url;
+    use uuid::Uuid;
 
     use super::*;
     use crate::app::AppContext;
-    use crate::app::router_client::msg::{Model, Provider};
+    use crate::app::router_client::msg::{Model, Provider, SessionListItem};
     use crate::app::tui::state::{ActiveComponentState, RouterState, UsageState};
     use crate::config::Config;
     use crate::credentials::{
@@ -475,6 +551,7 @@ mod tests {
     const MODEL_ID: &str = "gpt-4.1";
     const APPROVAL_ID: &str = "approval-1";
     const PROVIDER_OPENAI: &str = "openai";
+    const SESSION_UPDATED_AT: &str = "2026-07-08T10:00:00Z";
 
     fn app_context(exit: CancellationToken) -> AppContext {
         let cwd = tempfile::tempdir()
@@ -541,6 +618,15 @@ mod tests {
         })
     }
 
+    fn session(id: Uuid, title: &str) -> SessionListItem {
+        SessionListItem {
+            id,
+            title: Some(title.to_owned()),
+            scope: None,
+            updated_at: SESSION_UPDATED_AT.to_owned(),
+        }
+    }
+
     #[test]
     fn right_accepts_active_command_suggestion() {
         let exit = CancellationToken::new();
@@ -549,6 +635,23 @@ mod tests {
         tui.on_input(InputEvent::Char('/'));
         tui.on_input(InputEvent::Char('q'));
         tui.on_input(InputEvent::Right);
+
+        let console = tui
+            .state
+            .active_component
+            .console()
+            .expect("console view is active");
+        assert_eq!(console.prompt.input(), "/quit");
+    }
+
+    #[test]
+    fn tab_accepts_active_command_suggestion() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        tui.on_input(InputEvent::Char('/'));
+        tui.on_input(InputEvent::Char('q'));
+        tui.on_input(InputEvent::Tab);
 
         let console = tui
             .state
@@ -829,6 +932,110 @@ mod tests {
     }
 
     #[test]
+    fn handle_command_resume_lists_sessions() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        let cmd = tui
+            .handle_command(Command::Resume, Vec::new())
+            .expect("resume command produces command");
+
+        assert_eq!(cmd, Cmd::ListSessions);
+    }
+
+    #[test]
+    fn handle_command_resume_with_session_id_resumes_session() {
+        let session_id = Uuid::from_u128(42);
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        let cmd = tui
+            .handle_command(Command::Resume, vec![session_id.to_string()])
+            .expect("resume command with id produces command");
+
+        assert_eq!(cmd, Cmd::ResumeSession(session_id));
+    }
+
+    #[test]
+    fn handle_command_resume_with_invalid_session_id_reports_error() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        assert_eq!(
+            tui.handle_command(Command::Resume, vec!["not-a-session-id".to_owned()]),
+            None
+        );
+
+        assert_eq!(
+            tui.state.history.last(),
+            Some(&HistoryEntry::Error(
+                "Invalid session id not-a-session-id".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn handle_command_resume_with_extra_args_reports_error() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        assert_eq!(
+            tui.handle_command(
+                Command::Resume,
+                vec![Uuid::from_u128(42).to_string(), "extra".to_owned()]
+            ),
+            None
+        );
+
+        assert_eq!(
+            tui.state.history.last(),
+            Some(&HistoryEntry::Error(
+                "Expected at most one session id after /resume".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn enter_on_resume_command_with_session_id_resumes_session() {
+        let session_id = Uuid::from_u128(43);
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        tui.on_input(InputEvent::Paste(format!("/resume {session_id}")));
+        let cmd = tui
+            .on_input(InputEvent::Enter)
+            .expect("resume command with id produces command");
+
+        assert_eq!(cmd, Cmd::ResumeSession(session_id));
+    }
+
+    #[test]
+    fn handle_command_quit_exits_application() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit.clone()));
+
+        assert_eq!(tui.handle_command(Command::Quit, Vec::new()), None);
+
+        assert!(exit.is_cancelled());
+    }
+
+    #[test]
+    fn handle_command_unresolved_keeps_prompt_and_reports_error() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        assert_eq!(
+            tui.handle_command(Command::Unresolved("wat".to_owned()), Vec::new()),
+            None
+        );
+
+        assert_eq!(
+            tui.state.history.last(),
+            Some(&HistoryEntry::Error("Unknown command wat".to_owned()))
+        );
+    }
+
+    #[test]
     fn usage_escape_restores_console_and_interrupt_exits_application() {
         let exit = CancellationToken::new();
         let mut tui = Tui::<TestBackend>::new_test(app_context(exit.clone()));
@@ -864,6 +1071,42 @@ mod tests {
                 .as_deref(),
             Some("openai/gpt-4.1")
         );
+        assert!(matches!(
+            tui.state.active_component,
+            ActiveComponentState::Console(_)
+        ));
+    }
+
+    #[test]
+    fn enter_on_sessions_list_resumes_selected_session_and_restores_console() {
+        let first_id = Uuid::from_u128(1);
+        let second_id = Uuid::from_u128(2);
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+        tui.state.show_sessions_list(vec![
+            session(first_id, "first"),
+            session(second_id, "second"),
+        ]);
+        tui.on_input(InputEvent::Down);
+
+        let cmd = tui
+            .on_input(InputEvent::Enter)
+            .expect("session selection produces a command");
+
+        assert_eq!(cmd, Cmd::ResumeSession(second_id));
+        assert!(matches!(
+            tui.state.active_component,
+            ActiveComponentState::Console(_)
+        ));
+    }
+
+    #[test]
+    fn enter_on_empty_sessions_list_restores_console_without_command() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+        tui.state.show_sessions_list(Vec::new());
+
+        assert_eq!(tui.on_input(InputEvent::Enter), None);
         assert!(matches!(
             tui.state.active_component,
             ActiveComponentState::Console(_)

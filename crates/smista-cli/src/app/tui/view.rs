@@ -1,4 +1,5 @@
 pub(in crate::app::tui) mod console;
+mod select;
 
 use super::Tui;
 use crate::app::tui::state::ActiveComponentState;
@@ -31,13 +32,57 @@ where
                         &self.context.cwd,
                     );
                 }
-                ActiveComponentState::LogsList(_logs_list) => todo!(),
-                ActiveComponentState::SkillList(_list_state) => todo!(),
-                ActiveComponentState::ModelsList(_list_state) => todo!(),
-                ActiveComponentState::ProvidersList(_list_state) => todo!(),
+                ActiveComponentState::LogsList(logs_list) => {
+                    select::view_select(frame, "Logs", "No logs", logs_list, |entry| {
+                        select::string_line(entry)
+                    });
+                }
+                ActiveComponentState::SkillList(list_state) => {
+                    select::view_select(
+                        frame,
+                        "Skills",
+                        "No skills found",
+                        list_state,
+                        select::skill_line,
+                    );
+                }
+                ActiveComponentState::ModelsList(list_state) => {
+                    select::view_select(
+                        frame,
+                        "Models",
+                        "No models found",
+                        list_state,
+                        select::model_line,
+                    );
+                }
+                ActiveComponentState::ProvidersList(list_state) => {
+                    select::view_select(
+                        frame,
+                        "Providers",
+                        "No providers found",
+                        list_state,
+                        select::provider_line,
+                    );
+                }
                 ActiveComponentState::Usage(_usage_state) => todo!(),
-                ActiveComponentState::TracingList(_list_state) => todo!(),
-                ActiveComponentState::SessionsList(_list_state) => todo!(),
+                ActiveComponentState::TracingList(list_state) => {
+                    select::view_select(
+                        frame,
+                        "Trace",
+                        "No trace events",
+                        list_state,
+                        select::trace_line,
+                    );
+                }
+                ActiveComponentState::SessionsList(list_state) => {
+                    select::view_select(
+                        frame,
+                        "Resume Session",
+                        "No sessions found",
+                        list_state,
+                        select::session_line,
+                    );
+                }
             })
             .map_err(|err| anyhow::anyhow!("failed to render TUI view: {err}"))?;
 

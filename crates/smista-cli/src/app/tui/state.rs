@@ -19,7 +19,7 @@ pub use self::active_component::{ActiveComponentKind, ActiveComponentState, Usag
 pub use self::console::ConsoleState;
 pub use self::history::HistoryEntry;
 pub use self::list::ListState;
-pub use self::prompt::PromptState;
+pub use self::prompt::{Command, PromptState};
 pub use self::router::RouterState;
 pub use self::turn::ExecutionTurn;
 use crate::app::router_client::Msg;
@@ -176,40 +176,34 @@ impl State {
         );
 
         match msg {
+            Msg::ApprovalPrompt(prompt) => {
+                self.execution_turn = Some(ExecutionTurn::Approval(prompt.clone()));
+                self.history.push(HistoryEntry::ApprovalRequest(prompt));
+            }
             Msg::AssistantTurn(turn) => {
                 self.execution_turn = None;
                 self.history
                     .push(HistoryEntry::AssistantMessage(turn.message));
             }
-            Msg::StreamedContentChunk(chunk) => {
-                self.execution_turn
-                    .get_or_insert_with(ExecutionTurn::streaming)
-                    .push_content(&chunk);
+            Msg::Error(error) => {
+                self.history.push(HistoryEntry::Error(error));
             }
-            Msg::StreamedReasoningChunk(chunk) => {
-                self.execution_turn
-                    .get_or_insert_with(ExecutionTurn::streaming)
-                    .push_reasoning(&chunk);
+            Msg::Idle => {
+                self.router = RouterState::Idle;
+                self.execution_turn = None;
             }
-            Msg::ToolCallStarted(tool_call) => {
-                self.execution_turn = Some(ExecutionTurn::ToolCall(tool_call.clone()));
-                self.history.push(HistoryEntry::ToolCall {
-                    name: tool_call.name,
-                    input: tool_call.call_id,
-                });
-            }
-            Msg::ApprovalPrompt(prompt) => {
-                self.execution_turn = Some(ExecutionTurn::Approval(prompt.clone()));
-                self.history.push(HistoryEntry::ApprovalRequest(prompt));
+            Msg::Interrupted => {
+                self.router = RouterState::Interrupted;
+                self.execution_turn = None;
             }
             Msg::ModelsList(models) => {
                 self.show_models_list(models);
             }
+            Msg::Preview(preview) => {
+                self.history.push(HistoryEntry::Preview(preview));
+            }
             Msg::ProvidersList(providers) => {
                 self.show_providers_list(providers);
-            }
-            Msg::SessionsList(sessions) => {
-                self.show_sessions_list(sessions);
             }
             Msg::ResumedSession(session) => {
                 self.clear_history();
@@ -221,36 +215,42 @@ impl State {
                         .map(|message| HistoryEntry::AssistantMessage(message.content)),
                 );
             }
-            Msg::Usage(usage) => {
-                self.show_usage(UsageState::new(usage));
-            }
-            Msg::Trace(trace) => {
-                self.show_tracing_list(trace.events.clone());
-                self.history
-                    .extend(trace.events.into_iter().map(HistoryEntry::Trace));
-            }
-            Msg::Preview(preview) => {
-                self.history.push(HistoryEntry::Preview(preview));
-            }
             Msg::RouterStatus(status) => {
                 self.history.push(HistoryEntry::Notice(format!(
                     "{ROUTER_NOTICE_PREFIX} {} ({})",
                     status.status, status.version
                 )));
             }
-            Msg::Error(error) => {
-                self.history.push(HistoryEntry::Error(error));
+            Msg::SessionsList(sessions) => {
+                self.show_sessions_list(sessions);
             }
-            Msg::Idle => {
-                self.router = RouterState::Idle;
-                self.execution_turn = None;
+            Msg::StreamedContentChunk(chunk) => {
+                self.execution_turn
+                    .get_or_insert_with(ExecutionTurn::streaming)
+                    .push_content(&chunk);
+            }
+            Msg::StreamedReasoningChunk(chunk) => {
+                self.execution_turn
+                    .get_or_insert_with(ExecutionTurn::streaming)
+                    .push_reasoning(&chunk);
             }
             Msg::Thinking => {
                 self.router = RouterState::Thinking(std::time::Instant::now());
             }
-            Msg::Interrupted => {
-                self.router = RouterState::Interrupted;
-                self.execution_turn = None;
+            Msg::ToolCallStarted(tool_call) => {
+                self.execution_turn = Some(ExecutionTurn::ToolCall(tool_call.clone()));
+                self.history.push(HistoryEntry::ToolCall {
+                    name: tool_call.name,
+                    input: tool_call.call_id,
+                });
+            }
+            Msg::Trace(trace) => {
+                self.show_tracing_list(trace.events.clone());
+                self.history
+                    .extend(trace.events.into_iter().map(HistoryEntry::Trace));
+            }
+            Msg::Usage(usage) => {
+                self.show_usage(UsageState::new(usage));
             }
         }
 
@@ -330,6 +330,8 @@ mod tests {
     const RESUMED_ROLE: &str = "assistant";
     const RESUMED_TITLE: &str = "Resumed session";
     const ROUTER_STATUS: &str = "ok";
+    const SESSION_TITLE: &str = "Fix resume flow";
+    const SESSION_UPDATED_AT: &str = "2026-07-08T10:00:00Z";
     const ROUTER_VERSION: &str = "0.1.0";
     const TOOL_CALL_ID: &str = "tool-call-1";
     const TOOL_NAME: &str = "shell";
@@ -376,6 +378,25 @@ mod tests {
             state.active_component,
             ActiveComponentState::Usage(_)
         ));
+    }
+
+    #[test]
+    fn sessions_list_message_replaces_active_component_without_polluting_history() {
+        let mut state = State::new();
+        let session = SessionListItem {
+            id: Uuid::nil(),
+            title: Some(SESSION_TITLE.to_owned()),
+            scope: Some("project".to_owned()),
+            updated_at: SESSION_UPDATED_AT.to_owned(),
+        };
+
+        state.apply_msg(Msg::SessionsList(vec![session.clone()]));
+
+        assert!(state.history.is_empty());
+        let ActiveComponentState::SessionsList(sessions) = &state.active_component else {
+            panic!("sessions list expected");
+        };
+        assert_eq!(sessions.selected(), Some(&session));
     }
 
     #[test]
