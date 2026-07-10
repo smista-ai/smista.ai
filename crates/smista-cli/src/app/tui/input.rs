@@ -11,7 +11,7 @@ use crate::app::router_client::cmd::{
 use crate::app::router_client::msg::ApprovalPrompt;
 use crate::app::tui::state::{
     ActiveComponentKind, ActiveComponentState, Command, ExecutionTurn, HistoryEntry,
-    ModelListEntry, PromptState,
+    ModelListEntry, PromptHistoryNavigation, PromptState,
 };
 
 const EDIT_FILE_TOOL: &str = "edit_file";
@@ -47,6 +47,22 @@ where
     }
 
     fn handle_input_on_console(&mut self, event: InputEvent) -> Option<Cmd> {
+        if matches!(event, InputEvent::Up | InputEvent::Down) {
+            return self.handle_console_history_navigation(event);
+        }
+
+        if matches!(
+            &event,
+            InputEvent::Backspace
+                | InputEvent::Newline
+                | InputEvent::Tab
+                | InputEvent::Paste(_)
+                | InputEvent::Delete
+                | InputEvent::Char(_)
+        ) {
+            self.state.reset_prompt_history_navigation();
+        }
+
         let Some(console) = self.state.active_component.console_mut() else {
             tracing::warn!("active component is not console, cannot handle input event");
             return None;
@@ -81,6 +97,7 @@ where
                         );
                         self.state
                             .push_history(HistoryEntry::UserMessage(prompt.clone()));
+                        self.state.push_prompt_history(prompt.clone());
                         Some(Cmd::Execute {
                             prompt,
                             files: HashSet::default(),
@@ -90,10 +107,12 @@ where
                     }
                 }
                 PromptState::Command(command) => {
+                    let prompt = console.prompt.input();
                     let (command, args) = command.resolved();
                     if !matches!(command, Command::Unresolved(_)) {
                         // clear console only if command is resolved
                         console.prompt.clear();
+                        self.state.push_prompt_history(prompt);
                     }
 
                     self.handle_command(command, args)
@@ -159,6 +178,52 @@ where
                 None
             }
         }
+    }
+
+    fn handle_console_history_navigation(&mut self, event: InputEvent) -> Option<Cmd> {
+        let should_navigate_history = self
+            .state
+            .active_component
+            .console()
+            .map(|console| {
+                console.prompt.is_empty() || self.state.is_prompt_history_navigation_active()
+            })
+            .unwrap_or_default();
+
+        match (event, should_navigate_history) {
+            (InputEvent::Up, true) => {
+                if let Some(entry) = self.state.previous_prompt_history_entry()
+                    && let Some(console) = self.state.active_component.console_mut()
+                {
+                    console.prompt.replace_with_input(entry);
+                }
+            }
+            (InputEvent::Down, true) => {
+                let navigation = self.state.next_prompt_history_entry();
+                if let Some(console) = self.state.active_component.console_mut() {
+                    match navigation {
+                        PromptHistoryNavigation::Entry(entry) => {
+                            console.prompt.replace_with_input(entry);
+                        }
+                        PromptHistoryNavigation::Clear => console.prompt.clear(),
+                        PromptHistoryNavigation::Unchanged => console.prompt.move_down(),
+                    }
+                }
+            }
+            (InputEvent::Up, false) => {
+                if let Some(console) = self.state.active_component.console_mut() {
+                    console.prompt.move_up();
+                }
+            }
+            (InputEvent::Down, false) => {
+                if let Some(console) = self.state.active_component.console_mut() {
+                    console.prompt.move_down();
+                }
+            }
+            _ => {}
+        }
+
+        None
     }
 
     fn handle_command(&mut self, command: Command, args: Vec<String>) -> Option<Cmd> {
@@ -768,6 +833,90 @@ mod tests {
     }
 
     #[test]
+    fn up_on_empty_console_recalls_latest_prompt_history_entry() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        tui.on_input(InputEvent::Paste("first prompt".to_owned()));
+        tui.on_input(InputEvent::Enter);
+        tui.on_input(InputEvent::Paste("second prompt".to_owned()));
+        tui.on_input(InputEvent::Enter);
+
+        tui.on_input(InputEvent::Up);
+
+        assert_eq!(console_prompt_input(&tui), "second prompt");
+    }
+
+    #[test]
+    fn up_and_down_navigate_prompt_history_entries() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        tui.on_input(InputEvent::Paste("first prompt".to_owned()));
+        tui.on_input(InputEvent::Enter);
+        tui.on_input(InputEvent::Paste("second prompt".to_owned()));
+        tui.on_input(InputEvent::Enter);
+
+        tui.on_input(InputEvent::Up);
+        tui.on_input(InputEvent::Up);
+        assert_eq!(console_prompt_input(&tui), "first prompt");
+
+        tui.on_input(InputEvent::Down);
+        assert_eq!(console_prompt_input(&tui), "second prompt");
+
+        tui.on_input(InputEvent::Down);
+        assert_eq!(console_prompt_input(&tui), "");
+    }
+
+    #[test]
+    fn enter_on_command_saves_command_to_prompt_history() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        tui.on_input(InputEvent::Paste("/providers".to_owned()));
+        tui.on_input(InputEvent::Enter);
+        tui.state.show_console();
+        tui.on_input(InputEvent::Up);
+
+        assert_eq!(console_prompt_input(&tui), "/providers");
+    }
+
+    #[test]
+    fn unresolved_command_is_not_saved_to_prompt_history() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        tui.on_input(InputEvent::Paste("/unknown".to_owned()));
+        tui.on_input(InputEvent::Enter);
+        tui.on_input(InputEvent::Interrupt);
+        tui.on_input(InputEvent::Up);
+
+        assert_eq!(console_prompt_input(&tui), "");
+    }
+
+    #[test]
+    fn up_on_non_empty_console_keeps_prompt_cursor_navigation() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        tui.on_input(InputEvent::Paste("history prompt".to_owned()));
+        tui.on_input(InputEvent::Enter);
+        tui.on_input(InputEvent::Paste("draft\nprompt".to_owned()));
+        tui.on_input(InputEvent::Up);
+
+        assert_eq!(console_prompt_input(&tui), "draft\nprompt");
+        assert_eq!(
+            tui.state
+                .active_component
+                .console()
+                .expect("console view is active")
+                .prompt
+                .cursor_position(),
+            "draft".chars().count()
+        );
+    }
+
+    #[test]
     fn list_arrows_move_selection() {
         let exit = CancellationToken::new();
         let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
@@ -1358,6 +1507,15 @@ mod tests {
             .providers_list()
             .expect("providers list is active")
             .current_index()
+    }
+
+    fn console_prompt_input(tui: &Tui<TestBackend>) -> String {
+        tui.state
+            .active_component
+            .console()
+            .expect("console view is active")
+            .prompt
+            .input()
     }
 
     fn selected_approval_index(tui: &Tui<TestBackend>) -> usize {
