@@ -205,56 +205,17 @@ impl SkillStore {
         self.skills.keys().map(String::as_str)
     }
 
-    /// Returns whether a skill with `name` was discovered.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Skill lookup helpers are part of the interactive skill surface scaffold."
-        )
-    )]
-    #[must_use]
-    pub fn contains(&self, name: &str) -> bool {
-        self.skills.contains_key(name)
-    }
-
     /// Returns the entry for `name`, if discovered.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Skill lookup helpers are part of the interactive skill surface scaffold."
-        )
-    )]
+    #[cfg(test)]
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&SkillEntry> {
         self.skills.get(name)
     }
 
     /// Returns the discovery warnings collected while building the store.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Skill lookup helpers are part of the interactive skill surface scaffold."
-        )
-    )]
     #[must_use]
     pub fn warnings(&self) -> &[SkillWarning] {
         &self.warnings
-    }
-
-    /// Returns the number of discovered skills.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Skill lookup helpers are part of the interactive skill surface scaffold."
-        )
-    )]
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.skills.len()
     }
 
     /// Returns whether no skills were discovered.
@@ -308,7 +269,7 @@ mod tests {
         );
         let mut store = SkillStore::default();
         store.ingest(&root);
-        assert!(store.contains("rust-conventions"));
+        assert!(store.get("rust-conventions").is_some());
         assert_eq!(
             store.get("rust-conventions").unwrap().description(),
             "Enforce Rust style."
@@ -354,7 +315,7 @@ mod tests {
         std::fs::create_dir_all(root.join("empty")).unwrap();
         let mut store = SkillStore::default();
         store.ingest(&root);
-        assert!(!store.contains("empty"));
+        assert!(store.get("empty").is_none());
         assert!(matches!(
             store.warnings().first(),
             Some(SkillWarning::MissingSkillFile { .. })
@@ -385,7 +346,7 @@ mod tests {
             store.get("shared").unwrap().description(),
             "project version"
         );
-        assert_eq!(store.len(), 1);
+        assert_eq!(store.skills.len(), 1);
     }
 
     #[test]
@@ -425,8 +386,8 @@ mod tests {
         let mut store = SkillStore::default();
         store.ingest(&root);
         // Identity is the directory name, not the declared name.
-        assert!(store.contains("actual-dir"));
-        assert!(!store.contains("declared-name"));
+        assert!(store.get("actual-dir").is_some());
+        assert!(store.get("declared-name").is_none());
         assert!(matches!(
             store.warnings().first(),
             Some(SkillWarning::NameMismatch { .. })
@@ -439,7 +400,7 @@ mod tests {
         write_skill(&root, "skill", "name: skill", "Body.");
         let mut store = SkillStore::default();
         store.ingest(&root);
-        assert!(store.contains("skill"));
+        assert!(store.get("skill").is_some());
         assert!(matches!(
             store.warnings().first(),
             Some(SkillWarning::MissingDescription { .. })

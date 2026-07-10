@@ -76,6 +76,12 @@ pub async fn run(
             .await
             .context("Failed to inject credentials into router client")?;
 
+    // load skills store
+    let skills_store = SkillStore::discover(&cwd);
+    for warning in skills_store.warnings() {
+        tracing::warn!("skill store discovery warning: {warning}");
+    }
+
     // build context
     tracing::info!("app initialization completed; building app context");
     let context = AppContext {
@@ -83,7 +89,7 @@ pub async fn run(
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
         exit: CancellationToken::new(),
         router_client: Arc::new(router_client),
-        skills_store: Arc::new(SkillStore::discover(&cwd)),
+        skills_store: Arc::new(skills_store),
         cwd,
     };
 
