@@ -29,7 +29,7 @@ keywords = ["ai", "llm", "cli", "agent", "routing"]
 # Each member crate sets its own `license` field; there is no workspace default.
 license = "MIT"
 repository = "https://github.com/smista-ai/smista.ai"
-rust-version = "1.92.0"
+rust-version = "1.95.0"
 description = "Local-first agent and CLI that deterministically routes each phase of an AI workflow to the most suitable model."
 
 [workspace.dependencies]
@@ -45,7 +45,7 @@ clap = { version = "4", default-features = false }
 crossterm = { version = "0.29", default-features = false }
 dirs = "6"
 futures = "0.3"
-gix = { version = "0.83", default-features = false }
+gix = { version = "0.85", default-features = false }
 globset = "0.4"
 http = "1"
 isahc = { version = "2", default-features = false }
