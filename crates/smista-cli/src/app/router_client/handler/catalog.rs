@@ -15,6 +15,7 @@ impl RouterClient {
                     .models
                     .into_iter()
                     .map(|model| Model {
+                        reference: model.reference(),
                         provider: model.provider.to_string(),
                         display_name: model.display_name.unwrap_or_else(|| model.model.clone()),
                         id: model.model,

@@ -1,6 +1,8 @@
 //! Prompt state for the main TUI component.
 
 const COMMAND_EXIT: &str = "exit";
+const COMMAND_MODEL: &str = "model";
+const COMMAND_PROVIDERS: &str = "providers";
 const COMMAND_Q: &str = "q";
 const COMMAND_QUIT: &str = "quit";
 const COMMAND_RESUME: &str = "resume";
@@ -8,6 +10,8 @@ const COMMAND_SKILLS: &str = "skills";
 
 const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_EXIT, Command::Quit),
+    (COMMAND_MODEL, Command::Model),
+    (COMMAND_PROVIDERS, Command::Providers),
     (COMMAND_Q, Command::Quit),
     (COMMAND_QUIT, Command::Quit),
     (COMMAND_RESUME, Command::Resume),
@@ -423,6 +427,10 @@ impl CommandPromptState {
 /// A recognized or in-progress slash command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
+    /// `/model` command. Without arguments, lists available models. With a model name, sets the current model.
+    Model,
+    /// `/providers` command. Lists available providers.
+    Providers,
     /// `/resume` command. Lists sessions, or resumes a session when an ID is passed.
     Resume,
     /// `/skills` command, lists available skills.
@@ -438,6 +446,8 @@ impl Command {
     #[must_use]
     pub fn input_name(&self) -> &str {
         match self {
+            Self::Model => COMMAND_MODEL,
+            Self::Providers => COMMAND_PROVIDERS,
             Self::Quit => COMMAND_QUIT,
             Self::Resume => COMMAND_RESUME,
             Self::Skills => COMMAND_SKILLS,
@@ -558,9 +568,12 @@ mod tests {
     use super::{
         COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS, Command, PromptState, TextPromptState,
     };
+    use crate::app::tui::state::prompt::{COMMAND_MODEL, COMMAND_PROVIDERS};
 
     const HELLO_INPUT: &str = "hello";
     const HELLO_SUFFIX: &str = "ello";
+    const MODEL_SUGGESTION: &str = "/model";
+    const PROVIDERS_SUGGESTION: &str = "/providers";
     const RESUME_SUGGESTION: &str = "/resume";
     const QUIT_COMMAND_INPUT: &str = "quit now";
     const QUIT_INPUT: &str = "/quit now";
@@ -675,6 +688,24 @@ mod tests {
         state.push_str("/s");
 
         assert_eq!(state.current_suggestion(), Some(SKILLS_SUGGESTION));
+    }
+
+    #[test]
+    fn command_suggestion_includes_model_command() {
+        let mut state = PromptState::default();
+
+        state.push_str("/mod");
+
+        assert_eq!(state.current_suggestion(), Some(MODEL_SUGGESTION));
+    }
+
+    #[test]
+    fn command_suggestion_includes_providers_command() {
+        let mut state = PromptState::default();
+
+        state.push_str("/prov");
+
+        assert_eq!(state.current_suggestion(), Some(PROVIDERS_SUGGESTION));
     }
 
     #[test]
@@ -960,6 +991,36 @@ mod tests {
         state.move_end();
         state.move_down();
         assert_eq!(state.cursor_position(), 5);
+    }
+
+    #[test]
+    fn should_parse_model() {
+        let mut state = PromptState::default();
+
+        state.push_str("/model");
+
+        assert_eq!(state.command(), Some(&Command::Model));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/model");
+        assert_eq!(
+            state.command().map(Command::input_name),
+            Some(COMMAND_MODEL)
+        );
+    }
+
+    #[test]
+    fn should_parse_providers() {
+        let mut state = PromptState::default();
+
+        state.push_str("/providers");
+
+        assert_eq!(state.command(), Some(&Command::Providers));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/providers");
+        assert_eq!(
+            state.command().map(Command::input_name),
+            Some(COMMAND_PROVIDERS)
+        );
     }
 
     #[test]

@@ -10,10 +10,12 @@ use crate::app::router_client::cmd::{
 };
 use crate::app::router_client::msg::ApprovalPrompt;
 use crate::app::tui::state::{
-    ActiveComponentKind, ActiveComponentState, Command, ExecutionTurn, HistoryEntry, PromptState,
+    ActiveComponentKind, ActiveComponentState, Command, ExecutionTurn, HistoryEntry,
+    ModelListEntry, PromptState,
 };
 
 const EDIT_FILE_TOOL: &str = "edit_file";
+const MODEL_AUTO: &str = "auto";
 const WRITE_FILE_TOOL: &str = "write_file";
 
 impl<B> Tui<B>
@@ -83,7 +85,7 @@ where
                             prompt,
                             files: HashSet::default(),
                             plan: false,
-                            explicit_model: self.state.preferred_model.clone(),
+                            explicit_model: self.state.preferred_model().cloned(),
                         })
                     }
                 }
@@ -161,6 +163,13 @@ where
 
     fn handle_command(&mut self, command: Command, args: Vec<String>) -> Option<Cmd> {
         match command {
+            Command::Model => self.handle_model_command(&args),
+            Command::Providers => {
+                tracing::debug!(
+                    "input event is providers command, producing list providers command"
+                );
+                Some(Cmd::ListProviders)
+            }
             Command::Quit => {
                 tracing::debug!("input event is quit command, producing exit command");
                 self.context.exit.cancel();
@@ -187,6 +196,30 @@ where
                     .push_history(HistoryEntry::Error(format!("Unknown command {unresolved}")));
 
                 None
+            }
+        }
+    }
+
+    fn handle_model_command(&mut self, args: &[String]) -> Option<Cmd> {
+        match args {
+            [] => {
+                tracing::debug!("input event is model command, listing models");
+
+                Some(Cmd::ListModels)
+            }
+            model => {
+                let model = model.join(" ");
+                if model == MODEL_AUTO {
+                    tracing::debug!("input event is model auto command, clearing preferred model");
+                    self.state.clear_preferred_model();
+
+                    return None;
+                }
+
+                tracing::debug!(%model, "input event is model command with model id; awaiting list of models to validate");
+                self.state.set_awaited_model(model);
+
+                Some(Cmd::ListModels)
             }
         }
     }
@@ -428,32 +461,18 @@ where
     }
 
     fn set_selected_model_as_preferred(&mut self) {
-        let Some((provider, model)) = self
+        let Some(entry) = self
             .state
             .active_component
             .models_list()
             .and_then(|list| list.selected())
-            .map(|model| (model.provider.clone(), model.id.clone()))
         else {
             return;
         };
 
-        match provider.parse() {
-            Ok(provider) => {
-                self.state
-                    .set_preferred_model(smista_sdk::core::model::ModelReference {
-                        provider,
-                        model,
-                    });
-            }
-            Err(err) => {
-                tracing::warn!(
-                    model.provider = %provider,
-                    model.id = %model,
-                    error.message = %err,
-                    "selected model has invalid provider"
-                );
-            }
+        match entry {
+            ModelListEntry::Auto => self.state.clear_preferred_model(),
+            ModelListEntry::Model(model) => self.state.set_preferred_model(model.reference.clone()),
         }
     }
 
@@ -555,6 +574,7 @@ mod tests {
     use ratatui::backend::TestBackend;
     use smista_sdk::client::{ReqwestClient, RouterClientConfig};
     use smista_sdk::core::api::SessionUsageResponse;
+    use smista_sdk::core::model::ModelReference;
     use smista_sdk::core::usage::Usage;
     use tokio_util::sync::CancellationToken;
     use url::Url;
@@ -615,6 +635,10 @@ mod tests {
 
     fn model(id: &str) -> Model {
         Model {
+            reference: ModelReference {
+                provider: smista_sdk::core::model::Provider::OpenAI,
+                model: id.to_owned(),
+            },
             provider: PROVIDER_OPENAI.to_owned(),
             id: id.to_owned(),
             display_name: MODEL_DISPLAY_NAME.to_owned(),
@@ -1058,6 +1082,63 @@ mod tests {
     }
 
     #[test]
+    fn handle_command_model_without_args_lists_models() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        let cmd = tui
+            .handle_command(Command::Model, Vec::new())
+            .expect("model command produces command");
+
+        assert_eq!(cmd, Cmd::ListModels);
+        assert_eq!(tui.state.take_awaited_model(), None);
+    }
+
+    #[test]
+    fn handle_command_model_with_name_lists_models_for_validation() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        let cmd = tui
+            .handle_command(Command::Model, vec![MODEL_ID.to_owned()])
+            .expect("model command with name produces command");
+
+        assert_eq!(cmd, Cmd::ListModels);
+        assert_eq!(tui.state.take_awaited_model().as_deref(), Some(MODEL_ID));
+    }
+
+    #[test]
+    fn handle_command_model_auto_clears_preferred_model() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+        tui.state.set_preferred_model(
+            format!("{PROVIDER_OPENAI}/{MODEL_ID}")
+                .parse::<ModelReference>()
+                .expect("model reference parses"),
+        );
+
+        assert_eq!(
+            tui.handle_command(Command::Model, vec!["auto".to_owned()]),
+            None
+        );
+
+        assert_eq!(tui.state.preferred_model(), None);
+        assert_eq!(tui.state.take_awaited_model(), None);
+    }
+
+    #[test]
+    fn handle_command_providers_lists_providers() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        let cmd = tui
+            .handle_command(Command::Providers, Vec::new())
+            .expect("providers command produces command");
+
+        assert_eq!(cmd, Cmd::ListProviders);
+    }
+
+    #[test]
     fn handle_command_skills_shows_discovered_skill_names() {
         let exit = CancellationToken::new();
         let cwd = tempfile::tempdir()
@@ -1173,6 +1254,7 @@ mod tests {
         tui.state
             .show_models_list(vec![model("first"), model(MODEL_ID)]);
         tui.on_input(InputEvent::Down);
+        tui.on_input(InputEvent::Down);
 
         tui.on_input(InputEvent::Enter);
 
@@ -1183,6 +1265,26 @@ mod tests {
                 .as_deref(),
             Some("openai/gpt-4.1")
         );
+        assert!(matches!(
+            tui.state.active_component,
+            ActiveComponentState::Console(_)
+        ));
+    }
+
+    #[test]
+    fn enter_on_models_list_auto_clears_preferred_model_and_restores_console() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+        tui.state.set_preferred_model(
+            format!("{PROVIDER_OPENAI}/{MODEL_ID}")
+                .parse::<ModelReference>()
+                .expect("model reference parses"),
+        );
+        tui.state.show_models_list(vec![model(MODEL_ID)]);
+
+        tui.on_input(InputEvent::Enter);
+
+        assert_eq!(tui.state.preferred_model(), None);
         assert!(matches!(
             tui.state.active_component,
             ActiveComponentState::Console(_)
@@ -1226,17 +1328,24 @@ mod tests {
     }
 
     #[test]
-    fn enter_on_invalid_model_restores_console_without_setting_preference() {
+    fn enter_on_model_uses_reference_and_restores_console() {
         let exit = CancellationToken::new();
         let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
         tui.state.show_models_list(vec![Model {
             provider: "invalid provider".to_owned(),
             ..model(MODEL_ID)
         }]);
+        tui.on_input(InputEvent::Down);
 
         tui.on_input(InputEvent::Enter);
 
-        assert_eq!(tui.state.preferred_model(), None);
+        assert_eq!(
+            tui.state
+                .preferred_model()
+                .map(std::string::ToString::to_string)
+                .as_deref(),
+            Some("openai/gpt-4.1")
+        );
         assert!(matches!(
             tui.state.active_component,
             ActiveComponentState::Console(_)

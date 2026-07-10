@@ -8,12 +8,13 @@ use ratatui::widgets::{
     Block, Borders, Clear, List, ListItem, ListState as RatatuiListState, Widget,
 };
 
-use crate::app::router_client::msg::{Model, Provider, SessionListItem, TraceEvent};
-use crate::app::tui::state::ListState;
+use crate::app::router_client::msg::{Provider, SessionListItem, TraceEvent};
+use crate::app::tui::state::{ListState, ModelListEntry};
 use crate::skills::SkillEntry;
 
 const FOOTER: &str = "enter select  esc close";
 const LOCAL_PROVIDER: &str = "local";
+const MODEL_AUTO: &str = "auto";
 const REMOTE_PROVIDER: &str = "remote";
 const UNTITLED_SESSION: &str = "Untitled session";
 
@@ -66,15 +67,23 @@ pub(in crate::app::tui) fn skill_line((name, entry): &(String, SkillEntry)) -> L
     ])
 }
 
-pub(in crate::app::tui) fn model_line(model: &Model) -> Line<'static> {
+pub(in crate::app::tui) fn model_line(entry: &ModelListEntry) -> Line<'static> {
+    let ModelListEntry::Model(model) = entry else {
+        return Line::from(vec![
+            Span::styled(MODEL_AUTO, palette().name),
+            Span::raw(" "),
+            Span::styled("deterministic routing", palette().metadata),
+        ]);
+    };
+
     let max_output_tokens = model
         .max_output_tokens
         .map_or_else(|| "unbounded".to_owned(), |tokens| tokens.to_string());
 
     Line::from(vec![
-        Span::styled(format!("{}/{}", model.provider, model.id), palette().name),
+        Span::styled(model.display_name.clone(), palette().name),
         Span::raw(" "),
-        Span::styled(model.display_name.clone(), palette().dim),
+        Span::styled(model.provider.clone(), palette().metadata),
         Span::raw(" "),
         Span::styled(
             format!(
@@ -231,6 +240,10 @@ mod tests {
     #[test]
     fn model_line_includes_model_metadata() {
         let model = Model {
+            reference: smista_sdk::core::model::ModelReference {
+                provider: smista_sdk::core::model::Provider::OpenAI,
+                model: "gpt-4.1".to_owned(),
+            },
             provider: "openai".to_owned(),
             id: "gpt-4.1".to_owned(),
             display_name: "GPT-4.1".to_owned(),
@@ -240,16 +253,28 @@ mod tests {
             output_cost_per_million_tokens: None,
         };
 
-        let rendered = line_text(model_line(&model));
+        let rendered = line_text(model_line(&ModelListEntry::Model(model)));
 
-        assert!(rendered.contains("openai/gpt-4.1"));
         assert!(rendered.contains("GPT-4.1"));
+        assert!(rendered.contains("openai"));
         assert!(rendered.contains("128000 ctx / 16000 out"));
+    }
+
+    #[test]
+    fn model_line_renders_auto_entry() {
+        let rendered = line_text(model_line(&ModelListEntry::Auto));
+
+        assert!(rendered.contains("auto"));
+        assert!(rendered.contains("deterministic routing"));
     }
 
     #[test]
     fn model_line_renders_unbounded_output() {
         let model = Model {
+            reference: smista_sdk::core::model::ModelReference {
+                provider: smista_sdk::core::model::Provider::OpenAI,
+                model: "gpt-4.1".to_owned(),
+            },
             provider: "local".to_owned(),
             id: "model".to_owned(),
             display_name: "Local Model".to_owned(),
@@ -259,7 +284,10 @@ mod tests {
             output_cost_per_million_tokens: None,
         };
 
-        assert!(line_text(model_line(&model)).contains("4096 ctx / unbounded out"));
+        assert!(
+            line_text(model_line(&ModelListEntry::Model(model)))
+                .contains("4096 ctx / unbounded out")
+        );
     }
 
     #[test]

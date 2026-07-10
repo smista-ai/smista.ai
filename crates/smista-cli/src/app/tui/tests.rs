@@ -113,6 +113,10 @@ fn handle_models_list_renders_select_view() {
     let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
 
     tui.handle_client_msg(Msg::ModelsList(vec![Model {
+        reference: smista_sdk::core::model::ModelReference {
+            provider: smista_sdk::core::model::Provider::OpenAI,
+            model: "gpt-4.1".to_owned(),
+        },
         provider: "openai".to_owned(),
         id: "gpt-4.1".to_owned(),
         display_name: "GPT-4.1".to_owned(),
@@ -124,7 +128,9 @@ fn handle_models_list_renders_select_view() {
     .expect("models list message is handled");
 
     assert_backend_contains(&tui, "Models");
-    assert_backend_contains(&tui, "openai/gpt-4.1");
+    assert_backend_contains(&tui, "auto");
+    assert_backend_contains(&tui, "GPT-4.1");
+    assert_backend_contains(&tui, "openai");
 }
 
 #[test]

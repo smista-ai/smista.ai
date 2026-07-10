@@ -27,7 +27,7 @@ where
                         console_state,
                         &self.state.history,
                         self.state.execution_turn.as_ref(),
-                        self.state.preferred_model.as_ref(),
+                        self.state.preferred_model(),
                         self.state.router,
                         &self.context.cwd,
                     );
