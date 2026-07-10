@@ -9,7 +9,7 @@ mod text;
 use self::command::command_prompt;
 #[cfg(test)]
 use self::command::{
-    COMMAND_MODEL, COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS,
+    COMMAND_MODEL, COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS, COMMAND_STATUS,
 };
 pub use self::command::{Command, CommandPromptState};
 pub use self::file_autocomplete::FileAutocompleteState;
@@ -442,9 +442,9 @@ mod tests {
     use std::path::{MAIN_SEPARATOR, PathBuf};
 
     use super::{
-        COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS, Command, PromptState, TextPromptState,
+        COMMAND_MODEL, COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS,
+        COMMAND_STATUS, Command, PromptState, TextPromptState,
     };
-    use crate::app::tui::state::prompt::{COMMAND_MODEL, COMMAND_PROVIDERS};
 
     const HELLO_INPUT: &str = "hello";
     const HELLO_SUFFIX: &str = "ello";
@@ -1135,6 +1135,21 @@ mod tests {
         assert_eq!(
             state.command().map(Command::input_name),
             Some(COMMAND_SKILLS)
+        );
+    }
+
+    #[test]
+    fn should_parse_status() {
+        let mut state = PromptState::default();
+
+        state.push_str("/status");
+
+        assert_eq!(state.command(), Some(&Command::Status));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/status");
+        assert_eq!(
+            state.command().map(Command::input_name),
+            Some(COMMAND_STATUS)
         );
     }
 

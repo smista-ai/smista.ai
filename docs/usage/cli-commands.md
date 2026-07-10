@@ -316,11 +316,13 @@ Type slash commands at the interactive prompt.
   `provider/model` reference. Use `/model auto` to clear the preferred model.
 - `/providers` lists configured providers and whether each one is local or
   remote.
-- `/skills` lists available skills from the current workspace.
+- `/quit`, `/q`, or `/exit` closes the interactive CLI.
 - `/resume [session-id]` resumes a specific session when an ID is provided.
   Without an ID, it lists existing sessions for the current workspace. Use
   arrow keys to choose a session, then press Enter to load its transcript.
-- `/quit`, `/q`, or `/exit` closes the interactive CLI.
+- `/skills` lists available skills from the current workspace.
+- `/status` queries the router's `/status` endpoint and prints the router state and
+  version.
 
 ## Referencing files
 

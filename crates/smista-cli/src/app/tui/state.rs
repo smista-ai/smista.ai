@@ -336,8 +336,9 @@ impl State {
             }
             Msg::RouterStatus(status) => {
                 self.history.push(HistoryEntry::Notice(format!(
-                    "{ROUTER_NOTICE_PREFIX} {} ({})",
-                    status.status, status.version
+                    "{ROUTER_NOTICE_PREFIX} {status} (version: {version})",
+                    status = status.status,
+                    version = status.version
                 )));
             }
             Msg::SessionsList(sessions) => {
@@ -846,7 +847,7 @@ mod tests {
         assert_eq!(
             state.history.last(),
             Some(&HistoryEntry::Notice(format!(
-                "{ROUTER_NOTICE_PREFIX} {ROUTER_STATUS} ({ROUTER_VERSION})"
+                "{ROUTER_NOTICE_PREFIX} {ROUTER_STATUS} (version: {ROUTER_VERSION})"
             )))
         );
 

@@ -125,15 +125,15 @@ fn history_entry_lines(entry: &HistoryEntry, width: u16) -> Vec<Line<'static>> {
     match entry {
         HistoryEntry::UserMessage(message) => user_message_lines(message, width),
         HistoryEntry::AssistantMessage(message) => plain_block(message, palette().assistant),
-        HistoryEntry::Reasoning(message) => prefixed_block("reasoning", message, palette().dim),
+        HistoryEntry::Reasoning(message) => prefixed_block("Thinking", message, palette().dim),
         HistoryEntry::ToolCall { name, input } => tool_call_lines(name, input),
         HistoryEntry::ToolResult { name, output } => tool_result_lines(name, output),
         HistoryEntry::Diff { added, removed } => diff_lines(added, removed),
         HistoryEntry::ApprovalRequest(prompt) => approval_history_lines(prompt),
         HistoryEntry::Trace(trace) => trace_lines(trace),
         HistoryEntry::Preview(preview) => preview_lines(preview),
-        HistoryEntry::Error(error) => prefixed_block("error", error, palette().error),
-        HistoryEntry::Notice(message) => prefixed_block("notice", message, palette().dim),
+        HistoryEntry::Error(error) => prefixed_block("ERROR", error, palette().error),
+        HistoryEntry::Notice(message) => prefixed_block("Notice", message, palette().notice),
     }
 }
 
@@ -535,6 +535,7 @@ struct Palette {
     input_text: Style,
     interrupted: Style,
     line_number: Style,
+    notice: Style,
     option: Style,
     placeholder: Style,
     preview: Style,
@@ -565,6 +566,9 @@ fn palette() -> Palette {
         input_text: Style::default(),
         interrupted: Style::default().fg(Color::LightRed),
         line_number: Style::default().fg(Color::DarkGray),
+        notice: Style::default()
+            .fg(Color::Gray)
+            .add_modifier(Modifier::BOLD),
         option: Style::default().fg(Color::Gray),
         placeholder: Style::default().fg(Color::DarkGray),
         preview: Style::default().fg(Color::Magenta),

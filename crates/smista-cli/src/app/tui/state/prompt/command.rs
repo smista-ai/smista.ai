@@ -9,6 +9,7 @@ pub(super) const COMMAND_Q: &str = "q";
 pub(super) const COMMAND_QUIT: &str = "quit";
 pub(super) const COMMAND_RESUME: &str = "resume";
 pub(super) const COMMAND_SKILLS: &str = "skills";
+pub(super) const COMMAND_STATUS: &str = "status";
 
 const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_EXIT, Command::Quit),
@@ -18,6 +19,7 @@ const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_QUIT, Command::Quit),
     (COMMAND_RESUME, Command::Resume),
     (COMMAND_SKILLS, Command::Skills),
+    (COMMAND_STATUS, Command::Status),
 ];
 
 /// A recognized or in-progress slash command.
@@ -27,12 +29,14 @@ pub enum Command {
     Model,
     /// `/providers` command. Lists available providers.
     Providers,
+    /// `/quit`, `/q`, or `/exit` command, exits the application.
+    Quit,
     /// `/resume` command. Lists sessions, or resumes a session when an ID is passed.
     Resume,
     /// `/skills` command, lists available skills.
     Skills,
-    /// `/quit`, `/q`, or `/exit` command, exits the application.
-    Quit,
+    /// `/status` command, shows the current status of the router.
+    Status,
     /// Still unresolved
     Unresolved(String),
 }
@@ -47,6 +51,7 @@ impl Command {
             Self::Quit => COMMAND_QUIT,
             Self::Resume => COMMAND_RESUME,
             Self::Skills => COMMAND_SKILLS,
+            Self::Status => COMMAND_STATUS,
             Self::Unresolved(command) => command,
         }
     }

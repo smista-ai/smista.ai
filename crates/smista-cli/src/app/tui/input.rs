@@ -309,6 +309,12 @@ where
                 );
                 None
             }
+            Command::Status => {
+                tracing::debug!(
+                    "input event is status command, producing get router status command"
+                );
+                Some(Cmd::GetRouterStatus)
+            }
             Command::Unresolved(unresolved) => {
                 tracing::debug!(
                     "input event is unresolved '{unresolved}' command, producing execute command"
