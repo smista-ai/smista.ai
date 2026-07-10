@@ -10,7 +10,7 @@ use smista_core::error::ProviderError;
 use smista_core::model::{ModelDescriptor, ModelReference, Provider};
 
 #[doc(inline)]
-pub use self::gpt::{gpt_5_4, gpt_5_4_mini, gpt_5_5};
+pub use self::gpt::{gpt_5_4, gpt_5_4_mini, gpt_5_5, gpt_5_6_luna, gpt_5_6_sol, gpt_5_6_terra};
 use crate::ProviderResult;
 use crate::agent::{Agent, AgentArgs};
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
@@ -23,7 +23,14 @@ use crate::model::Model;
 /// The single catalog the provider reads to resolve and list models, so the set
 /// of offered models is declared in one place.
 pub fn catalog() -> Vec<ModelDescriptor> {
-    vec![gpt_5_4(), gpt_5_4_mini(), gpt_5_5()]
+    vec![
+        gpt_5_4(),
+        gpt_5_4_mini(),
+        gpt_5_5(),
+        gpt_5_6_sol(),
+        gpt_5_6_terra(),
+        gpt_5_6_luna(),
+    ]
 }
 
 /// Arguments for creating a new OpenAI model.
