@@ -331,3 +331,22 @@ review @src/auth/middleware.rs
 ```
 
 The CLI auto-completes paths typed after `@`.
+
+Start typing a relative or absolute path immediately after `@`. Relative paths
+are resolved from the directory where `smista` was started. Absolute paths can
+reference files outside that directory.
+
+- Press `Down` or `Up` to cycle through matching files and directories.
+- Press `Tab` or `Right` to accept the selected path. Accepting a directory
+  keeps its trailing path separator so you can continue completing its
+  contents.
+- Press `Escape` to close file completion without removing what you typed.
+
+Completion includes hidden and ignored entries and matches one directory
+segment at a time using a case-sensitive prefix. A space, tab, or newline ends
+the file reference, so paths containing whitespace are not supported.
+
+When you submit the prompt, every existing regular file referenced by an
+`@path` token is attached to the request. The `@path` text remains unchanged in
+the prompt. Missing paths, unreadable paths, directories, and a bare `@` remain
+ordinary prompt text and do not produce an input error.

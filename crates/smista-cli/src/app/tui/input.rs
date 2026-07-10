@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use uuid::Uuid;
 
@@ -47,6 +48,10 @@ where
     }
 
     fn handle_input_on_console(&mut self, event: InputEvent) -> Option<Cmd> {
+        if self.handle_file_autocomplete_input(&event) {
+            return None;
+        }
+
         if matches!(event, InputEvent::Up | InputEvent::Down) {
             return self.handle_console_history_navigation(event);
         }
@@ -71,10 +76,12 @@ where
         match event {
             InputEvent::Backspace => {
                 console.prompt.backspace();
+                self.refresh_file_autocomplete();
                 None
             }
             InputEvent::Newline => {
                 console.prompt.push('\n');
+                self.refresh_file_autocomplete();
                 None
             }
             InputEvent::Enter => match &console.prompt {
@@ -82,8 +89,9 @@ where
                     tracing::debug!("input event is enter, but prompt input is empty, ignoring");
                     None
                 }
-                PromptState::Text(input) => {
-                    let prompt = input.text().trim().to_string();
+                PromptState::Text(_) | PromptState::FileAutocomplete(_) => {
+                    let prompt = console.prompt.text().unwrap_or_default().trim().to_owned();
+                    let files = mentioned_files(&prompt, &self.context.cwd);
                     console.prompt.clear();
 
                     if prompt.is_empty() {
@@ -100,7 +108,7 @@ where
                         self.state.push_prompt_history(prompt.clone());
                         Some(Cmd::Execute {
                             prompt,
-                            files: HashSet::default(),
+                            files,
                             plan: false,
                             explicit_model: self.state.preferred_model().cloned(),
                         })
@@ -125,11 +133,13 @@ where
             }
             InputEvent::Paste(content) => {
                 console.prompt.push_str(&content);
+                self.refresh_file_autocomplete();
 
                 None
             }
             InputEvent::Delete => {
                 console.prompt.delete();
+                self.refresh_file_autocomplete();
 
                 None
             }
@@ -169,6 +179,7 @@ where
             InputEvent::Char(char) => {
                 tracing::debug!("input event is character, pushing to prompt input state");
                 console.prompt.push(char);
+                self.refresh_file_autocomplete();
 
                 None
             }
@@ -177,6 +188,51 @@ where
 
                 None
             }
+        }
+    }
+
+    fn handle_file_autocomplete_input(&mut self, event: &InputEvent) -> bool {
+        let is_active = self
+            .state
+            .active_component
+            .console()
+            .is_some_and(|console| console.prompt.is_file_autocomplete_active());
+        if !is_active {
+            return false;
+        }
+
+        let Some(console) = self.state.active_component.console_mut() else {
+            return false;
+        };
+        match event {
+            InputEvent::Down => console.prompt.next_file_match(),
+            InputEvent::Up => console.prompt.previous_file_match(),
+            InputEvent::Tab | InputEvent::Right => {
+                console.prompt.accept_suggestion();
+                self.refresh_file_autocomplete();
+            }
+            InputEvent::Escape => {
+                console.prompt.cancel_file_autocomplete();
+            }
+            _ => return false,
+        }
+
+        true
+    }
+
+    fn refresh_file_autocomplete(&mut self) {
+        let query = self
+            .state
+            .active_component
+            .console()
+            .and_then(|console| console.prompt.file_autocomplete_query())
+            .map(ToOwned::to_owned);
+        let Some(query) = query else {
+            return;
+        };
+        let matches = file_matches(&self.context.cwd, &query);
+        if let Some(console) = self.state.active_component.console_mut() {
+            console.prompt.replace_file_matches(matches);
         }
     }
 
@@ -561,6 +617,52 @@ where
     }
 }
 
+fn file_matches(cwd: &Path, query: &str) -> Vec<PathBuf> {
+    let (typed_parent, prefix) = query
+        .rfind(std::path::is_separator)
+        .map_or(("", query), |separator| query.split_at(separator + 1));
+    let parent = Path::new(typed_parent);
+    let resolved_parent = if parent.is_absolute() {
+        parent.to_owned()
+    } else {
+        cwd.join(parent)
+    };
+    let Ok(entries) = std::fs::read_dir(resolved_parent) else {
+        return Vec::new();
+    };
+
+    let mut matches = entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with(prefix))
+        .map(|entry| {
+            let mut path = PathBuf::from(typed_parent).join(entry.file_name());
+            if entry.path().is_dir() {
+                path.push("");
+            }
+            path
+        })
+        .collect::<Vec<_>>();
+    matches.sort();
+    matches
+}
+
+fn mentioned_files(prompt: &str, cwd: &Path) -> HashSet<PathBuf> {
+    prompt
+        .split_whitespace()
+        .filter_map(|token| token.strip_prefix('@'))
+        .filter(|path| !path.is_empty())
+        .map(Path::new)
+        .map(|path| {
+            if path.is_absolute() {
+                path.to_owned()
+            } else {
+                cwd.join(path)
+            }
+        })
+        .filter(|path| path.is_file() && std::fs::File::open(path).is_ok())
+        .collect()
+}
+
 fn approval_command(prompt: &ApprovalPrompt, option: ApprovalOption) -> Cmd {
     Cmd::Continue(ContinueExecution::ApprovalDecisions {
         decisions: vec![approval_decision_for_option(prompt, option)],
@@ -749,6 +851,354 @@ mod tests {
             scope: None,
             updated_at: SESSION_UPDATED_AT.to_owned(),
         }
+    }
+
+    #[test]
+    fn file_matcher_lists_sorted_immediate_entries() {
+        let cwd = tempfile::tempdir().expect("temporary directory is created");
+        std::fs::write(cwd.path().join("zeta"), "z").expect("file is written");
+        std::fs::write(cwd.path().join("alpha"), "a").expect("file is written");
+        std::fs::write(cwd.path().join(".hidden"), "h").expect("file is written");
+        std::fs::create_dir(cwd.path().join("directory")).expect("directory is created");
+
+        let matches = file_matches(cwd.path(), "");
+        let mut directory = PathBuf::from("directory");
+        directory.push("");
+
+        assert_eq!(
+            matches,
+            vec![
+                PathBuf::from(".hidden"),
+                PathBuf::from("alpha"),
+                directory,
+                PathBuf::from("zeta"),
+            ]
+        );
+    }
+
+    #[test]
+    fn file_matcher_uses_case_sensitive_prefixes_and_includes_ignored_entries() {
+        let cwd = tempfile::tempdir().expect("temporary directory is created");
+        std::fs::write(cwd.path().join("Alpha"), "a").expect("file is written");
+        std::fs::write(cwd.path().join("alpha"), "a").expect("file is written");
+        std::fs::write(cwd.path().join("ignored.log"), "i").expect("file is written");
+        std::fs::write(cwd.path().join(".gitignore"), "ignored.log\n")
+            .expect("gitignore is written");
+
+        assert_eq!(file_matches(cwd.path(), "Al"), vec![PathBuf::from("Alpha")]);
+        assert_eq!(
+            file_matches(cwd.path(), "ignored"),
+            vec![PathBuf::from("ignored.log")]
+        );
+    }
+
+    #[test]
+    fn file_matcher_resolves_nested_relative_and_absolute_parents() {
+        let cwd = tempfile::tempdir().expect("temporary directory is created");
+        let nested = cwd.path().join("src");
+        std::fs::create_dir(&nested).expect("directory is created");
+        std::fs::write(nested.join("lib.rs"), "lib").expect("file is written");
+
+        let relative_query = format!("src{}li", std::path::MAIN_SEPARATOR);
+        assert_eq!(
+            file_matches(cwd.path(), &relative_query),
+            vec![PathBuf::from("src").join("lib.rs")]
+        );
+
+        let absolute_query = format!("{}{}li", nested.display(), std::path::MAIN_SEPARATOR);
+        assert_eq!(
+            file_matches(cwd.path(), &absolute_query),
+            vec![nested.join("lib.rs")]
+        );
+    }
+
+    #[test]
+    fn file_matcher_handles_special_names_and_missing_parents() {
+        let cwd = tempfile::tempdir().expect("temporary directory is created");
+        std::fs::write(cwd.path().join("with@sign"), "a").expect("file is written");
+        std::fs::write(cwd.path().join("unicodé"), "u").expect("file is written");
+
+        assert_eq!(
+            file_matches(cwd.path(), "with@"),
+            vec![PathBuf::from("with@sign")]
+        );
+        assert_eq!(
+            file_matches(cwd.path(), "unic"),
+            vec![PathBuf::from("unicodé")]
+        );
+        assert!(file_matches(cwd.path(), "missing/child").is_empty());
+        assert!(file_matches(cwd.path(), "no-match").is_empty());
+    }
+
+    #[test]
+    fn file_matcher_preserves_dot_and_parent_components() {
+        let root = tempfile::tempdir().expect("temporary directory is created");
+        let cwd = root.path().join("child");
+        std::fs::create_dir(&cwd).expect("child directory is created");
+        std::fs::write(cwd.join("local"), "local").expect("file is written");
+        std::fs::write(root.path().join("parent"), "parent").expect("file is written");
+
+        assert_eq!(
+            file_matches(&cwd, &format!(".{}lo", std::path::MAIN_SEPARATOR)),
+            vec![PathBuf::from(".").join("local")]
+        );
+        assert_eq!(
+            file_matches(&cwd, &format!("..{}pa", std::path::MAIN_SEPARATOR)),
+            vec![PathBuf::from("..").join("parent")]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_matcher_includes_symlinks_and_tolerates_unreadable_parents() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let cwd = tempfile::tempdir().expect("temporary directory is created");
+        std::fs::write(cwd.path().join("target"), "target").expect("file is written");
+        std::os::unix::fs::symlink(cwd.path().join("target"), cwd.path().join("link"))
+            .expect("symlink is created");
+        assert_eq!(file_matches(cwd.path(), "li"), vec![PathBuf::from("link")]);
+
+        let unreadable = cwd.path().join("unreadable");
+        std::fs::create_dir(&unreadable).expect("directory is created");
+        std::fs::write(unreadable.join("child"), "child").expect("file is written");
+        std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o0))
+            .expect("directory permissions are changed");
+        if std::fs::read_dir(&unreadable).is_err() {
+            assert!(
+                file_matches(
+                    cwd.path(),
+                    &format!("unreadable{}", std::path::MAIN_SEPARATOR)
+                )
+                .is_empty()
+            );
+        }
+        std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o700))
+            .expect("directory permissions are restored");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn file_matcher_supports_windows_drive_and_unc_paths() {
+        let cwd = tempfile::tempdir().expect("temporary directory is created");
+        std::fs::write(cwd.path().join("rooted"), "rooted").expect("file is written");
+        let drive_query = format!("{}{}roo", cwd.path().display(), std::path::MAIN_SEPARATOR);
+
+        assert_eq!(
+            file_matches(cwd.path(), &drive_query),
+            vec![cwd.path().join("rooted")]
+        );
+        assert!(file_matches(cwd.path(), r"\\missing\share\file").is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_matcher_supports_unix_rooted_paths() {
+        let cwd = tempfile::tempdir().expect("temporary directory is created");
+        let name = cwd
+            .path()
+            .file_name()
+            .expect("temporary directory has a name")
+            .to_string_lossy();
+        let parent = cwd
+            .path()
+            .parent()
+            .expect("temporary directory has a parent");
+        let query = format!(
+            "{}/{}",
+            parent.display(),
+            &name[..name.len().saturating_sub(1)]
+        );
+
+        assert!(file_matches(cwd.path(), &query).contains(&cwd.path().to_path_buf()));
+    }
+
+    #[test]
+    fn typing_and_editing_file_mention_refreshes_matches() {
+        let exit = CancellationToken::new();
+        let cwd = tempfile::tempdir()
+            .expect("temporary directory is created")
+            .keep();
+        std::fs::write(cwd.join("alpha"), "a").expect("file is written");
+        std::fs::write(cwd.join("beta"), "b").expect("file is written");
+        let mut tui = Tui::<TestBackend>::new_test(app_context_for_cwd(exit, cwd));
+
+        tui.on_input(InputEvent::Char('@'));
+        tui.on_input(InputEvent::Char('b'));
+        assert_eq!(console_suggestion(&tui), Some("@beta"));
+
+        tui.on_input(InputEvent::Backspace);
+        assert!(console_suggestion(&tui).is_some());
+    }
+
+    #[test]
+    fn file_completion_navigation_acceptance_and_escape_precede_history() {
+        let exit = CancellationToken::new();
+        let cwd = tempfile::tempdir()
+            .expect("temporary directory is created")
+            .keep();
+        std::fs::write(cwd.join("alpha"), "a").expect("file is written");
+        std::fs::write(cwd.join("beta"), "b").expect("file is written");
+        let mut tui = Tui::<TestBackend>::new_test(app_context_for_cwd(exit, cwd));
+
+        tui.on_input(InputEvent::Char('@'));
+        tui.on_input(InputEvent::Down);
+        assert_eq!(console_suggestion(&tui), Some("@beta"));
+        tui.on_input(InputEvent::Up);
+        assert_eq!(console_suggestion(&tui), Some("@alpha"));
+        tui.on_input(InputEvent::Tab);
+        assert_eq!(console_prompt_input(&tui), "@alpha");
+        tui.on_input(InputEvent::Escape);
+        assert_eq!(console_prompt_input(&tui), "@alpha");
+        assert!(!console_file_autocomplete_active(&tui));
+    }
+
+    #[test]
+    fn right_accepts_file_match_and_is_safe_without_matches() {
+        let exit = CancellationToken::new();
+        let cwd = tempfile::tempdir()
+            .expect("temporary directory is created")
+            .keep();
+        std::fs::write(cwd.join("file.rs"), "f").expect("file is written");
+        let mut tui = Tui::<TestBackend>::new_test(app_context_for_cwd(exit, cwd));
+
+        tui.on_input(InputEvent::Paste("@fi".to_owned()));
+        tui.on_input(InputEvent::Right);
+        assert_eq!(console_prompt_input(&tui), "@file.rs");
+
+        tui.on_input(InputEvent::Char('x'));
+        assert_eq!(console_prompt_input(&tui), "@file.rsx");
+        tui.on_input(InputEvent::Right);
+        assert_eq!(console_prompt_input(&tui), "@file.rsx");
+    }
+
+    #[test]
+    fn accepted_directory_can_complete_nested_file() {
+        let exit = CancellationToken::new();
+        let cwd = tempfile::tempdir()
+            .expect("temporary directory is created")
+            .keep();
+        std::fs::create_dir(cwd.join("src")).expect("directory is created");
+        std::fs::write(cwd.join("src").join("lib.rs"), "lib").expect("file is written");
+        let mut tui = Tui::<TestBackend>::new_test(app_context_for_cwd(exit, cwd));
+
+        tui.on_input(InputEvent::Paste("@sr".to_owned()));
+        tui.on_input(InputEvent::Tab);
+        assert_eq!(
+            console_prompt_input(&tui),
+            format!("@src{}", std::path::MAIN_SEPARATOR)
+        );
+        assert!(console_suggestion(&tui).is_some_and(|path| path.ends_with("lib.rs")));
+        tui.on_input(InputEvent::Tab);
+        assert!(console_prompt_input(&tui).ends_with("lib.rs"));
+    }
+
+    #[test]
+    fn paste_whitespace_ends_file_completion() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        tui.on_input(InputEvent::Paste("review @file next".to_owned()));
+
+        assert!(!console_file_autocomplete_active(&tui));
+        assert_eq!(console_prompt_input(&tui), "review @file next");
+    }
+
+    #[test]
+    fn second_escape_after_file_completion_cancellation_clears_prompt() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+        tui.on_input(InputEvent::Paste("@missing".to_owned()));
+
+        tui.on_input(InputEvent::Escape);
+        assert_eq!(console_prompt_input(&tui), "@missing");
+
+        tui.on_input(InputEvent::Escape);
+        assert_eq!(console_prompt_input(&tui), "");
+    }
+
+    #[test]
+    fn enter_resolves_file_mentions_and_preserves_prompt_text() {
+        let exit = CancellationToken::new();
+        let cwd = tempfile::tempdir()
+            .expect("temporary directory is created")
+            .keep();
+        let relative = cwd.join("relative.rs");
+        std::fs::write(&relative, "relative").expect("file is written");
+        let outside = tempfile::NamedTempFile::new().expect("temporary file is created");
+        let prompt = format!(
+            "  review @relative.rs @relative.rs @{} @missing @  ",
+            outside.path().display()
+        );
+        let mut tui = Tui::<TestBackend>::new_test(app_context_for_cwd(exit, cwd));
+
+        tui.on_input(InputEvent::Paste(prompt));
+        let cmd = tui
+            .on_input(InputEvent::Enter)
+            .expect("text prompt produces execute command");
+        let Cmd::Execute {
+            prompt,
+            files,
+            plan,
+            explicit_model,
+        } = cmd
+        else {
+            panic!("execute command expected");
+        };
+
+        assert_eq!(
+            prompt,
+            format!(
+                "review @relative.rs @relative.rs @{} @missing @",
+                outside.path().display()
+            )
+        );
+        assert_eq!(
+            files,
+            HashSet::from([relative, outside.path().to_path_buf()])
+        );
+        assert!(!plan);
+        assert_eq!(explicit_model, None);
+
+        tui.on_input(InputEvent::Up);
+        assert_eq!(console_prompt_input(&tui), prompt);
+    }
+
+    #[test]
+    fn mentioned_files_omit_directories_and_keep_symlink_targets() {
+        let cwd = tempfile::tempdir().expect("temporary directory is created");
+        std::fs::create_dir(cwd.path().join("directory")).expect("directory is created");
+        std::fs::write(cwd.path().join("target"), "target").expect("file is written");
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(cwd.path().join("target"), cwd.path().join("link"))
+            .expect("symlink is created");
+
+        let files = mentioned_files("@directory @target @missing @link", cwd.path());
+        assert!(files.contains(&cwd.path().join("target")));
+        assert!(!files.contains(&cwd.path().join("directory")));
+        assert!(!files.contains(&cwd.path().join("missing")));
+        #[cfg(unix)]
+        assert!(files.contains(&cwd.path().join("link")));
+    }
+
+    #[test]
+    fn mentioned_files_parse_all_whitespace_delimiters() {
+        let cwd = tempfile::tempdir().expect("temporary directory is created");
+        for name in ["one", "two", "three"] {
+            std::fs::write(cwd.path().join(name), name).expect("file is written");
+        }
+
+        let files = mentioned_files("@one\t@two\n@three", cwd.path());
+
+        assert_eq!(
+            files,
+            HashSet::from([
+                cwd.path().join("one"),
+                cwd.path().join("two"),
+                cwd.path().join("three"),
+            ])
+        );
     }
 
     #[test]
@@ -1516,6 +1966,24 @@ mod tests {
             .expect("console view is active")
             .prompt
             .input()
+    }
+
+    fn console_suggestion(tui: &Tui<TestBackend>) -> Option<&str> {
+        tui.state
+            .active_component
+            .console()
+            .expect("console view is active")
+            .prompt
+            .current_suggestion()
+    }
+
+    fn console_file_autocomplete_active(tui: &Tui<TestBackend>) -> bool {
+        tui.state
+            .active_component
+            .console()
+            .expect("console view is active")
+            .prompt
+            .is_file_autocomplete_active()
     }
 
     fn selected_approval_index(tui: &Tui<TestBackend>) -> usize {

@@ -654,6 +654,7 @@ fn ansi_color(index: u8) -> Option<(u8, u8, u8)> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::time::{Duration, Instant};
 
     use super::*;
@@ -790,6 +791,66 @@ mod tests {
 
         assert_eq!(plain_text(&lines[0]), "› a");
         assert_eq!(plain_text(&lines[1]), "  b");
+    }
+
+    #[test]
+    fn prompt_lines_render_only_file_suggestion_suffix_as_placeholder() {
+        let mut prompt = PromptState::default();
+        prompt.push_str("review @sr");
+        prompt.replace_file_matches(vec![PathBuf::from("src/lib.rs")]);
+
+        let lines = prompt_lines(&prompt);
+
+        assert_eq!(plain_text(&lines[0]), "› review @src/lib.rs");
+        assert_eq!(lines[0].spans.len(), 3);
+        assert_eq!(lines[0].spans[1].content.as_ref(), "review @sr");
+        assert_eq!(lines[0].spans[1].style, palette().input_text);
+        assert_eq!(lines[0].spans[2].content.as_ref(), "c/lib.rs");
+        assert_eq!(lines[0].spans[2].style, palette().placeholder);
+    }
+
+    #[test]
+    fn prompt_lines_render_absolute_and_directory_suggestions() {
+        let mut absolute = PromptState::default();
+        absolute.push_str("@/tm");
+        absolute.replace_file_matches(vec![PathBuf::from("/tmp/outside.rs")]);
+        assert_eq!(
+            plain_text(&prompt_lines(&absolute)[0]),
+            "› @/tmp/outside.rs"
+        );
+
+        let mut directory = PathBuf::from("src");
+        directory.push("");
+        let mut relative = PromptState::default();
+        relative.push_str("@s");
+        relative.replace_file_matches(vec![directory]);
+        assert_eq!(
+            plain_text(&prompt_lines(&relative)[0]),
+            format!("› @src{}", std::path::MAIN_SEPARATOR)
+        );
+    }
+
+    #[test]
+    fn prompt_lines_omit_empty_or_exact_file_suggestions() {
+        let mut prompt = PromptState::default();
+        prompt.push_str("@file.rs");
+        assert_eq!(prompt_lines(&prompt)[0].spans.len(), 2);
+
+        prompt.replace_file_matches(vec![PathBuf::from("file.rs")]);
+        assert_eq!(prompt_lines(&prompt)[0].spans.len(), 2);
+    }
+
+    #[test]
+    fn file_suggestion_does_not_move_prompt_cursor() {
+        let mut console = ConsoleState::default();
+        console.prompt.push_str("@sr");
+        console
+            .prompt
+            .replace_file_matches(vec![PathBuf::from("src/a/long/path.rs")]);
+
+        let position = prompt_cursor_position(&console, None, Rect::new(0, 0, 10, 4));
+
+        assert_eq!(position, Some((5, 1)));
     }
 
     #[test]
