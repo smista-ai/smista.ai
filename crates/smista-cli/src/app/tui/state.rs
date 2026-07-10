@@ -13,6 +13,8 @@ mod prompt;
 mod router;
 mod turn;
 
+use std::collections::VecDeque;
+
 use smista_sdk::core::model::ModelReference;
 
 pub use self::active_component::{ActiveComponentKind, ActiveComponentState, UsageState};
@@ -50,6 +52,7 @@ const MESSAGE_THINKING: &str = "thinking";
 const MESSAGE_TOOL_CALL_STARTED: &str = "tool_call_started";
 const MESSAGE_TRACE: &str = "trace";
 const MESSAGE_USAGE: &str = "usage";
+const PROMPT_HISTORY_LIMIT: usize = 100;
 const ROUTER_NOTICE_PREFIX: &str = "router";
 
 /// Selectable entry in the model picker.
@@ -59,6 +62,17 @@ pub enum ModelListEntry {
     Auto,
     /// Explicit model choice.
     Model(Model),
+}
+
+/// Result of moving through prompt input history.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PromptHistoryNavigation {
+    /// The prompt should be replaced with this history entry.
+    Entry(String),
+    /// Navigation moved past the newest entry, so the prompt should clear.
+    Clear,
+    /// There was no active history navigation to update.
+    Unchanged,
 }
 
 /// Terminal UI state for the smista-cli user interface.
@@ -76,6 +90,10 @@ pub struct State {
     pub history: Vec<HistoryEntry>,
     /// Preferred model selected by the user.
     preferred_model: Option<ModelReference>,
+    /// Previously submitted non-empty prompt inputs.
+    prompt_history: VecDeque<String>,
+    /// Currently recalled prompt history index.
+    prompt_history_index: Option<usize>,
     /// The state of the smista-router execution ()
     pub router: RouterState,
 }
@@ -88,6 +106,71 @@ impl State {
             history.entries = self.history.len(),
             "appended tui history entry"
         );
+    }
+
+    /// Appends a non-empty prompt input to recall history.
+    pub fn push_prompt_history(&mut self, input: String) {
+        if input.trim().is_empty() {
+            return;
+        }
+
+        if self.prompt_history.len() == PROMPT_HISTORY_LIMIT {
+            self.prompt_history.pop_front();
+        }
+
+        self.prompt_history.push_back(input);
+        self.reset_prompt_history_navigation();
+        tracing::trace!(
+            prompt_history.entries = self.prompt_history.len(),
+            "appended prompt history entry"
+        );
+    }
+
+    /// Moves to the previous prompt history entry.
+    #[must_use]
+    pub fn previous_prompt_history_entry(&mut self) -> Option<String> {
+        if self.prompt_history.is_empty() {
+            return None;
+        }
+
+        let index = self.prompt_history_index.map_or_else(
+            || self.prompt_history.len().saturating_sub(1),
+            |index| index.saturating_sub(1),
+        );
+        self.prompt_history_index = Some(index);
+
+        self.prompt_history.get(index).cloned()
+    }
+
+    /// Moves to the next prompt history entry.
+    #[must_use]
+    pub fn next_prompt_history_entry(&mut self) -> PromptHistoryNavigation {
+        let Some(index) = self.prompt_history_index else {
+            return PromptHistoryNavigation::Unchanged;
+        };
+
+        let next_index = index.saturating_add(1);
+        if next_index >= self.prompt_history.len() {
+            self.reset_prompt_history_navigation();
+            return PromptHistoryNavigation::Clear;
+        }
+
+        self.prompt_history_index = Some(next_index);
+        self.prompt_history.get(next_index).cloned().map_or(
+            PromptHistoryNavigation::Clear,
+            PromptHistoryNavigation::Entry,
+        )
+    }
+
+    /// Returns `true` when a prompt history entry is currently recalled.
+    #[must_use]
+    pub fn is_prompt_history_navigation_active(&self) -> bool {
+        self.prompt_history_index.is_some()
+    }
+
+    /// Stops navigating prompt history.
+    pub fn reset_prompt_history_navigation(&mut self) {
+        self.prompt_history_index = None;
     }
 
     /// Clears history for a session change.
@@ -470,6 +553,56 @@ mod tests {
         state.clear_preferred_model();
 
         assert_eq!(state.preferred_model(), None);
+    }
+
+    #[test]
+    fn prompt_history_keeps_bounded_non_empty_entries() {
+        let mut state = State::default();
+
+        state.push_prompt_history("   ".to_owned());
+        assert!(state.prompt_history.is_empty());
+
+        for index in 0..PROMPT_HISTORY_LIMIT + 1 {
+            state.push_prompt_history(format!("prompt-{index}"));
+        }
+
+        assert_eq!(state.prompt_history.len(), PROMPT_HISTORY_LIMIT);
+        assert_eq!(
+            state.prompt_history.front().map(String::as_str),
+            Some("prompt-1")
+        );
+        assert_eq!(
+            state.prompt_history.back().map(String::as_str),
+            Some("prompt-100")
+        );
+    }
+
+    #[test]
+    fn prompt_history_navigation_moves_older_newer_and_clears() {
+        let mut state = State::default();
+        state.push_prompt_history("first".to_owned());
+        state.push_prompt_history("second".to_owned());
+
+        assert_eq!(
+            state.previous_prompt_history_entry().as_deref(),
+            Some("second")
+        );
+        assert_eq!(
+            state.previous_prompt_history_entry().as_deref(),
+            Some("first")
+        );
+        assert_eq!(
+            state.next_prompt_history_entry(),
+            PromptHistoryNavigation::Entry("second".to_owned())
+        );
+        assert_eq!(
+            state.next_prompt_history_entry(),
+            PromptHistoryNavigation::Clear
+        );
+        assert_eq!(
+            state.next_prompt_history_entry(),
+            PromptHistoryNavigation::Unchanged
+        );
     }
 
     #[test]

@@ -55,6 +55,12 @@ impl PromptState {
         }
     }
 
+    /// Replaces the prompt with renderable input text.
+    pub fn replace_with_input(&mut self, input: impl AsRef<str>) {
+        self.clear();
+        self.push_str(input.as_ref());
+    }
+
     /// Removes the character before the cursor.
     pub fn backspace(&mut self) -> Option<char> {
         match self {
@@ -638,6 +644,23 @@ mod tests {
                 cursor: QUIT_COMMAND_INPUT.chars().count(),
             })
         );
+    }
+
+    #[test]
+    fn replace_with_input_rebuilds_prompt_state() {
+        let mut state = PromptState::default();
+
+        state.replace_with_input(QUIT_INPUT);
+        assert_eq!(state.command(), Some(&Command::Quit));
+        assert_eq!(state.command_args(), Some(QUIT_ARGUMENTS));
+        assert_eq!(state.cursor_position(), QUIT_INPUT.chars().count());
+
+        state.replace_with_input(HELLO_INPUT);
+        assert_eq!(state.input(), HELLO_INPUT);
+        assert_eq!(state.command(), None);
+
+        state.replace_with_input("");
+        assert_eq!(state, PromptState::Empty);
     }
 
     #[test]
