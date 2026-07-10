@@ -52,6 +52,15 @@ const MESSAGE_TRACE: &str = "trace";
 const MESSAGE_USAGE: &str = "usage";
 const ROUTER_NOTICE_PREFIX: &str = "router";
 
+/// Selectable entry in the model picker.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ModelListEntry {
+    /// Automatic model routing.
+    Auto,
+    /// Explicit model choice.
+    Model(Model),
+}
+
 /// Terminal UI state for the smista-cli user interface.
 #[derive(Debug, Default)]
 pub struct State {
@@ -59,23 +68,19 @@ pub struct State {
     ///
     /// On active component change, the previous state is lost.
     pub active_component: ActiveComponentState,
+    /// Set awaited model. This means the user has selected a model, but we need to await list of models to validate it.
+    pub awaited_model: Option<String>,
     /// The active execution turn, if any
     pub execution_turn: Option<ExecutionTurn>,
     /// Conversation history
     pub history: Vec<HistoryEntry>,
     /// Preferred model selected by the user.
-    pub preferred_model: Option<ModelReference>,
+    preferred_model: Option<ModelReference>,
     /// The state of the smista-router execution ()
     pub router: RouterState,
 }
 
 impl State {
-    /// Creates empty terminal UI state.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Appends a renderable history entry.
     pub fn push_history(&mut self, entry: HistoryEntry) {
         self.history.push(entry);
@@ -108,6 +113,19 @@ impl State {
         tracing::debug!(preferred_model.present = true, "set tui preferred model");
     }
 
+    /// Returns the awaited model selected by the user.
+    ///
+    /// Replaces the awaited model with None, so it can only be called once per awaited model.
+    #[must_use]
+    pub fn take_awaited_model(&mut self) -> Option<String> {
+        self.awaited_model.take()
+    }
+
+    /// Sets the awaited model selected by the user.
+    pub fn set_awaited_model(&mut self, model: String) {
+        self.awaited_model = Some(model);
+    }
+
     /// Clears the preferred model selected by the user.
     pub fn clear_preferred_model(&mut self) {
         self.preferred_model = None;
@@ -132,8 +150,11 @@ impl State {
 
     /// Shows the models list view without changing history.
     pub fn show_models_list(&mut self, models: Vec<Model>) {
-        let entry_count = models.len();
-        self.active_component = ActiveComponentState::ModelsList(ListState::new(models));
+        let entry_count = models.len().saturating_add(1);
+        let mut entries = Vec::with_capacity(entry_count);
+        entries.push(ModelListEntry::Auto);
+        entries.extend(models.into_iter().map(ModelListEntry::Model));
+        self.active_component = ActiveComponentState::ModelsList(ListState::new(entries));
         self.trace_active_component(COMPONENT_MODELS_LIST, Some(entry_count));
     }
 
@@ -196,8 +217,23 @@ impl State {
                 self.router = RouterState::Interrupted;
                 self.execution_turn = None;
             }
-            Msg::ModelsList(models) => {
-                self.show_models_list(models);
+            Msg::ModelsList(mut models) => {
+                if let Some(awaited_model) = self.take_awaited_model() {
+                    if let Some(model_ref) = Self::match_model(&awaited_model, &models) {
+                        self.set_preferred_model(model_ref);
+                    } else {
+                        self.push_history(HistoryEntry::Error(format!(
+                            r#"Unknown model: "{awaited_model}". List available models with `/model`"#
+                        )));
+                    }
+                } else {
+                    // sort models by (provider, display_name) for consistent ordering
+                    models.sort_by(|a, b| {
+                        (&a.provider, &a.display_name).cmp(&(&b.provider, &b.display_name))
+                    });
+
+                    self.show_models_list(models);
+                }
             }
             Msg::Preview(preview) => {
                 self.history.push(HistoryEntry::Preview(preview));
@@ -279,6 +315,16 @@ impl State {
             );
         }
     }
+
+    fn match_model(model: &str, models: &[Model]) -> Option<ModelReference> {
+        models
+            .iter()
+            .find(|m| {
+                let model_ref = format!("{provider}/{id}", provider = m.provider, id = m.id);
+                m.id == model || m.display_name == model || model_ref == model
+            })
+            .map(|m| m.reference.clone())
+    }
 }
 
 fn message_kind(msg: &Msg) -> &'static str {
@@ -344,28 +390,21 @@ mod tests {
 
     #[test]
     fn list_messages_replace_active_component_without_polluting_history() {
-        let mut state = State::new();
+        let mut state = State::default();
 
-        state.apply_msg(Msg::ModelsList(vec![Model {
-            provider: PROVIDER_OPENAI.to_owned(),
-            id: MODEL_ID.to_owned(),
-            display_name: MODEL_DISPLAY_NAME.to_owned(),
-            max_context_tokens: 128_000,
-            max_output_tokens: Some(16_000),
-            input_cost_per_million_tokens: None,
-            output_cost_per_million_tokens: None,
-        }]));
+        state.apply_msg(Msg::ModelsList(vec![model(MODEL_ID, MODEL_DISPLAY_NAME)]));
 
         assert!(state.history.is_empty());
         let ActiveComponentState::ModelsList(models) = &state.active_component else {
             panic!("{MODELS_LIST_EXPECTED}");
         };
-        assert_eq!(models.entries().len(), 1);
+        assert_eq!(models.entries().len(), 2);
+        assert_eq!(models.entries().first(), Some(&ModelListEntry::Auto));
     }
 
     #[test]
     fn usage_message_replaces_active_component_without_polluting_history() {
-        let mut state = State::new();
+        let mut state = State::default();
 
         state.apply_msg(Msg::Usage(SessionUsageResponse {
             total: Usage::default(),
@@ -382,7 +421,7 @@ mod tests {
 
     #[test]
     fn sessions_list_message_replaces_active_component_without_polluting_history() {
-        let mut state = State::new();
+        let mut state = State::default();
         let session = SessionListItem {
             id: Uuid::nil(),
             title: Some(SESSION_TITLE.to_owned()),
@@ -401,7 +440,7 @@ mod tests {
 
     #[test]
     fn assistant_turn_becomes_transcript_history() {
-        let mut state = State::new();
+        let mut state = State::default();
 
         state.apply_msg(Msg::AssistantTurn(
             crate::app::router_client::msg::AssistantTurn {
@@ -418,7 +457,7 @@ mod tests {
 
     #[test]
     fn preferred_model_defaults_to_none_and_can_be_changed() {
-        let mut state = State::new();
+        let mut state = State::default();
         assert_eq!(state.preferred_model(), None);
 
         let model = MODEL_REFERENCE
@@ -434,8 +473,63 @@ mod tests {
     }
 
     #[test]
+    fn models_list_message_sorts_models_after_auto_entry() {
+        let mut state = State::default();
+
+        state.apply_msg(Msg::ModelsList(vec![
+            model("z-model", "Z model"),
+            model("a-model", "A model"),
+        ]));
+
+        let ActiveComponentState::ModelsList(models) = &state.active_component else {
+            panic!("{MODELS_LIST_EXPECTED}");
+        };
+        assert!(matches!(models.entries()[0], ModelListEntry::Auto));
+        assert_model_entry(&models.entries()[1], "a-model");
+        assert_model_entry(&models.entries()[2], "z-model");
+    }
+
+    #[test]
+    fn awaited_model_sets_preferred_model_without_showing_list() {
+        let mut state = State::default();
+        state.set_awaited_model(MODEL_DISPLAY_NAME.to_owned());
+
+        state.apply_msg(Msg::ModelsList(vec![model(MODEL_ID, MODEL_DISPLAY_NAME)]));
+
+        assert_eq!(
+            state
+                .preferred_model()
+                .map(std::string::ToString::to_string)
+                .as_deref(),
+            Some(MODEL_REFERENCE)
+        );
+        assert!(state.awaited_model.is_none());
+        assert!(matches!(
+            state.active_component,
+            ActiveComponentState::Console(_)
+        ));
+        assert!(state.history.is_empty());
+    }
+
+    #[test]
+    fn awaited_unknown_model_reports_error_without_setting_preference() {
+        let mut state = State::default();
+        state.set_awaited_model("missing".to_owned());
+
+        state.apply_msg(Msg::ModelsList(vec![model(MODEL_ID, MODEL_DISPLAY_NAME)]));
+
+        assert_eq!(state.preferred_model(), None);
+        assert_eq!(
+            state.history.last(),
+            Some(&HistoryEntry::Error(
+                r#"Unknown model: "missing". List available models with `/model`"#.to_owned()
+            ))
+        );
+    }
+
+    #[test]
     fn show_methods_switch_active_component_without_touching_history() {
-        let mut state = State::new();
+        let mut state = State::default();
         state.push_history(HistoryEntry::AssistantMessage(ASSISTANT_MESSAGE.to_owned()));
 
         state.show_skill_list(Vec::new());
@@ -492,7 +586,7 @@ mod tests {
 
     #[test]
     fn streaming_chunks_update_transient_execution_turn() {
-        let mut state = State::new();
+        let mut state = State::default();
 
         state.apply_msg(Msg::StreamedContentChunk(CONTENT_CHUNK.to_owned()));
         state.apply_msg(Msg::StreamedReasoningChunk(REASONING_CHUNK.to_owned()));
@@ -507,7 +601,7 @@ mod tests {
 
     #[test]
     fn tool_call_and_approval_messages_update_history_and_execution_turn() {
-        let mut state = State::new();
+        let mut state = State::default();
 
         state.apply_msg(Msg::ToolCallStarted(ToolCallStarted {
             call_id: TOOL_CALL_ID.to_owned(),
@@ -547,7 +641,7 @@ mod tests {
 
     #[test]
     fn resumed_session_clears_previous_history_and_restores_prompt() {
-        let mut state = State::new();
+        let mut state = State::default();
         state.push_history(HistoryEntry::Error(ERROR_MESSAGE.to_owned()));
         state.show_models_list(Vec::new());
 
@@ -572,7 +666,7 @@ mod tests {
 
     #[test]
     fn trace_message_updates_trace_view_and_history() {
-        let mut state = State::new();
+        let mut state = State::default();
         let trace_event = TraceEvent {
             event_type: TRACE_EVENT_TYPE,
             task_type: TRACE_TASK_TYPE,
@@ -596,7 +690,7 @@ mod tests {
 
     #[test]
     fn status_preview_error_and_router_lifecycle_messages_update_state() {
-        let mut state = State::new();
+        let mut state = State::default();
 
         state.apply_msg(Msg::Thinking);
         assert_eq!(state.router.kind(), "thinking");
@@ -642,5 +736,27 @@ mod tests {
 
         assert_eq!(state.router.kind(), "idle");
         assert!(state.execution_turn.is_none());
+    }
+
+    fn model(id: &str, display_name: &str) -> Model {
+        Model {
+            reference: format!("{PROVIDER_OPENAI}/{id}")
+                .parse::<ModelReference>()
+                .expect("model reference parses"),
+            provider: PROVIDER_OPENAI.to_owned(),
+            id: id.to_owned(),
+            display_name: display_name.to_owned(),
+            max_context_tokens: 128_000,
+            max_output_tokens: Some(16_000),
+            input_cost_per_million_tokens: None,
+            output_cost_per_million_tokens: None,
+        }
+    }
+
+    fn assert_model_entry(entry: &ModelListEntry, expected_id: &str) {
+        let ModelListEntry::Model(model) = entry else {
+            panic!("model list entry expected");
+        };
+        assert_eq!(model.id, expected_id);
     }
 }

@@ -4,8 +4,9 @@ use std::fmt;
 
 use smista_sdk::core::api::SessionUsageResponse;
 
+use super::ModelListEntry;
 use super::list::ListState;
-use crate::app::router_client::msg::{Model, Provider, SessionListItem, TraceEvent};
+use crate::app::router_client::msg::{Provider, SessionListItem, TraceEvent};
 use crate::app::tui::state::console::ConsoleState;
 use crate::skills::SkillEntry;
 
@@ -26,7 +27,7 @@ pub enum ActiveComponentState {
     /// Logs list view.
     LogsList(ListState<String>),
     /// Models list view.
-    ModelsList(ListState<Model>),
+    ModelsList(ListState<ModelListEntry>),
     /// Providers list view.
     ProvidersList(ListState<Provider>),
     /// Sessions list view.
@@ -128,7 +129,7 @@ impl ActiveComponentState {
 
     /// Returns the models list state when active.
     #[must_use]
-    pub fn models_list(&self) -> Option<&ListState<Model>> {
+    pub fn models_list(&self) -> Option<&ListState<ModelListEntry>> {
         match self {
             Self::ModelsList(state) => Some(state),
             _ => None,
@@ -137,7 +138,7 @@ impl ActiveComponentState {
 
     /// Returns the mutable models list state when active.
     #[must_use]
-    pub fn models_list_mut(&mut self) -> Option<&mut ListState<Model>> {
+    pub fn models_list_mut(&mut self) -> Option<&mut ListState<ModelListEntry>> {
         match self {
             Self::ModelsList(state) => Some(state),
             _ => None,
@@ -251,10 +252,12 @@ impl UsageState {
 #[cfg(test)]
 mod tests {
     use smista_sdk::core::api::SessionUsageResponse;
+    use smista_sdk::core::model::{ModelReference, Provider as CoreProvider};
     use smista_sdk::core::usage::Usage;
     use uuid::Uuid;
 
     use super::*;
+    use crate::app::router_client::msg::Model;
 
     const MODEL_DISPLAY_NAME: &str = "GPT-4.1";
     const MODEL_ID: &str = "gpt-4.1";
@@ -279,6 +282,10 @@ mod tests {
 
     fn model() -> Model {
         Model {
+            reference: ModelReference {
+                provider: CoreProvider::OpenAI,
+                model: MODEL_ID.to_owned(),
+            },
             provider: PROVIDER_NAME.to_owned(),
             id: MODEL_ID.to_owned(),
             display_name: MODEL_DISPLAY_NAME.to_owned(),
@@ -320,7 +327,8 @@ mod tests {
         assert_eq!(prompt.input(), "hi");
         assert_eq!(prompt.cursor_position(), 2);
 
-        let mut models = ActiveComponentState::ModelsList(ListState::new(vec![model()]));
+        let mut models =
+            ActiveComponentState::ModelsList(ListState::new(vec![ModelListEntry::Model(model())]));
         models.push_console('x');
 
         assert!(models.console().is_none());
@@ -334,7 +342,8 @@ mod tests {
         assert!(skills.skill_list().expect("skill list").is_empty());
         skills.skill_list_mut().expect("skill list").next();
 
-        let mut models = ActiveComponentState::ModelsList(ListState::new(vec![model()]));
+        let mut models =
+            ActiveComponentState::ModelsList(ListState::new(vec![ModelListEntry::Model(model())]));
         assert_eq!(models.kind(), ActiveComponentKind::ModelsList);
         assert_eq!(
             models.models_list().expect("models list").entries().len(),
@@ -342,10 +351,12 @@ mod tests {
         );
         models.models_list_mut().expect("models list").next();
 
-        let mut providers = ActiveComponentState::ProvidersList(ListState::new(vec![Provider {
-            name: PROVIDER_NAME.to_owned(),
-            local: false,
-        }]));
+        let mut providers = ActiveComponentState::ProvidersList(ListState::new(vec![
+            crate::app::tui::state::Provider {
+                name: PROVIDER_NAME.to_owned(),
+                local: false,
+            },
+        ]));
         assert_eq!(providers.kind(), ActiveComponentKind::ProvidersList);
         assert_eq!(
             providers

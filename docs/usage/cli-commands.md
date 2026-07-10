@@ -308,6 +308,15 @@ smista 0.0.0
 
 Type slash commands at the interactive prompt.
 
+- `/model` lists models available through the router. Use arrow keys to choose
+  a model, then press Enter to use it for later prompts in the session. The
+  first option, `auto`, clears the preferred model and returns to deterministic
+  routing.
+- `/model <model>` sets a preferred model by model id, display name, or
+  `provider/model` reference. Use `/model auto` to clear the preferred model.
+- `/providers` lists configured providers and whether each one is local or
+  remote.
+- `/skills` lists available skills from the current workspace.
 - `/resume [session-id]` resumes a specific session when an ID is provided.
   Without an ID, it lists existing sessions for the current workspace. Use
   arrow keys to choose a session, then press Enter to load its transcript.

@@ -1,6 +1,7 @@
 //! All types of messages with their payloads sent by the router client to the UI to notify about the status of the execution.
 
 use smista_sdk::core::api::SessionUsageResponse;
+use smista_sdk::core::model::ModelReference;
 use uuid::Uuid;
 
 /// Messages are sent by the router client to the UI to notify about the status of the execution.
@@ -79,6 +80,7 @@ pub struct ApprovalPrompt {
 /// Information about a model available on the router for this user, reduced for UI rendering.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Model {
+    pub reference: ModelReference,
     /// Provider name
     pub provider: String,
     /// Model identifier
