@@ -15,8 +15,9 @@ where
     pub(in crate::app::tui) fn render_view(&mut self, sync_history: bool) -> anyhow::Result<()> {
         tracing::debug!("rendering TUI view");
 
-        if sync_history && self.insert_transcript_entries()? {
-            self.pin_inline_viewport_to_bottom();
+        self.try_pin_inline_viewport_to_bottom()?;
+        if sync_history {
+            self.insert_transcript_entries()?;
         }
 
         self.terminal

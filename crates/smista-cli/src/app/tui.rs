@@ -142,7 +142,6 @@ impl Tui<TestBackend> {
             state: State::default(),
             terminal,
         };
-        tui.pin_inline_viewport_to_bottom();
         tui.view().expect("test backend terminal is infallible");
 
         tui
@@ -225,7 +224,7 @@ impl<B: Backend> Tui<B> {
             return Ok(false);
         }
 
-        let height = u16::try_from(lines.len()).unwrap_or(u16::MAX);
+        let height = view::console::history_rendered_height(&lines, width);
         self.terminal
             .insert_before(height, |buffer| {
                 view::console::render_history_lines(lines, buffer);
@@ -235,13 +234,10 @@ impl<B: Backend> Tui<B> {
         Ok(true)
     }
 
-    fn pin_inline_viewport_to_bottom(&mut self) {
-        if let Err(err) = self.try_pin_inline_viewport_to_bottom() {
-            tracing::debug!("failed to pin inline viewport: {err}");
-        }
-    }
-
     fn try_pin_inline_viewport_to_bottom(&mut self) -> anyhow::Result<()> {
+        self.terminal
+            .autoresize()
+            .map_err(|err| anyhow::anyhow!("failed to resize inline viewport: {err}"))?;
         let terminal_height = self
             .terminal
             .size()
@@ -256,9 +252,6 @@ impl<B: Backend> Tui<B> {
         self.terminal
             .insert_before(missing_lines, |_| {})
             .map_err(|err| anyhow::anyhow!("failed to pin inline viewport: {err}"))?;
-        self.terminal
-            .clear()
-            .map_err(|err| anyhow::anyhow!("failed to clear inline viewport: {err}"))?;
 
         Ok(())
     }

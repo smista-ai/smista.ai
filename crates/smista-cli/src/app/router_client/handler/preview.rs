@@ -5,8 +5,9 @@ use std::path::PathBuf;
 
 use smista_sdk::client::Client as _;
 use smista_sdk::core::model::ModelReference;
+use smista_sdk::core::policy::{Confidence, IntentSource};
 
-use crate::app::router_client::msg::PreviewSummary;
+use crate::app::router_client::msg::{PreviewPermissionSummary, PreviewSummary};
 use crate::app::router_client::{Msg, RouterClient};
 
 impl RouterClient {
@@ -59,6 +60,20 @@ impl RouterClient {
                 let task_type = response.task_type.to_string();
                 let provider = response.provider.to_string();
                 let model = response.model.to_string();
+                let classification_source = match response.classification.source {
+                    IntentSource::Explicit => "explicit",
+                    IntentSource::Inferred => "inferred",
+                }
+                .to_owned();
+                let classification_confidence =
+                    response.classification.confidence.map(|confidence| {
+                        match confidence {
+                            Confidence::Low => "low",
+                            Confidence::Medium => "medium",
+                            Confidence::High => "high",
+                        }
+                        .to_owned()
+                    });
                 tracing::debug!(
                     task_type,
                     provider,
@@ -70,10 +85,22 @@ impl RouterClient {
                     task_type,
                     provider,
                     model,
+                    classification_source,
+                    classification_reason: response.classification.reason,
+                    classification_confidence,
+                    matched_rule: response.matched_rule,
+                    included_context: response.included_context,
+                    excluded_context: response.excluded_context,
+                    estimated_cost_min: response.estimated_cost.min.to_string(),
+                    estimated_cost_max: response.estimated_cost.max.to_string(),
+                    estimated_cost_currency: response.estimated_cost.currency,
                     required_permissions: response
                         .required_permissions
                         .into_iter()
-                        .map(|p| p.permission)
+                        .map(|permission| PreviewPermissionSummary {
+                            permission: permission.permission,
+                            mode: permission.mode.to_string(),
+                        })
                         .collect(),
                 }))
                 .await;

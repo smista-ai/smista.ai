@@ -314,6 +314,11 @@ Type slash commands at the interactive prompt.
   routing.
 - `/model <model>` sets a preferred model by model id, display name, or
   `provider/model` reference. Use `/model auto` to clear the preferred model.
+- `/preview <prompt>` shows how the router would handle a prompt without
+  invoking the selected model. The report includes the task classification,
+  provider and model, matched routing rule, estimated cost, included and
+  excluded context, and required permissions. File references use the same
+  `@path` completion and attachment behavior as normal prompts.
 - `/providers` lists configured providers and whether each one is local or
   remote.
 - `/quit`, `/q`, or `/exit` closes the interactive CLI.

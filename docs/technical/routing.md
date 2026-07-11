@@ -203,7 +203,7 @@ A policy with one rule and a default route:
 
 ```json
 {
-  "default": { "model": "openai/gpt-5.5-mini", "fallbacks": ["ollama/qwen2.5-coder"] },
+  "default": { "model": "openai/gpt-5.5-mini", "fallbacks": ["ollama/qwen2.5-coder:7b"] },
   "rules": [
     {
       "name": "auth edits use Claude",

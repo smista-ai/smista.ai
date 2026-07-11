@@ -98,10 +98,10 @@ each provider exposes about its models, not against any config:
 name = "tool-using edits"
 requires_capabilities = { tools = true }
 model = "anthropic/claude-sonnet"
-fallbacks = ["ollama/qwen2.5-coder"]
+fallbacks = ["ollama/qwen2.5-coder:7b"]
 ```
 
-If `ollama/qwen2.5-coder` does not support tools, the router skips it when this
+If `ollama/qwen2.5-coder:7b` does not support tools, the router skips it when this
 rule needs tool calls and falls through to the next viable option, rather than
 failing configuration validation up front. Because model facts come from the
 provider at run time, they are never declared in `config.toml`.

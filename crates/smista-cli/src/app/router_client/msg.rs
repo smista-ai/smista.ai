@@ -174,8 +174,35 @@ pub struct PreviewSummary {
     pub provider: String,
     /// Model that would be used.
     pub model: String,
-    /// Required permission lines.
-    pub required_permissions: Vec<String>,
+    /// Whether classification was explicit or inferred.
+    pub classification_source: String,
+    /// Human-readable classification explanation.
+    pub classification_reason: String,
+    /// Deterministic classification confidence, when available.
+    pub classification_confidence: Option<String>,
+    /// Description of the matched routing rule, when available.
+    pub matched_rule: Option<String>,
+    /// Context that would be included.
+    pub included_context: Vec<String>,
+    /// Context that would be excluded.
+    pub excluded_context: Vec<String>,
+    /// Lower bound of the estimated cost.
+    pub estimated_cost_min: String,
+    /// Upper bound of the estimated cost.
+    pub estimated_cost_max: String,
+    /// Currency for the estimated cost.
+    pub estimated_cost_currency: String,
+    /// Required permissions and their policy modes.
+    pub required_permissions: Vec<PreviewPermissionSummary>,
+}
+
+/// Permission data reduced for preview rendering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreviewPermissionSummary {
+    /// Permission name.
+    pub permission: String,
+    /// Policy mode that would apply.
+    pub mode: String,
 }
 
 /// Router health data reduced for UI rendering.

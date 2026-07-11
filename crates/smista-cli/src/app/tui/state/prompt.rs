@@ -7,10 +7,6 @@ mod file_autocomplete;
 mod text;
 
 use self::command::command_prompt;
-#[cfg(test)]
-use self::command::{
-    COMMAND_MODEL, COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS, COMMAND_STATUS,
-};
 pub use self::command::{Command, CommandPromptState};
 pub use self::file_autocomplete::FileAutocompleteState;
 pub use self::text::TextPromptState;
@@ -37,7 +33,8 @@ impl PromptState {
                 *self = command_prompt("");
             }
             Self::Empty if char == '@' => {
-                *self = Self::FileAutocomplete(FileAutocompleteState::new("@".to_owned(), 1));
+                *self =
+                    Self::FileAutocomplete(FileAutocompleteState::new("@".to_owned(), 1, false));
             }
             Self::Empty => {
                 *self = Self::Text(TextPromptState::new(char.to_string()));
@@ -47,17 +44,26 @@ impl PromptState {
                 *self = Self::FileAutocomplete(FileAutocompleteState::new(
                     state.input.clone(),
                     state.input.len(),
+                    false,
                 ));
             }
             Self::Text(state) => state.insert(char),
             Self::FileAutocomplete(state) if char.is_whitespace() => {
                 state.insert(char);
-                *self = Self::Text(TextPromptState {
-                    input: state.input.clone(),
-                    cursor: state.cursor,
-                });
+                *self = state_without_file_autocomplete(state);
             }
             Self::FileAutocomplete(state) => state.insert(char),
+            Self::Command(state)
+                if char == '@'
+                    && state.command == Command::Preview
+                    && state.cursor == char_len(&state.input) =>
+            {
+                state.insert(char);
+                let input = format!("/{}", state.input);
+                let mention_start = input.len();
+                *self =
+                    Self::FileAutocomplete(FileAutocompleteState::new(input, mention_start, true));
+            }
             Self::Command(state) => {
                 state.insert(char);
                 state.reparse();
@@ -100,10 +106,7 @@ impl PromptState {
                 if state.input.is_empty() {
                     *self = Self::Empty;
                 } else if state.cursor_byte_index() < state.mention_start {
-                    *self = Self::Text(TextPromptState {
-                        input: state.input.clone(),
-                        cursor: state.cursor,
-                    });
+                    *self = state_without_file_autocomplete(state);
                 }
                 removed
             }
@@ -173,10 +176,7 @@ impl PromptState {
             Self::Text(state) => state.move_left(),
             Self::FileAutocomplete(state) => {
                 state.move_left();
-                *self = Self::Text(TextPromptState {
-                    input: state.input.clone(),
-                    cursor: state.cursor,
-                });
+                *self = state_without_file_autocomplete(state);
             }
             Self::Command(state) => state.move_left(),
         }
@@ -190,10 +190,7 @@ impl PromptState {
             Self::FileAutocomplete(state) => {
                 state.move_right();
                 if state.cursor != char_len(&state.input) {
-                    *self = Self::Text(TextPromptState {
-                        input: state.input.clone(),
-                        cursor: state.cursor,
-                    });
+                    *self = state_without_file_autocomplete(state);
                 }
             }
             Self::Command(state) => state.move_right(),
@@ -207,10 +204,7 @@ impl PromptState {
             Self::Text(state) => state.move_home(),
             Self::FileAutocomplete(state) => {
                 state.move_home();
-                *self = Self::Text(TextPromptState {
-                    input: state.input.clone(),
-                    cursor: state.cursor,
-                });
+                *self = state_without_file_autocomplete(state);
             }
             Self::Command(state) => state.move_home(),
         }
@@ -234,10 +228,7 @@ impl PromptState {
             Self::FileAutocomplete(state) => {
                 state.move_up();
                 if state.cursor != char_len(&state.input) {
-                    *self = Self::Text(TextPromptState {
-                        input: state.input.clone(),
-                        cursor: state.cursor,
-                    });
+                    *self = state_without_file_autocomplete(state);
                 }
             }
             Self::Command(state) => state.move_up(),
@@ -252,10 +243,7 @@ impl PromptState {
             Self::FileAutocomplete(state) => {
                 state.move_down();
                 if state.cursor != char_len(&state.input) {
-                    *self = Self::Text(TextPromptState {
-                        input: state.input.clone(),
-                        cursor: state.cursor,
-                    });
+                    *self = state_without_file_autocomplete(state);
                 }
             }
             Self::Command(state) => state.move_down(),
@@ -311,6 +299,12 @@ impl PromptState {
         matches!(self, Self::FileAutocomplete(_))
     }
 
+    /// Returns `true` when file completion belongs to a slash command.
+    #[must_use]
+    pub fn is_command_file_autocomplete_active(&self) -> bool {
+        matches!(self, Self::FileAutocomplete(state) if state.command)
+    }
+
     /// Returns the path text after the active mention's triggering `@`.
     #[must_use]
     pub fn file_autocomplete_query(&self) -> Option<&str> {
@@ -346,10 +340,7 @@ impl PromptState {
         let Self::FileAutocomplete(state) = self else {
             return false;
         };
-        *self = Self::Text(TextPromptState {
-            input: state.input.clone(),
-            cursor: state.cursor,
-        });
+        *self = state_without_file_autocomplete(state);
         true
     }
 
@@ -358,7 +349,8 @@ impl PromptState {
     pub fn text(&self) -> Option<&str> {
         match self {
             Self::Text(state) => Some(state.text()),
-            Self::FileAutocomplete(state) => Some(state.text()),
+            Self::FileAutocomplete(state) if !state.command => Some(state.text()),
+            Self::FileAutocomplete(_) => None,
             Self::Empty | Self::Command(_) => None,
         }
     }
@@ -368,6 +360,21 @@ impl PromptState {
             Self::Command(state) => state.input.clone(),
             _ => String::new(),
         }
+    }
+}
+
+fn state_without_file_autocomplete(state: &FileAutocompleteState) -> PromptState {
+    if state.command {
+        let mut prompt = command_prompt(state.input.strip_prefix('/').unwrap_or(&state.input));
+        if let PromptState::Command(command) = &mut prompt {
+            command.cursor = state.cursor.saturating_sub(1).min(char_len(&command.input));
+        }
+        prompt
+    } else {
+        PromptState::Text(TextPromptState {
+            input: state.input.clone(),
+            cursor: state.cursor,
+        })
     }
 }
 
@@ -441,9 +448,10 @@ fn char_len(input: &str) -> usize {
 mod tests {
     use std::path::{MAIN_SEPARATOR, PathBuf};
 
-    use super::{
-        COMMAND_MODEL, COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS,
-        COMMAND_STATUS, Command, PromptState, TextPromptState,
+    use super::{Command, PromptState, TextPromptState};
+    use crate::app::tui::state::prompt::command::{
+        COMMAND_MODEL, COMMAND_PREVIEW, COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME,
+        COMMAND_SKILLS, COMMAND_STATUS,
     };
 
     const HELLO_INPUT: &str = "hello";
@@ -491,6 +499,45 @@ mod tests {
 
         assert!(!command.is_file_autocomplete_active());
         assert!(matches!(command, PromptState::Command(_)));
+    }
+
+    #[test]
+    fn at_sign_in_preview_arguments_starts_file_autocomplete() {
+        let mut state = PromptState::default();
+        state.push_str("/preview review @sr");
+
+        assert!(state.is_file_autocomplete_active());
+        assert!(state.is_command_file_autocomplete_active());
+        assert_eq!(state.input(), "/preview review @sr");
+        assert_eq!(state.file_autocomplete_query(), Some("sr"));
+
+        state.replace_file_matches(vec![PathBuf::from("src/lib.rs")]);
+        assert_eq!(
+            state.current_suggestion(),
+            Some("/preview review @src/lib.rs")
+        );
+        assert!(state.accept_suggestion());
+        assert_eq!(state.input(), "/preview review @src/lib.rs");
+    }
+
+    #[test]
+    fn ending_preview_file_completion_restores_command_state() {
+        for action in [' ', '\t', '\n'] {
+            let mut state = PromptState::default();
+            state.push_str("/preview review @src");
+            state.push(action);
+            let expected_args = format!("review @src{action}");
+
+            assert!(!state.is_file_autocomplete_active());
+            assert_eq!(state.command(), Some(&Command::Preview));
+            assert_eq!(state.command_args(), Some(expected_args.as_str()));
+        }
+
+        let mut state = PromptState::default();
+        state.push_str("/preview review @src");
+        assert!(state.cancel_file_autocomplete());
+        assert_eq!(state.command(), Some(&Command::Preview));
+        assert_eq!(state.command_args(), Some("review @src"));
     }
 
     #[test]
@@ -1094,6 +1141,21 @@ mod tests {
         assert_eq!(
             state.command().map(Command::input_name),
             Some(COMMAND_MODEL)
+        );
+    }
+
+    #[test]
+    fn should_parse_preview() {
+        let mut state = PromptState::default();
+
+        state.push_str("/preview");
+
+        assert_eq!(state.command(), Some(&Command::Preview));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/preview");
+        assert_eq!(
+            state.command().map(Command::input_name),
+            Some(COMMAND_PREVIEW)
         );
     }
 

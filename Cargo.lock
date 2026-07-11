@@ -6686,6 +6686,8 @@ dependencies = [
  "opentelemetry_sdk",
  "rand 0.10.2",
  "ratatui",
+ "ratatui-core",
+ "ratatui-crossterm",
  "rust_decimal",
  "secrecy",
  "serde",

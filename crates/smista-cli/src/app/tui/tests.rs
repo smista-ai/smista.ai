@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use ratatui::style::Color;
 use smista_sdk::client::{ReqwestClient, RouterClientConfig};
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -246,6 +247,55 @@ fn pushed_history_keeps_latest_entry_visible() {
     }
 
     assert_backend_contains(&tui, "message-11");
+}
+
+#[test]
+fn history_updates_keep_the_live_panel_aligned_at_the_bottom() {
+    let exit = CancellationToken::new();
+    let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+    tui.handle_client_msg(Msg::Thinking)
+        .expect("thinking message is handled");
+    for index in 0..12 {
+        tui.state
+            .push_history(HistoryEntry::AssistantMessage(format!("message-{index}")));
+        tui.view().expect("history update renders");
+    }
+
+    let area = tui.terminal.get_frame().area();
+    assert_eq!(area.bottom(), tui.terminal.size().unwrap().height);
+    let screen = tui.terminal.backend().to_string();
+    let status_row = screen
+        .lines()
+        .position(|line| line.contains("Working ("))
+        .expect("status line is visible");
+    let prompt_row = screen
+        .lines()
+        .position(|line| line.contains(PROMPT_PLACEHOLDER))
+        .expect("prompt line is visible");
+    let footer_row = screen
+        .lines()
+        .position(|line| line.contains("auto - "))
+        .expect("footer line is visible");
+
+    assert!(status_row < prompt_row);
+    assert!(prompt_row < footer_row);
+    assert_eq!(footer_row, usize::from(area.bottom() - 1));
+    let buffer = tui.terminal.backend().buffer();
+    let status_background = buffer.cell((0, status_row as u16)).unwrap().bg;
+    let prompt_background = buffer.cell((0, prompt_row as u16)).unwrap().bg;
+    let footer_background = buffer.cell((0, footer_row as u16)).unwrap().bg;
+    assert_ne!(prompt_background, Color::Reset);
+    assert_eq!(status_background, prompt_background);
+    assert_eq!(footer_background, prompt_background);
+
+    tui.handle_client_msg(Msg::Idle)
+        .expect("idle message is handled");
+    assert_eq!(
+        tui.terminal.get_frame().area().bottom(),
+        tui.terminal.size().unwrap().height
+    );
+    assert_backend_contains(&tui, PROMPT_PLACEHOLDER);
 }
 
 #[test]

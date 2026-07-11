@@ -30,7 +30,10 @@ opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true, features = ["grpc-tonic", "http-proto", "reqwest-client"] }
 opentelemetry_sdk = { workspace = true }
 rand = { workspace = true }
-ratatui = { workspace = true, features = ["crossterm", "layout-cache", "macros", "std"] }
+ratatui = { workspace = true, features = ["crossterm", "layout-cache", "macros", "std", "unstable-rendered-line-info"] }
+# Activate scrolling regions narrowly because Ratatui 0.30.2's aggregate feature resolves unused backends.
+ratatui-core = { workspace = true }
+ratatui-crossterm = { workspace = true }
 rust_decimal = { workspace = true }
 secrecy = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }

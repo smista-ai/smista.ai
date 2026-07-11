@@ -10,18 +10,20 @@ pub struct FileAutocompleteState {
     pub(super) input: String,
     pub(super) cursor: usize,
     pub(super) mention_start: usize,
+    pub(super) command: bool,
     matches: Vec<PathBuf>,
     selected: usize,
     suggestion: Option<String>,
 }
 
 impl FileAutocompleteState {
-    pub(super) fn new(input: String, mention_start: usize) -> Self {
+    pub(super) fn new(input: String, mention_start: usize, command: bool) -> Self {
         let cursor = char_len(&input);
         Self {
             input,
             cursor,
             mention_start,
+            command,
             matches: Vec::new(),
             selected: 0,
             suggestion: None,
