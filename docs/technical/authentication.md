@@ -126,5 +126,5 @@ Two router settings govern authentication, both under `[router.auth]`:
 | `token_ttl_seconds`       | `86400` | How long an issued session token stays valid, in seconds (one day).                                          |
 | `local_bootstrap_enabled` | `true`  | Whether the local API-key bootstrap endpoint is available. Must be `false` when storage runs in remote mode. |
 
-See [Running the Router](../configuration/router.md) for where these settings
+See [Configure the Router](../configuration/router.md) for where these settings
 live.

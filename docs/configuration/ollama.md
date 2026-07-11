@@ -1,102 +1,109 @@
-# Using Local Models with Ollama
+# Use Local Models with Ollama
 
-- [Using Local Models with Ollama](#using-local-models-with-ollama)
-  - [1. Install and start Ollama](#1-install-and-start-ollama)
-  - [2. Point the router at Ollama](#2-point-the-router-at-ollama)
-  - [3. Enable the provider in your policy](#3-enable-the-provider-in-your-policy)
-  - [4. Route tasks to the local model](#4-route-tasks-to-the-local-model)
+- [Use Local Models with Ollama](#use-local-models-with-ollama)
+  - [Prepare Ollama](#prepare-ollama)
+  - [Connect the router to Ollama](#connect-the-router-to-ollama)
+  - [Enable Ollama in your policy](#enable-ollama-in-your-policy)
+  - [Require local execution](#require-local-execution)
+  - [Route tasks to a local model](#route-tasks-to-a-local-model)
+  - [Check the setup](#check-the-setup)
   - [Capability checks](#capability-checks)
 
-Local models are first-class in smista.ai. Use them to cut costs on simple tasks
-and to keep sensitive code off remote providers. smista.ai runs local models
-through [Ollama](https://ollama.com).
+Use a local model to reduce cost or keep sensitive code on your machine.
+smista.ai connects to local models through
+[Ollama](https://ollama.com).
 
-Setting up a local model touches two places that must agree:
+The setup uses two files:
 
-1. **The router** connects to Ollama and discovers models — `[router.ollama]`
-   in [`router.toml`](router.md).
-2. **Your routing policy** enables the Ollama provider and the rules that send
-   tasks to it — in [`config.toml`](cli.md).
+1. `router.toml` tells the router how to connect to Ollama.
+2. `config.toml` enables the provider and routes tasks to its models.
 
-> [!NOTE]
-> Ollama is a local model backend, not the router. smista-router stays the
-> source of truth for every routing decision.
+Ollama is a model service, not the smista router. The smista router still owns
+every routing decision.
 
-## 1. Install and start Ollama
+## Prepare Ollama
 
-Install Ollama, then pull the models you want to use:
+Start Ollama and pull the models you want to use. For example:
 
 ```sh
 ollama pull qwen2.5-coder:7b
-ollama pull llama3.1:8b
 ```
 
-By default Ollama serves its API at `http://127.0.0.1:11434`.
+Ollama normally serves its API at `http://127.0.0.1:11434`.
 
-## 2. Point the router at Ollama
+## Connect the router to Ollama
 
-In `router.toml`, enable Ollama and tell the router where it lives. With
-`auto_discover_models` the router lists what Ollama already has; `preload` warms
-models at startup; `allowed_models` bounds what may run.
+Create the router configuration if it does not exist:
+
+```sh
+smista config init router
+```
+
+Enable the Ollama connection in `router.toml`:
 
 ```toml
 [router.ollama]
 enabled = true
 base_url = "http://127.0.0.1:11434"
-auto_discover_models = true
-startup_healthcheck = true
-startup_required = false
-model_refresh_interval_seconds = 300
-
-[router.ollama.limits]
-max_concurrent_requests = 4
-request_timeout_ms = 180000
-pull_timeout_ms = 600000
-
-[router.ollama.models]
-preload = ["llama3.1:8b", "qwen2.5-coder:7b"]
-allow_pull = false
-allowed_models = ["llama3.1:8b", "qwen2.5-coder:7b", "mistral:7b"]
 ```
 
-Set `startup_required = true` if the router should refuse to start when Ollama is
-unreachable. Leave `allow_pull = false` to prevent the router from downloading
-models on demand.
+The router discovers the models that Ollama can serve. The current router
+configuration supports only `enabled` and `base_url` in this section.
 
-## 3. Enable the provider in your policy
+## Enable Ollama in your policy
 
-In `config.toml`, enable Ollama as a provider. That is all the CLI needs — you
-do **not** declare Ollama models or their facts. The router discovers the
-installed models and obtains each one's facts (capabilities, context window,
-whether it runs locally) through the provider layer.
+Create the project configuration if it does not exist:
+
+```sh
+smista config init
+```
+
+Enable the Ollama provider in `.smista/config.toml`:
 
 ```toml
 [providers.ollama]
 type = "ollama"
 ```
 
-> [!IMPORTANT]
-> Keep model names consistent across your routing rules and Ollama itself. A
-> model referenced as `ollama/qwen2.5-coder:7b` in a routing rule must be allowed by
-> `[router.ollama.models]` and be a model Ollama can serve. The endpoint and
-> discovery behaviour are controlled by `[router.ollama]` — `base_url`,
-> `auto_discover_models`, and `allowed_models`.
+You do not declare individual Ollama models or their capabilities in this file.
+The router obtains that information from the provider at run time.
 
-## 4. Route tasks to the local model
+## Require local execution
 
-Now write rules that send work to Ollama — for cost, for privacy, or both.
+An `ollama/<model>` reference is not enough to guarantee local execution. To
+keep every task on local models, add:
 
 ```toml
-# Cheap, local summaries
+[local_preferences]
+local_only = true
+```
+
+This also prevents routes from falling back to a remote provider. If your
+policy mixes local and remote models, omit this preference and set
+`local_only = true` only on the routing rules that must stay local.
+
+## Route tasks to a local model
+
+Set a local default when every task should use Ollama unless another rule
+matches:
+
+```toml
+[routing.default]
+model = "ollama/qwen2.5-coder:7b"
+```
+
+You can also route only selected work to a local model:
+
+```toml
 [[routing.rules]]
 name = "summaries run locally"
 priority = 40
 intent = "summarize"
+local_only = true
 model = "ollama/qwen2.5-coder:7b"
 
-# Keep sensitive code on-device
 [[routing.rules]]
-name = "review crypto locally"
+name = "review sensitive code locally"
 priority = 5
 intent = "review"
 paths = ["src/crypto/**", "src/auth/**"]
@@ -104,19 +111,34 @@ local_only = true
 model = "ollama/qwen2.5-coder:7b"
 ```
 
-You can also make a local model the fallback for a remote one, so work continues
-when a provider is down:
+Keep the model name identical to the name shown by Ollama.
 
-```toml
-[routing.default]
-model = "openai/gpt-5.5-mini"
-fallbacks = ["ollama/qwen2.5-coder:7b"]
+## Check the setup
+
+Check both configuration files:
+
+```sh
+smista config check project
+smista config check router
 ```
+
+Then start the router and log in:
+
+```sh
+smista start
+smista login
+smista
+```
+
+Inside the interactive CLI, use `/providers` to check that Ollama is available
+and `/model` to view its models.
 
 ## Capability checks
 
-The router checks capabilities before running a task, using the facts the
-provider reports for each model. Local models often lack tool support, so a task
-that needs tools won't be routed to one unless the policy explicitly allows
-degraded execution. You don't declare these facts yourself — the provider
-supplies them — so routing stays predictable without any per-model config.
+The router checks each model's capabilities before using it. For example, a
+route with `requires_capabilities = { tools = true }` cannot use a model that
+does not support tools.
+
+When a model does not meet the rule, the router tries the next configured
+fallback. If no model is suitable, the task stops with an explanation instead
+of running with missing capabilities.

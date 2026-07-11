@@ -17,23 +17,31 @@ problems but do not block execution.
 When smista validates your configuration it collects all findings in a single
 pass and reports them together, so you can fix everything at once.
 
+Check each file with the CLI:
+
+```sh
+smista config check project
+smista config check global
+smista config check router
+```
+
 ## CLI / policy configuration (`config.toml`)
 
 These checks apply to the merged CLI and routing-policy configuration loaded
 from your global and project configuration, plus any runtime override.
 CLI configuration validation emits errors only.
 
-| Check                                                                                                                                                       | Severity | How to fix                                                                                                                |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Unknown provider** — a routing rule, fallback, or default route references a provider identifier that is not enabled in `[providers]`                     | Error    | Enable that provider with a `[providers.<id>]` table, or correct the reference                                            |
-| **Invalid glob** — a pattern in `privacy.restricted_paths`, `privacy.remote.blocked_paths`, or a rule's `paths` list fails to compile                       | Error    | Fix the glob syntax (e.g. close unclosed brackets)                                                                        |
-| **Duplicate rule name** — two `[[routing.rules]]` entries share the same `name`                                                                             | Error    | Give each rule a unique `name`                                                                                            |
-| **Missing default route** — no `[routing.default]` table is present                                                                                         | Error    | Add `[routing.default]` with a `model` field                                                                              |
-| **Invalid fallback** — a rule lists its own `model` as a fallback, or lists the same fallback model more than once                                          | Error    | Remove the self-reference or duplicate from `fallbacks`                                                                   |
-| **Ambiguous rules** — two overlapping rules share the same `priority` value and the same specificity score, making their relative order undefined           | Error    | Give them distinct `priority` values or make their match conditions mutually exclusive                                    |
-| **Unsafe override** — a runtime override sets `privacy.remote.mode` to a value less strict than the merged config-layer floor                               | Error    | Do not weaken the configured privacy mode in a runtime override                                                           |
-| **Permission widening** — a runtime override sets a tool permission (`file_read`, `file_write`, `shell`, etc.) to a less strict value than the config floor | Error    | Keep the configured stricter permission; runtime overrides may only tighten, never loosen                                 |
-| **Inline secret** — a provider `api_key` is a literal string instead of a `${secret:NAME}` reference                                                        | Error    | Replace the literal with `api_key = "${secret:NAME}"` and store the value in a secrets file or as an environment variable |
+| Check                                                                                                                                                       | Severity | How to fix                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Unknown provider** — a routing rule, fallback, or default route references a provider identifier that is not enabled in `[providers]`                     | Error    | Enable that provider with a `[providers.<id>]` table, or correct the reference                                          |
+| **Invalid glob** — a pattern in `privacy.restricted_paths`, `privacy.remote.blocked_paths`, or a rule's `paths` list fails to compile                       | Error    | Fix the glob syntax (e.g. close unclosed brackets)                                                                      |
+| **Duplicate rule name** — two `[[routing.rules]]` entries share the same `name`                                                                             | Error    | Give each rule a unique `name`                                                                                          |
+| **Missing default route** — no `[routing.default]` table is present                                                                                         | Error    | Add `[routing.default]` with a `model` field                                                                            |
+| **Invalid fallback** — a rule lists its own `model` as a fallback, or lists the same fallback model more than once                                          | Error    | Remove the self-reference or duplicate from `fallbacks`                                                                 |
+| **Ambiguous rules** — two overlapping rules share the same `priority` value and the same specificity score, making their relative order undefined           | Error    | Give them distinct `priority` values or make their match conditions mutually exclusive                                  |
+| **Unsafe override** — a runtime override sets `privacy.remote.mode` to a value less strict than the merged config-layer floor                               | Error    | Do not weaken the configured privacy mode in a runtime override                                                         |
+| **Permission widening** — a runtime override sets a tool permission (`file_read`, `file_write`, `shell`, etc.) to a less strict value than the config floor | Error    | Keep the configured stricter permission; runtime overrides may only tighten, never loosen                               |
+| **Inline secret** — a provider `api_key` is a literal string instead of a `${secret:NAME}` reference                                                        | Error    | Remove the value and use `smista credentials set`, or replace it with a `${secret:NAME}` environment-variable reference |
 
 ### Specificity
 
@@ -121,8 +129,11 @@ for a valid router configuration.
 | **Local bootstrap in remote mode** — `router.auth.local_bootstrap_enabled = true` while `router.storage.mode = "remote"`                     | Error    | Set `local_bootstrap_enabled = false`, or switch to `embedded` mode                         |
 | **Zero timeout** — any of `router.limits.request_timeout_ms`, `router.limits.provider_timeout_ms`, or `router.limits.tool_timeout_ms` is `0` | Error    | Set a positive value in milliseconds                                                        |
 | **Zero size limit** — `router.limits.max_request_body_bytes` or `router.limits.max_context_bytes` is `0`                                     | Error    | Set a positive byte limit                                                                   |
+| **Invalid rate limit** — rate limiting is enabled but `period_ms` or `burst_size` is `0`                                                     | Error    | Set both values above zero, or disable rate limiting                                        |
 | **Excessive timeout** — a timeout exceeds 3,600,000 ms (1 hour)                                                                              | Warning  | Check that the value is in milliseconds, not seconds; lower it if so                        |
 | **Unsafe CORS** — CORS is enabled (`router.cors.enabled = true`) but `router.cors.allowed_origins` is empty or contains `*`                  | Error    | List explicit origins: `allowed_origins = ["https://app.example.com"]`                      |
+| **Invalid OpenTelemetry** — export is enabled with an empty endpoint, empty service name, or sample ratio outside `0.0`–`1.0`                | Error    | Set a collector endpoint, service name, and valid sample ratio                              |
+| **Ignored provider URL** — `base_url` is set for built-in OpenAI, Anthropic, or Gemini                                                       | Warning  | Remove it, or configure a named `openai-compat:<name>` provider for a custom endpoint       |
 
 ### Example: correcting a zero timeout
 

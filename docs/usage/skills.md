@@ -3,16 +3,17 @@
 - [Skills](#skills)
   - [Where skills live](#where-skills-live)
   - [Project skills win over global skills](#project-skills-win-over-global-skills)
+  - [List available skills](#list-available-skills)
   - [Writing a `SKILL.md`](#writing-a-skillmd)
   - [Warnings](#warnings)
 
-A **skill** is a reusable set of instructions you can attach to a task, for
-example a code-review checklist or your project's Rust conventions. smista.ai
-discovers skills from disk and sends them with a task in one of two ways. A skill
-you **explicitly invoke** is applied for sure, and a routing rule can target it
-by name. A skill that is merely **available** is offered to the model, which
-decides whether to apply it by reading it. The router never guesses which skills
-are relevant from your prompt.
+A **skill** is a reusable set of instructions for a model. Examples include a
+code-review checklist or a project's Rust conventions.
+
+smista discovers skills from disk and offers them to the model serving the
+task. The model decides whether a skill is relevant. Skills do not change task
+classification or routing, and the router never guesses a skill from the
+prompt.
 
 ## Where skills live
 
@@ -42,6 +43,19 @@ When a skill of the same name exists both in your project and globally, the
 **project version wins**. This lets a repository override a shared skill with a
 project-specific one. The global skill of that name is ignored entirely.
 
+## List available skills
+
+Start the interactive CLI and enter:
+
+```text
+/skills
+```
+
+The command lists the skills discovered for the current project. Before the CLI
+sends a task, it loads the full instructions for the available skills and sends
+them with the request. This lets the model apply a relevant skill without
+reading another local file later.
+
 ## Writing a `SKILL.md`
 
 Every skill directory must contain a `SKILL.md` file. It has two parts: a YAML
@@ -64,9 +78,10 @@ The front matter fields are:
   directory name as the identity and reports a warning.
 - `description` — a one-line summary of what the skill does.
 
-smista reads only the front matter when discovering skills, and reads the body
-on demand when a skill is actually used. You can keep long instructions in a
-skill without any cost until it is invoked.
+smista reads only the front matter during initial discovery. It loads the body
+when it prepares the available skills for a task. Because the full instructions
+travel with that request, long skill bodies use more context even when the model
+does not apply them.
 
 ## Warnings
 
