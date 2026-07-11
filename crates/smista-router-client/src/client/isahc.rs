@@ -29,7 +29,8 @@
 //!
 //! The provider keys the router needs to reach a model
 //! ([`ProviderCredentials`]) are configured on the client too and travel as
-//! request headers on the methods that can call a model.
+//! request headers on methods whose routing or execution depends on provider
+//! availability.
 //!
 //! # Wire behaviour
 //!
@@ -610,8 +611,8 @@ impl Client for IsahcClient {
 
     async fn preview(&self, id: Uuid, req: ExecuteRequest) -> Result<PreviewResponse> {
         let url = self.url(&format!("/api/v1/sessions/{id}/preview"))?;
-        // Preview never calls a model, so it carries no provider credentials.
         let builder = self.authorize(Request::post(url.as_str()))?;
+        let builder = self.provider_headers(builder);
         self.send(json_request(builder, &req)?).await
     }
 
@@ -931,7 +932,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn should_not_forward_provider_credentials_on_preview() {
+    async fn should_forward_provider_credentials_on_preview() {
         let router = MockRouter::start().await;
         let client = client_for(&router).with_provider_credentials(
             ProviderCredentials::new()
@@ -944,9 +945,9 @@ mod tests {
             .await
             .expect("preview succeeds");
         let requests = received(&router).await;
-        assert!(
-            header_of(&requests, "/preview", "x-smista-provider-anthropic-api-key").is_none(),
-            "preview never calls a model, so it must carry no provider credentials"
+        assert_eq!(
+            header_of(&requests, "/preview", "x-smista-provider-anthropic-api-key").as_deref(),
+            Some("sk-ant")
         );
     }
 

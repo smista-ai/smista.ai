@@ -660,18 +660,25 @@ POST /api/v1/sessions/{session_id}/preview
 ```
 
 Same body as `/execute`, but the selected model is **never called**: no provider
-request is made and no tokens are spent. The router opens the session, runs the
-same deterministic routing `/execute` would, and returns the task type, chosen
-provider/model, matched rule, included/excluded context, an estimated cost range
-and the required permissions:
+completion request is made and no tokens are spent. Send the same
+`X-Smista-Provider-<Provider>-Api-Key` headers as `/execute`; the router may use
+them to query provider model catalogs and runs the same credential-aware,
+deterministic routing `/execute` would. It returns the task type, chosen
+provider/model, matched rule, routing explanation, included/excluded context, an
+estimated cost range, and the required permissions:
 
 ```json
 {
-  "task_type": "review",
   "classification": { "intent": "review", "source": "inferred", "reason": "keyword 'review' matched rule 0", "confidence": "high" },
-  "provider": "openai",
-  "model": "gpt-5.5-thinking",
-  "matched_rule": "task.review -> openai/gpt-5.5-thinking",
+  "routing": {
+    "intent": "review",
+    "provider": "openai",
+    "model": "gpt-5.5-thinking",
+    "matched_rule": "task.review -> openai/gpt-5.5-thinking",
+    "fallback_used": false,
+    "override_used": false,
+    "reason": "rule 'task.review' matched the review intent"
+  },
   "included_context": ["current git diff", "AGENTS.md"],
   "excluded_context": [".env", "target/**"],
   "estimated_cost": { "min": "0.03", "max": "0.09", "currency": "USD" },
@@ -682,12 +689,20 @@ and the required permissions:
 }
 ```
 
+`routing` is the complete deterministic decision that `/execute` would apply.
+Its `reason` explains why the route was selected, while `fallback_used` and
+`override_used` identify whether selection moved away from the configured
+primary or honored an explicit model override.
+
 `required_permissions` is the project tool permissions tightened by the matched
 rule's `required_permissions`. `estimated_cost` is a decimal-string range: `min`
 prices only the input (the selected context and the prompt) and `max` adds an
 assumed reply, so a model that declares no prices — a local model, for instance —
-reports a `0`–`0` range. The preview is deterministic: the same body and policy
-always yield the same result.
+reports a `0`–`0` range. The preview is deterministic: the same body, policy,
+provider credentials, and model catalogs yield the same result. Missing
+credentials have the same effect as on `/execute`: models that require them are
+unavailable, so routing uses an eligible fallback or fails with
+`fallback_exhausted`.
 
 Only the owner may preview, and previewing needs no run: it acquires no lock and
 changes nothing, so it works even while a turn is in flight. An unknown,

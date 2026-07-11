@@ -172,7 +172,8 @@ POST /sessions/{session_id}/execute   # buffered, or streamed via Accept
 Starts a run from a new user prompt. `execute` returns the turn's outcome as one
 JSON body by default, or as server-sent events when the client sends
 `Accept: text/event-stream` (see [Streaming](#streaming)). `preview` takes the
-same body but never calls a model.
+same body and provider credential headers. It may query provider model catalogs
+to mirror `execute` model availability, but never sends a completion request.
 
 ### Request body
 

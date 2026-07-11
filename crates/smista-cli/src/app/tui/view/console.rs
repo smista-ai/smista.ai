@@ -487,13 +487,20 @@ fn preview_lines(preview: &PreviewSummary) -> Vec<Line<'static>> {
             "Routing preview",
             palette().preview.add_modifier(Modifier::BOLD),
         )),
-        preview_detail_line("Model", format!("{}/{}", preview.provider, preview.model)),
-        preview_detail_line("Task", preview.task_type.clone()),
+        preview_detail_line(
+            "Model",
+            format!("{}/{}", preview.routing.provider, preview.routing.model),
+        ),
+        preview_detail_line("Task", preview.routing.intent.to_string()),
         preview_detail_line("Classification", confidence),
         preview_detail_line("Reason", preview.classification_reason.clone()),
         preview_detail_line(
             "Matched rule",
-            preview.matched_rule.as_deref().unwrap_or("default route"),
+            preview
+                .routing
+                .matched_rule
+                .as_deref()
+                .unwrap_or("default route"),
         ),
         preview_detail_line(
             "Estimated cost",
@@ -505,6 +512,11 @@ fn preview_lines(preview: &PreviewSummary) -> Vec<Line<'static>> {
             ),
         ),
     ];
+    lines.extend(prefixed_block(
+        "Routing reason",
+        &preview.routing.reason,
+        palette().preview,
+    ));
     lines.extend(preview_list_lines(
         "Included context",
         &preview.included_context,
@@ -737,18 +749,27 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{Duration, Instant};
 
+    use smista_sdk::core::intent::TaskIntent;
+    use smista_sdk::core::model::Provider;
+    use smista_sdk::core::routing::RoutingDecision;
+
     use super::*;
     use crate::app::router_client::msg::PreviewPermissionSummary;
 
     fn preview_summary() -> PreviewSummary {
         PreviewSummary {
-            task_type: "review".to_owned(),
-            provider: "openai".to_owned(),
-            model: "gpt-5.5-thinking".to_owned(),
+            routing: RoutingDecision {
+                intent: TaskIntent::Review,
+                provider: Provider::OpenAI,
+                model: "gpt-5.5-thinking".to_owned(),
+                matched_rule: Some("review route".to_owned()),
+                fallback_used: false,
+                override_used: false,
+                reason: "review intent matched the review route".to_owned(),
+            },
             classification_source: "inferred".to_owned(),
             classification_reason: "keyword 'review' matched".to_owned(),
             classification_confidence: Some("high".to_owned()),
-            matched_rule: Some("review route".to_owned()),
             included_context: vec!["current git diff".to_owned(), "AGENTS.md".to_owned()],
             excluded_context: vec![".env".to_owned()],
             estimated_cost_min: "0.03".to_owned(),
@@ -799,6 +820,9 @@ mod tests {
         assert!(text.contains(&"Classification: inferred (high confidence)".to_owned()));
         assert!(text.contains(&"Reason: keyword 'review' matched".to_owned()));
         assert!(text.contains(&"Matched rule: review route".to_owned()));
+        assert!(
+            text.contains(&"Routing reason: review intent matched the review route".to_owned())
+        );
         assert!(text.contains(&"Estimated cost: 0.03-0.09 USD".to_owned()));
         assert!(text.contains(&"  • current git diff".to_owned()));
         assert!(text.contains(&"  • .env".to_owned()));

@@ -360,11 +360,11 @@ mod tests {
         ModelAuthRequirement, ModelCapabilities, ModelDescriptor, ModelParameters,
     };
     use smista_core::policy::{Classification, IntentSource, ToolsConfig};
+    use smista_core::routing::RoutingDecision;
     use tokio::sync::mpsc;
 
     use super::*;
     use crate::orchestrator::stream::TurnSink;
-    use crate::router::resolver::RoutingDecision;
     use crate::router::resolver::context::{ContextOutcome, ResolvedContext};
 
     /// Drains an unbounded receiver into a vec after the sender has dropped.

@@ -11,6 +11,7 @@ use smista_core::api::{ApprovalDecision, ToolApproval};
 use smista_core::intent::TaskIntent;
 use smista_core::message::MessageRole;
 use smista_core::model::Provider;
+use smista_core::routing::RoutingDecision;
 use smista_storage::StorageError;
 use smista_storage::database::Database as _;
 use smista_storage::database::surreal::SurrealDatabase;
@@ -27,7 +28,6 @@ use uuid::Uuid;
 use crate::orchestrator::mediation::ClientCall;
 use crate::orchestrator::run_input::{RunInputBundle, RunInputMeta};
 use crate::orchestrator::tools::diff_for_tool_call;
-use crate::router::resolver::RoutingDecision;
 use crate::router::resolver::context::{CandidateKind, ContextReference};
 use crate::session::{SessionError, SessionResult, UserSession};
 

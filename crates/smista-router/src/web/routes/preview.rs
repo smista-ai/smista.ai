@@ -5,8 +5,9 @@
 //! session, resolves the turn and returns a
 //! [`PreviewResponse`](smista_core::api::PreviewResponse) with the chosen
 //! provider/model, matched rule, included and excluded context, an estimated
-//! cost range and the permissions the route would require. No provider request
-//! is made and no tokens are spent.
+//! cost range and the permissions the route would require. Providers may be
+//! queried for their model catalogs, but no completion request is made and no
+//! tokens are spent.
 
 use std::sync::Arc;
 
@@ -186,10 +187,10 @@ mod tests {
             send(router, preview_post(session_id, &token, &preview_request())).await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["provider"], "ollama");
-        assert_eq!(body["model"], "mock-local");
+        assert_eq!(body["routing"]["provider"], "ollama");
+        assert_eq!(body["routing"]["model"], "mock-local");
         // The default route names no rule, and the local mock is unpriced.
-        assert!(body.get("matched_rule").is_none());
+        assert!(body["routing"].get("matched_rule").is_none());
         assert_eq!(body["estimated_cost"]["min"], "0");
         assert_eq!(body["estimated_cost"]["max"], "0");
         assert_eq!(body["estimated_cost"]["currency"], "USD");
@@ -222,8 +223,8 @@ mod tests {
         let (status, body) = send(router, preview_post(session_id, &token, &request)).await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["task_type"], "edit");
-        assert_eq!(body["matched_rule"], "edits ask before writing");
+        assert_eq!(body["routing"]["intent"], "edit");
+        assert_eq!(body["routing"]["matched_rule"], "edits ask before writing");
         let permissions = body["required_permissions"]
             .as_array()
             .expect("required_permissions missing");
@@ -251,6 +252,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_use_provider_credentials_when_selecting_a_model() {
+        let (router, token, _user_id, _db) = authenticated_router_with_database().await;
+        let session_id = create_session(router.clone(), &token).await;
+        let mut request = preview_request();
+        request.policy.routing.default = Some(DefaultRoute {
+            model: "openai/mock-remote".parse().expect("valid reference"),
+            fallbacks: vec!["ollama/mock-local".parse().expect("valid reference")],
+        });
+
+        let (missing_status, missing) =
+            send(router.clone(), preview_post(session_id, &token, &request)).await;
+
+        let mut credentialed = preview_post(session_id, &token, &request);
+        credentialed.headers_mut().insert(
+            header::HeaderName::from_static("x-smista-provider-openai-api-key"),
+            header::HeaderValue::from_static("sk-openai"),
+        );
+        let (credentialed_status, credentialed) = send(router, credentialed).await;
+
+        assert_eq!(missing_status, StatusCode::OK);
+        assert_eq!(missing["routing"]["provider"], "ollama");
+        assert_eq!(missing["routing"]["model"], "mock-local");
+        assert_eq!(credentialed_status, StatusCode::OK);
+        assert_eq!(credentialed["routing"]["provider"], "openai");
+        assert_eq!(credentialed["routing"]["model"], "mock-remote");
+    }
+
+    #[tokio::test]
     async fn should_not_call_the_provider() {
         // A router whose every model call errors: a preview that touched the
         // provider would surface that error, but a preview never calls it.
@@ -262,7 +291,7 @@ mod tests {
             send(router, preview_post(session_id, &token, &preview_request())).await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["model"], "mock-local");
+        assert_eq!(body["routing"]["model"], "mock-local");
     }
 
     #[tokio::test]

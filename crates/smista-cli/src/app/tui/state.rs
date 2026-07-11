@@ -454,8 +454,6 @@ mod tests {
     const MODEL_ID: &str = "gpt-4.1";
     const MODEL_REFERENCE: &str = "openai/gpt-4.1";
     const PREVIEW_MODEL: &str = "gpt-4.1";
-    const PREVIEW_PROVIDER: &str = "openai";
-    const PREVIEW_TASK_TYPE: &str = "code";
     const PROVIDER_OPENAI: &str = "openai";
     const REASONING_CHUNK: &str = "because ";
     const RESUMED_MESSAGE: &str = "resumed message";
@@ -832,13 +830,18 @@ mod tests {
         assert_eq!(state.router.kind(), "thinking");
 
         state.apply_msg(Msg::Preview(PreviewSummary {
-            task_type: PREVIEW_TASK_TYPE.to_owned(),
-            provider: PREVIEW_PROVIDER.to_owned(),
-            model: PREVIEW_MODEL.to_owned(),
+            routing: smista_sdk::core::routing::RoutingDecision {
+                intent: smista_sdk::core::intent::TaskIntent::Review,
+                provider: smista_sdk::core::model::Provider::OpenAI,
+                model: PREVIEW_MODEL.to_owned(),
+                matched_rule: Some("review rule".to_owned()),
+                fallback_used: false,
+                override_used: false,
+                reason: "review rule matched".to_owned(),
+            },
             classification_source: "inferred".to_owned(),
             classification_reason: "keyword matched".to_owned(),
             classification_confidence: Some("high".to_owned()),
-            matched_rule: Some("review rule".to_owned()),
             included_context: vec!["current prompt".to_owned()],
             excluded_context: Vec::new(),
             estimated_cost_min: "0.01".to_owned(),

@@ -282,11 +282,10 @@ export class SmistaClient implements ISmistaClient {
   }
 
   async preview(id: string, req: ExecuteRequest): Promise<PreviewResponse> {
-    // Preview never calls a model, so it carries no provider credentials.
     return this.send(
       'POST',
       this.url(`/api/v1/sessions/${id}/preview`),
-      this.authedHeaders({ json: true }),
+      this.authedHeaders({ json: true, provider: true }),
       JSON.stringify(req),
     );
   }

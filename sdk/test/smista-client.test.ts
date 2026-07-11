@@ -136,7 +136,7 @@ describe('SmistaClient', () => {
     expect(router.headerOf('/llm/models', 'x-smista-provider-anthropic-api-key')).toBe('sk-ant');
   });
 
-  it('does not forward provider credentials on preview', async () => {
+  it('forwards provider credentials on preview', async () => {
     const router = new MockRouter();
     const client = new SmistaClient({
       baseUrl: 'http://router.test',
@@ -146,7 +146,7 @@ describe('SmistaClient', () => {
     await client.signIn();
 
     await client.preview(SESSION_ID, executeRequest());
-    expect(router.headerOf('/preview', 'x-smista-provider-anthropic-api-key')).toBeNull();
+    expect(router.headerOf('/preview', 'x-smista-provider-anthropic-api-key')).toBe('sk-ant');
   });
 
   it('sends pagination as query parameters for traces', async () => {

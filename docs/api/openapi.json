@@ -2753,38 +2753,21 @@
         "type": "object",
         "description": "The predicted routing of a task, without calling the model.",
         "required": [
-          "task_type",
           "classification",
-          "provider",
-          "model",
+          "routing",
           "included_context",
           "excluded_context",
           "estimated_cost",
           "required_permissions"
         ],
         "properties": {
-          "task_type": {
-            "$ref": "#/components/schemas/TaskIntent",
-            "description": "Task type that would be detected."
-          },
           "classification": {
             "$ref": "#/components/schemas/Classification",
             "description": "How the task would be classified."
           },
-          "provider": {
-            "$ref": "#/components/schemas/Provider",
-            "description": "Provider that would serve the task."
-          },
-          "model": {
-            "type": "string",
-            "description": "Model that would serve the task."
-          },
-          "matched_rule": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Description of the routing rule that would match, if any."
+          "routing": {
+            "$ref": "#/components/schemas/RoutingDecision",
+            "description": "Complete routing decision the router would apply."
           },
           "included_context": {
             "type": "array",
@@ -2919,6 +2902,51 @@
           "mode": {
             "$ref": "#/components/schemas/PermissionMode",
             "description": "Mode that would apply to the permission."
+          }
+        }
+      },
+      "RoutingDecision": {
+        "type": "object",
+        "description": "The complete deterministic routing decision for one task.",
+        "required": [
+          "intent",
+          "provider",
+          "model",
+          "fallback_used",
+          "override_used",
+          "reason"
+        ],
+        "properties": {
+          "intent": {
+            "$ref": "#/components/schemas/TaskIntent",
+            "description": "Task intent that drove routing."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/Provider",
+            "description": "Provider selected to serve the task."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model selected to serve the task."
+          },
+          "matched_rule": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name of the routing rule that matched, if any."
+          },
+          "fallback_used": {
+            "type": "boolean",
+            "description": "Whether a fallback model, rather than the primary, was selected."
+          },
+          "override_used": {
+            "type": "boolean",
+            "description": "Whether an explicit model override was selected."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Human-readable explanation of why the route was selected."
           }
         }
       },
