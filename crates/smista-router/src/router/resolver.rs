@@ -50,6 +50,7 @@ use smista_core::model::{ModelDescriptor, ModelReference, Provider, RoutingRequi
 use smista_core::policy::{
     Classification, ClassificationConfig, PrivacyPolicy, RoutingPolicy, ToolsConfig,
 };
+use smista_core::routing::RoutingDecision;
 use smista_core::skill::Skill;
 
 use crate::router::resolver::context::{
@@ -176,29 +177,6 @@ pub struct ResolveArgs<'a> {
     /// Whether the caller restricts the turn to local models, regardless of the
     /// route — the request's `local_only` or `no_network` preference.
     pub local_only: bool,
-}
-
-/// How a turn was routed, recorded for the trace.
-///
-/// Mirrors the data the [`Tracer`](crate::trace::Tracer) records for a routing
-/// decision: the intent that drove routing, the provider and model that serve
-/// it, the matched rule, and whether a fallback or an override was used.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RoutingDecision {
-    /// The task intent that drove routing.
-    pub intent: TaskIntent,
-    /// Provider that serves the turn.
-    pub provider: Provider,
-    /// Model that serves the turn.
-    pub model: String,
-    /// Name of the routing rule that matched, if any.
-    pub matched_rule: Option<String>,
-    /// Whether a fallback model, rather than the route's primary, was chosen.
-    pub fallback_used: bool,
-    /// Whether an explicit model override was used.
-    pub override_used: bool,
-    /// Human-readable explanation of why this route was chosen.
-    pub reason: String,
 }
 
 /// The deterministic plan for one turn, the resolver's output.

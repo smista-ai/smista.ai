@@ -23,6 +23,7 @@ use smista_sdk::core::model::{
     ProviderDescriptor,
 };
 use smista_sdk::core::policy::{Classification, Confidence, IntentSource, PermissionMode};
+use smista_sdk::core::routing::RoutingDecision;
 use smista_sdk::core::trace::Trace;
 use smista_sdk::core::usage::Usage;
 use uuid::Uuid;
@@ -199,11 +200,16 @@ pub fn turn() -> TurnResponse {
 /// Canned body for `POST /api/v1/sessions/{id}/preview`.
 pub fn preview() -> PreviewResponse {
     PreviewResponse {
-        task_type: TaskIntent::Review,
         classification: classification(TaskIntent::Review),
-        provider: Provider::OpenAI,
-        model: "gpt-5.5-thinking".to_owned(),
-        matched_rule: Some("task.review -> openai/gpt-5.5-thinking".to_owned()),
+        routing: RoutingDecision {
+            intent: TaskIntent::Review,
+            provider: Provider::OpenAI,
+            model: "gpt-5.5-thinking".to_owned(),
+            matched_rule: Some("task.review -> openai/gpt-5.5-thinking".to_owned()),
+            fallback_used: false,
+            override_used: false,
+            reason: "review routing rule matched".to_owned(),
+        },
         included_context: vec!["current git diff".to_owned(), "AGENTS.md".to_owned()],
         excluded_context: vec![".env".to_owned()],
         estimated_cost: CostRange {

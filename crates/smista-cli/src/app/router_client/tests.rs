@@ -1556,14 +1556,17 @@ async fn preview_emits_summary_and_reuses_active_session() {
     assert!(matches!(
         recv_msg(&mut msg_rx).await,
         Msg::Preview(summary)
-            if summary.task_type == "review"
-                && summary.provider == "openai"
-                && summary.model == "gpt-5.5-thinking"
+            if summary.routing.intent.to_string() == "review"
+                && summary.routing.provider.to_string() == "openai"
+                && summary.routing.model == "gpt-5.5-thinking"
                 && summary.classification_source == "inferred"
                 && summary.classification_reason == "keyword matched"
                 && summary.classification_confidence.as_deref() == Some("high")
-                && summary.matched_rule.as_deref()
+                && summary.routing.matched_rule.as_deref()
                     == Some("task.review -> openai/gpt-5.5-thinking")
+                && !summary.routing.fallback_used
+                && !summary.routing.override_used
+                && summary.routing.reason == "review routing rule matched"
                 && summary.included_context == ["current git diff", "AGENTS.md"]
                 && summary.excluded_context == [".env"]
                 && summary.estimated_cost_min == "0.03"

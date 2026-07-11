@@ -57,9 +57,6 @@ impl RouterClient {
             .await
         {
             Ok(response) => {
-                let task_type = response.task_type.to_string();
-                let provider = response.provider.to_string();
-                let model = response.model.to_string();
                 let classification_source = match response.classification.source {
                     IntentSource::Explicit => "explicit",
                     IntentSource::Inferred => "inferred",
@@ -75,20 +72,17 @@ impl RouterClient {
                         .to_owned()
                     });
                 tracing::debug!(
-                    task_type,
-                    provider,
-                    model,
+                    task_type = %response.routing.intent,
+                    provider = %response.routing.provider,
+                    model = %response.routing.model,
                     "preview accepted, sending preview results to UI"
                 );
 
                 self.send_msg(Msg::Preview(PreviewSummary {
-                    task_type,
-                    provider,
-                    model,
+                    routing: response.routing,
                     classification_source,
                     classification_reason: response.classification.reason,
                     classification_confidence,
-                    matched_rule: response.matched_rule,
                     included_context: response.included_context,
                     excluded_context: response.excluded_context,
                     estimated_cost_min: response.estimated_cost.min.to_string(),

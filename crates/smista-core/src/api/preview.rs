@@ -22,9 +22,8 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::intent::TaskIntent;
-use crate::model::Provider;
 use crate::policy::{Classification, PermissionMode};
+use crate::routing::RoutingDecision;
 
 /// The predicted routing of a task, without calling the model.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -32,18 +31,10 @@ use crate::policy::{Classification, PermissionMode};
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts", ts(export))]
 pub struct PreviewResponse {
-    /// Task type that would be detected.
-    pub task_type: TaskIntent,
     /// How the task would be classified.
     pub classification: Classification,
-    /// Provider that would serve the task.
-    pub provider: Provider,
-    /// Model that would serve the task.
-    pub model: String,
-    /// Description of the routing rule that would match, if any.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts", ts(optional))]
-    pub matched_rule: Option<String>,
+    /// Complete routing decision the router would apply.
+    pub routing: RoutingDecision,
     /// Human-readable descriptions of context that would be included.
     pub included_context: Vec<String>,
     /// Human-readable descriptions of context that would be excluded.
@@ -94,11 +85,16 @@ mod tests {
     #[test]
     fn should_deserialize_spec_preview_response() {
         let json = r#"{
-            "task_type": "review",
             "classification": { "intent": "review", "source": "inferred", "reason": "keyword 'review' matched", "confidence": "high" },
-            "provider": "openai",
-            "model": "gpt-5.5-thinking",
-            "matched_rule": "task.review -> openai/gpt-5.5-thinking",
+            "routing": {
+                "intent": "review",
+                "provider": "openai",
+                "model": "gpt-5.5-thinking",
+                "matched_rule": "task.review -> openai/gpt-5.5-thinking",
+                "fallback_used": false,
+                "override_used": false,
+                "reason": "review rule matched"
+            },
             "included_context": ["current git diff", "AGENTS.md"],
             "excluded_context": [".env", "target/**"],
             "estimated_cost": { "min": "0.03", "max": "0.09", "currency": "USD" },
@@ -109,9 +105,12 @@ mod tests {
         }"#;
         let preview: PreviewResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(preview.task_type, TaskIntent::Review);
-        assert_eq!(preview.classification.intent, TaskIntent::Review);
-        assert_eq!(preview.provider, Provider::OpenAI);
+        assert_eq!(
+            preview.classification.intent,
+            crate::intent::TaskIntent::Review
+        );
+        assert_eq!(preview.routing.provider, crate::model::Provider::OpenAI);
+        assert_eq!(preview.routing.intent, crate::intent::TaskIntent::Review);
         assert_eq!(
             preview.estimated_cost.max,
             "0.09".parse::<Decimal>().unwrap()
@@ -128,17 +127,22 @@ mod tests {
     #[test]
     fn should_roundtrip_preview_response() {
         let preview = PreviewResponse {
-            task_type: TaskIntent::Review,
             classification: Classification {
-                intent: TaskIntent::Review,
+                intent: crate::intent::TaskIntent::Review,
                 source: IntentSource::Inferred,
                 reason: "keyword matched".to_string(),
                 matched_rule: Some(0),
                 confidence: Some(Confidence::High),
             },
-            provider: Provider::OpenAI,
-            model: "gpt-5.5-thinking".to_string(),
-            matched_rule: None,
+            routing: RoutingDecision {
+                intent: crate::intent::TaskIntent::Review,
+                provider: crate::model::Provider::OpenAI,
+                model: "gpt-5.5-thinking".to_string(),
+                matched_rule: None,
+                fallback_used: false,
+                override_used: false,
+                reason: "review rule matched".to_string(),
+            },
             included_context: vec!["AGENTS.md".to_string()],
             excluded_context: Vec::new(),
             estimated_cost: CostRange {

@@ -119,7 +119,8 @@ export interface ISmistaClient {
 
   /**
    * Calls `POST /api/v1/sessions/{id}/preview` to predict how a task would be
-   * routed without calling the model. Takes the same body as `execute`.
+   * routed without calling the model. Takes the same body and uses the same
+   * provider credentials as `execute`.
    */
   preview(id: string, req: ExecuteRequest): Promise<PreviewResponse>;
 

@@ -37,6 +37,7 @@ use smista_core::api::{
 };
 use smista_core::message::{Message, MessageRole};
 use smista_core::model::{Provider, RoutingRequirements};
+use smista_core::routing::RoutingDecision;
 use smista_providers::api::RequestMessage;
 use smista_providers::memory::MemoryScope;
 use smista_storage::database::Database as _;
@@ -68,7 +69,7 @@ use self::turn::{
 };
 use crate::router::Router;
 use crate::router::resolver::context::{RecalledContext, ResolvedContext};
-use crate::router::resolver::{ResolveArgs, Resolver, RoutingDecision};
+use crate::router::resolver::{ResolveArgs, Resolver};
 use crate::session::{Sessions, UserSession};
 use crate::trace::TraceContext;
 
@@ -292,8 +293,8 @@ impl Orchestrator {
         };
 
         // The catalog is read with the supplied credentials so model selection
-        // sees exactly the models the turn would; no provider request is made
-        // beyond listing, and the chosen model is never invoked.
+        // sees exactly the models the turn would. Providers may be queried for
+        // their catalogs, but the chosen model is never invoked.
         let catalog = self
             .router
             .fetch_models(credentials.clone(), CATALOG_TIMEOUT)

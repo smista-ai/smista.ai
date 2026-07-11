@@ -1,3 +1,4 @@
+import type { PreviewResponse } from '../src/bindings/PreviewResponse.js';
 import type { TurnEvent } from '../src/bindings/TurnEvent.js';
 import type { TurnResponse } from '../src/bindings/TurnResponse.js';
 import type { FetchLike } from '../src/config.js';
@@ -45,6 +46,29 @@ export type Endpoint =
 /** A minimal but valid `idle` turn outcome, used by the turn endpoints. */
 const turn: TurnResponse = { status: 'idle', data: { trace_id: 'trace-1' } };
 
+/** A representative credential-aware routing preview. */
+const preview: PreviewResponse = {
+  classification: {
+    intent: 'review',
+    source: 'inferred',
+    reason: 'keyword matched',
+    confidence: 'high',
+  },
+  routing: {
+    intent: 'review',
+    provider: 'openai',
+    model: 'gpt-5.5-thinking',
+    matched_rule: 'review route',
+    fallback_used: false,
+    override_used: false,
+    reason: 'review routing rule matched',
+  },
+  included_context: [],
+  excluded_context: [],
+  estimated_cost: { min: '0.03', max: '0.09', currency: 'USD' },
+  required_permissions: [],
+};
+
 /** Default success bodies the mock returns for each endpoint. */
 export const defaults = {
   status: { status: 'ok', version: '0.0.0' },
@@ -58,7 +82,7 @@ export const defaults = {
   updateSession: { id: '00000000-0000-0000-0000-000000000000' },
   deleteSession: { deleted: true },
   turn,
-  preview: { decision: 'preview' },
+  preview,
   traces: { traces: [], total: 0 },
   listProviders: { providers: [] },
   listModels: { models: [], unavailable: [] },

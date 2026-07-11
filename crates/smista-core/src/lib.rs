@@ -20,6 +20,7 @@ pub mod message;
 pub mod model;
 pub mod paths;
 pub mod policy;
+pub mod routing;
 pub mod secret;
 pub mod skill;
 pub mod stream;

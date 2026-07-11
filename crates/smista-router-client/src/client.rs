@@ -65,8 +65,8 @@ use crate::error::Result;
 /// held session token, [`sign_out`](Self::sign_out) clears it, and every
 /// authenticated method uses it. The provider keys the router needs to reach a
 /// model (its [`ProviderCredentials`](crate::ProviderCredentials)) are configured
-/// on the client too, so the methods that can call a model take no credential
-/// argument either.
+/// on the client too, so methods whose routing or execution depends on provider
+/// availability take no credential argument either.
 ///
 /// Every fallible method returns [`Result`](crate::Result), whose error is
 /// [`RouterClientError`](crate::RouterClientError).

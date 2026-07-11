@@ -38,11 +38,8 @@ pub(super) fn preview_response(
     base_tools: &ToolsConfig,
 ) -> PreviewResponse {
     PreviewResponse {
-        task_type: resolved.routing.intent,
         classification: resolved.classification.clone(),
-        provider: resolved.routing.provider.clone(),
-        model: resolved.routing.model.clone(),
-        matched_rule: resolved.routing.matched_rule.clone(),
+        routing: resolved.routing.clone(),
         included_context: resolved.context.outcome.included.clone(),
         excluded_context: resolved.context.outcome.excluded.clone(),
         estimated_cost: estimate_cost(resolved, &input.text),
@@ -119,9 +116,9 @@ mod tests {
         ModelAuthRequirement, ModelCapabilities, ModelDescriptor, ModelParameters, ModelReference,
     };
     use smista_core::policy::{Classification, IntentSource, PermissionMode, ToolsConfig};
+    use smista_core::routing::RoutingDecision;
 
     use super::*;
-    use crate::router::resolver::RoutingDecision;
     use crate::router::resolver::context::{
         Candidate, CandidateKind, ContextOutcome, Relevance, ResolvedContext,
     };

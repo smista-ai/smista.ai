@@ -2,6 +2,7 @@
 
 use smista_sdk::core::api::SessionUsageResponse;
 use smista_sdk::core::model::ModelReference;
+use smista_sdk::core::routing::RoutingDecision;
 use uuid::Uuid;
 
 /// Messages are sent by the router client to the UI to notify about the status of the execution.
@@ -168,20 +169,14 @@ pub struct TraceEvent {
 /// Preview data reduced for UI rendering.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreviewSummary {
-    /// Task type that would be routed.
-    pub task_type: String,
-    /// Provider that would be used.
-    pub provider: String,
-    /// Model that would be used.
-    pub model: String,
+    /// Complete deterministic routing decision.
+    pub routing: RoutingDecision,
     /// Whether classification was explicit or inferred.
     pub classification_source: String,
     /// Human-readable classification explanation.
     pub classification_reason: String,
     /// Deterministic classification confidence, when available.
     pub classification_confidence: Option<String>,
-    /// Description of the matched routing rule, when available.
-    pub matched_rule: Option<String>,
     /// Context that would be included.
     pub included_context: Vec<String>,
     /// Context that would be excluded.
