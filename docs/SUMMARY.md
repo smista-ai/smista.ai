@@ -8,9 +8,9 @@
 
 # Configuration
 
-- [Configuring the CLI](configuration/cli.md)
-- [Running the Router](configuration/router.md)
-- [Using Local Models with Ollama](configuration/ollama.md)
+- [Configure Routing and the CLI](configuration/cli.md)
+- [Configure the Router](configuration/router.md)
+- [Use Local Models with Ollama](configuration/ollama.md)
 - [Configuration Validation](configuration/validation.md)
 
 # Using smista.ai

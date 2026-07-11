@@ -1,10 +1,10 @@
-# Running the Router
+# Configure the Router
 
-- [Running the Router](#running-the-router)
-  - [Where configuration lives](#where-configuration-lives)
-  - [A complete example](#a-complete-example)
-  - [Server](#server)
+- [Configure the Router](#configure-the-router)
+  - [Start with the defaults](#start-with-the-defaults)
   - [Starting and stopping](#starting-and-stopping)
+  - [Where configuration lives](#where-configuration-lives)
+  - [Server](#server)
   - [Storage](#storage)
   - [Authentication](#authentication)
   - [Runtime limits](#runtime-limits)
@@ -16,101 +16,28 @@
   - [Providers](#providers)
     - [Generic OpenAI-compatible endpoints](#generic-openai-compatible-endpoints)
   - [Local models with Ollama](#local-models-with-ollama)
+  - [A complete example](#a-complete-example)
   - [Validation](#validation)
 
 `smista-router` is the routing and orchestration service the CLI talks to. This
 page covers how the router process itself runs — the server binding, storage,
 authentication, runtime limits and logging. It is separate from the routing
 policy (which model handles a task); that lives in
-[Configuring the CLI](cli.md).
+[Configure Routing and the CLI](cli.md).
 
-## Where configuration lives
+## Start with the defaults
 
-| Layer            | Location                             |
-| ---------------- | ------------------------------------ |
-| Global (POSIX)   | `~/.config/smista/router.toml`       |
-| Global (Windows) | `C:\Users\$USER\.smista\router.toml` |
-| Project          | `.smista/router.toml`                |
+Most local users do not need to create `router.toml`. Without the file, the
+router uses safe local defaults: it binds to `127.0.0.1:7331`, stores data in
+an embedded database under the global smista directory, and disables CORS and
+telemetry.
 
-The default format is TOML. An invalid router configuration prevents the router
-from starting and reports which field to fix.
+Create `router.toml` when you need to enable Ollama, change a runtime limit, use
+remote storage, or connect to a custom provider endpoint:
 
-## A complete example
-
-```toml
-[router]
-host = "127.0.0.1"
-port = 7331
-
-[router.storage]
-engine = "surrealdb"
-mode = "embedded"
-path = ".smista/db"
-namespace = "smista"
-database = "local"
-
-[router.auth]
-token_ttl_seconds = 86400
-api_key_version = "01"
-local_bootstrap_enabled = true
-
-[router.limits]
-max_request_body_bytes = 10485760
-max_context_bytes = 5242880
-max_concurrent_requests = 8
-request_timeout_ms = 120000
-provider_timeout_ms = 180000
-tool_timeout_ms = 60000
-
-[router.rate_limit]
-enabled = true
-period_ms = 10
-burst_size = 200
-trust_proxy_headers = false
-
-[router.logging]
-level = "info"
-format = "compact"
-redact_secrets = true
-
-[router.opentelemetry]
-enabled = false
-endpoint = "http://localhost:4317"
-protocol = "grpc"
-service_name = "smista-router"
-sample_ratio = 1.0
-
-[router.cors]
-enabled = false
-allowed_origins = []
-
-[router.retention]
-trace_retention_days = 90
-session_retention_days = 365
-deleted_session_retention_days = 30
-cleanup_interval_seconds = 3600
-
-[router.providers.openai]
-base_url = "https://api.openai.com/v1"
+```sh
+smista config init router
 ```
-
-## Server
-
-```toml
-[router]
-host = "127.0.0.1"
-port = 7331
-```
-
-The router is meant to be reached locally. Binding it to a public interface in
-local mode is flagged as unsafe by validation.
-
-The `[router]` table accepts:
-
-| Key    | Type    | Default     | Purpose    |
-| ------ | ------- | ----------- | ---------- |
-| `host` | string  | `127.0.0.1` | Bind host. |
-| `port` | integer | `7331`      | Bind port. |
 
 ## Starting and stopping
 
@@ -139,6 +66,57 @@ smista start --foreground
 The pidfile defaults to a per-user location under the runtime directory. Set a
 different path with `--pidfile <path>` on both `start` and `stop`, or with the
 `SMISTA_ROUTER_PIDFILE` environment variable.
+
+Check that the router is ready with:
+
+```sh
+smista status
+```
+
+## Where configuration lives
+
+| System  | Default location                    |
+| ------- | ----------------------------------- |
+| POSIX   | `~/.config/smista/router.toml`      |
+| Windows | `%USERPROFILE%\.smista\router.toml` |
+
+Use `smista config path router` to print the location on your system. Pass
+`--config <path>` to `smista start` when you want to use another file.
+
+The router configuration is stored in the global smista directory, but
+`smista config` commands access it with the `router` argument:
+
+```sh
+smista config path router
+smista config edit router
+smista config show router
+smista config check router
+```
+
+The `global` argument selects the global CLI configuration (`config.toml`), not
+the router configuration (`router.toml`).
+
+An invalid router configuration prevents the router from starting and reports
+which field to fix. Run `smista config check router` before starting to check
+the file directly.
+
+## Server
+
+```toml
+[router]
+host = "127.0.0.1"
+port = 7331
+```
+
+The router is meant to be reached locally. Binding it to a public interface in
+local mode is flagged as unsafe by validation.
+
+The `[router]` table accepts:
+
+| Key    | Type    | Default     | Purpose    |
+| ------ | ------- | ----------- | ---------- |
+| `host` | string  | `127.0.0.1` | Bind host. |
+| `port` | integer | `7331`      | Bind port. |
 
 ## Storage
 
@@ -377,14 +355,18 @@ The `[router.retention]` table accepts:
 
 ## Providers
 
-Each provider the CLI enables can have an optional connection override on the
-router. This is where you point a provider at a custom endpoint — for example an
-OpenAI-compatible proxy or a self-hosted gateway. Omit the section to use the
-provider's default endpoint.
+The router discovers built-in providers without endpoint configuration. OpenAI,
+Anthropic, and Gemini always use their official endpoints.
+
+Use `[router.providers]` for named OpenAI-compatible services, such as a local
+vLLM server or a hosted gateway. Configure a local Ollama connection under
+`[router.ollama]` instead.
 
 ```toml
-[router.providers.openai]
-base_url = "https://api.openai.com/v1"
+[router.providers."openai-compat:my-vllm"]
+base_url = "http://localhost:8000/v1"
+local = true
+display_name = "My vLLM"
 ```
 
 Each `[router.providers.<id>]` table accepts:
@@ -431,7 +413,7 @@ output_cost_per_million_tokens = "0.0"
 These endpoints expose no catalog of model facts, so routing reads each model's
 facts from the `[[...models]]` tables you declare. The credential, if the
 endpoint needs one, is set on the CLI side — see the `openai-compat:<name>`
-provider in [Configuring the CLI](cli.md).
+provider in [Configure Routing and the CLI](cli.md).
 
 Each `[[router.providers.<id>.models]]` table accepts:
 
@@ -473,9 +455,10 @@ images = true
 
 The router connects to Ollama to run local models. Connection and discovery are
 configured here under `[router.ollama]`; which tasks actually use an Ollama
-model is decided by your routing policy in [Configuring the CLI](cli.md). The
+model is decided by your routing policy in
+[Configure Routing and the CLI](cli.md). The
 two must stay consistent — see
-[Using Local Models with Ollama](ollama.md) for the full setup.
+[Use Local Models with Ollama](ollama.md) for the full setup.
 
 ```toml
 [router.ollama]
@@ -490,14 +473,77 @@ The `[router.ollama]` table accepts:
 | `enabled`  | bool   | `false`                  | Whether the Ollama backend is active. |
 | `base_url` | string | `http://127.0.0.1:11434` | Ollama endpoint base URL.             |
 
+## A complete example
+
+The example below shows every main runtime section. Most local users only need
+the sections that differ from the defaults.
+
+```toml
+[router]
+host = "127.0.0.1"
+port = 7331
+
+[router.storage]
+engine = "surrealdb"
+mode = "embedded"
+path = ".smista/db"
+namespace = "smista"
+database = "local"
+
+[router.auth]
+token_ttl_seconds = 86400
+api_key_version = "01"
+local_bootstrap_enabled = true
+
+[router.limits]
+max_request_body_bytes = 10485760
+max_context_bytes = 5242880
+max_concurrent_requests = 8
+request_timeout_ms = 120000
+provider_timeout_ms = 180000
+tool_timeout_ms = 60000
+
+[router.rate_limit]
+enabled = true
+period_ms = 10
+burst_size = 200
+trust_proxy_headers = false
+
+[router.logging]
+level = "info"
+format = "compact"
+redact_secrets = true
+
+[router.opentelemetry]
+enabled = false
+endpoint = "http://localhost:4317"
+protocol = "grpc"
+service_name = "smista-router"
+sample_ratio = 1.0
+
+[router.cors]
+enabled = false
+allowed_origins = []
+
+[router.retention]
+trace_retention_days = 90
+session_retention_days = 365
+archived_session_retention_days = 30
+cleanup_interval_seconds = 3600
+
+[router.ollama]
+enabled = false
+base_url = "http://127.0.0.1:11434"
+```
+
 ## Validation
 
 Router configuration is validated at startup. Validation rejects an invalid host
 or port, an unsafe public binding in local mode, missing or unsupported storage
 configuration, local bootstrap enabled in remote mode, invalid timeouts or size
 limits, a zero rate-limit period or burst while rate limiting is enabled, unsafe
-CORS, and inline secrets. A failure prevents startup and explains the offending
-field.
+CORS, and invalid OpenTelemetry settings. A failure prevents startup and
+explains the offending field.
 
 Validation also emits non-blocking warnings, such as setting a `base_url` on a
 built-in API provider that ignores it. Warnings are surfaced but do not prevent

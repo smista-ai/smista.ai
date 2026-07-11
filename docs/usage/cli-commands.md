@@ -1,6 +1,7 @@
 # CLI Commands
 
 - [CLI Commands](#cli-commands)
+  - [Typical first-time order](#typical-first-time-order)
   - [From your shell](#from-your-shell)
     - [Running the router](#running-the-router)
     - [Global flags](#global-flags)
@@ -16,6 +17,24 @@
 
 The `smista` CLI runs in two modes: a one-shot prompt from your shell, and an
 interactive session where commands are typed as slash commands.
+
+## Typical first-time order
+
+Configure smista before starting the router:
+
+```sh
+smista config init
+smista config edit project
+smista credentials set openai YOUR_API_KEY
+smista config check project
+smista start
+smista login
+smista
+```
+
+Local Ollama does not need a provider key. It needs an enabled
+`[router.ollama]` connection instead. See
+[Use Local Models with Ollama](../configuration/ollama.md).
 
 ## From your shell
 
@@ -73,7 +92,7 @@ router as unreachable instead of starting anything.
 
 Both commands accept flags to point at a specific configuration file or pidfile,
 and `smista start` exposes flags to configure OpenTelemetry trace export. See
-[Running the Router](../configuration/router.md) for the full list and for the
+[Configure the Router](../configuration/router.md) for the full list and for the
 configuration file itself.
 
 ### Global flags
@@ -92,9 +111,9 @@ smista --log-filter debug start --foreground
 
 ### Credential storage
 
-The main interactive `smista` command stores API keys and provider credentials
-in the operating-system keyring when it is available. If the keyring cannot be
-used, the CLI falls back to file-backed storage.
+The CLI stores router API keys and provider credentials in the operating-system
+keyring when it is available. If the keyring cannot be used, the CLI falls back
+to file-backed storage.
 
 Pass `--enforce-keyring` to make startup fail instead of falling back:
 
@@ -182,7 +201,7 @@ The `<provider>` value must be one of:
 | `anthropic`                     | Anthropic Claude models.                       |
 | `gemini`                        | Google Gemini models.                          |
 | `openai`                        | OpenAI GPT models.                             |
-| `ollama`                        | Ollama models.                                 |
+| `ollama`                        | Ollama endpoints that require a key.           |
 | `openai-compat:<provider_name>` | A named OpenAI-compatible provider or gateway. |
 
 For OpenAI-compatible providers, replace `<provider_name>` with the configured

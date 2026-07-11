@@ -129,7 +129,7 @@ sequenceDiagram
 
 ## Route preview
 
-`smista route` (or `/route`) explains the decision without calling any model.
+`/preview` explains the decision without calling any model.
 
 ```mermaid
 sequenceDiagram
@@ -137,7 +137,7 @@ sequenceDiagram
     participant C as smista-cli
     participant R as smista-router
 
-    U->>C: /route "review this PR"
+    U->>C: /preview "review this PR"
     C->>R: POST /sessions/{id}/preview
     R->>R: classify + evaluate policy + select context
     Note over R: Model is never called
