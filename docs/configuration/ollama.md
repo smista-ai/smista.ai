@@ -77,7 +77,7 @@ type = "ollama"
 
 > [!IMPORTANT]
 > Keep model names consistent across your routing rules and Ollama itself. A
-> model referenced as `ollama/qwen2.5-coder` in a routing rule must be allowed by
+> model referenced as `ollama/qwen2.5-coder:7b` in a routing rule must be allowed by
 > `[router.ollama.models]` and be a model Ollama can serve. The endpoint and
 > discovery behaviour are controlled by `[router.ollama]` — `base_url`,
 > `auto_discover_models`, and `allowed_models`.
@@ -92,7 +92,7 @@ Now write rules that send work to Ollama — for cost, for privacy, or both.
 name = "summaries run locally"
 priority = 40
 intent = "summarize"
-model = "ollama/qwen2.5-coder"
+model = "ollama/qwen2.5-coder:7b"
 
 # Keep sensitive code on-device
 [[routing.rules]]
@@ -101,7 +101,7 @@ priority = 5
 intent = "review"
 paths = ["src/crypto/**", "src/auth/**"]
 local_only = true
-model = "ollama/qwen2.5-coder"
+model = "ollama/qwen2.5-coder:7b"
 ```
 
 You can also make a local model the fallback for a remote one, so work continues
@@ -110,7 +110,7 @@ when a provider is down:
 ```toml
 [routing.default]
 model = "openai/gpt-5.5-mini"
-fallbacks = ["ollama/qwen2.5-coder"]
+fallbacks = ["ollama/qwen2.5-coder:7b"]
 ```
 
 ## Capability checks

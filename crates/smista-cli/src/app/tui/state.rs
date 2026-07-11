@@ -88,6 +88,8 @@ pub struct State {
     pub execution_turn: Option<ExecutionTurn>,
     /// Conversation history
     pub history: Vec<HistoryEntry>,
+    /// Whether plan mode is enabled
+    pub plan: bool,
     /// Preferred model selected by the user.
     preferred_model: Option<ModelReference>,
     /// Previously submitted non-empty prompt inputs.
@@ -833,6 +835,15 @@ mod tests {
             task_type: PREVIEW_TASK_TYPE.to_owned(),
             provider: PREVIEW_PROVIDER.to_owned(),
             model: PREVIEW_MODEL.to_owned(),
+            classification_source: "inferred".to_owned(),
+            classification_reason: "keyword matched".to_owned(),
+            classification_confidence: Some("high".to_owned()),
+            matched_rule: Some("review rule".to_owned()),
+            included_context: vec!["current prompt".to_owned()],
+            excluded_context: Vec::new(),
+            estimated_cost_min: "0.01".to_owned(),
+            estimated_cost_max: "0.03".to_owned(),
+            estimated_cost_currency: "USD".to_owned(),
             required_permissions: Vec::new(),
         }));
         assert!(matches!(

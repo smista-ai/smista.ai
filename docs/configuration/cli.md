@@ -33,7 +33,7 @@ configuration:
 type = "ollama"
 
 [routing.default]
-model = "ollama/qwen2.5-coder"
+model = "ollama/qwen2.5-coder:7b"
 ```
 
 This default is keyless and passes configuration validation on its own. Model
@@ -61,7 +61,7 @@ fallbacks = ["anthropic/claude-sonnet"]
 name = "summarize on a local model"
 priority = 20
 intent = "summarize"
-model = "ollama/qwen2.5-coder"
+model = "ollama/qwen2.5-coder:7b"
 fallbacks = ["openai/gpt-5.5-mini"]
 
 [[routing.rules]]
@@ -79,7 +79,7 @@ effort = "low"
 intent = "review"
 paths = ["src/crypto/**", "src/auth/**"]
 local_only = true
-model = "ollama/qwen2.5-coder"
+model = "ollama/qwen2.5-coder:7b"
 ```
 
 ### Rule fields
@@ -182,11 +182,11 @@ A policy must define a default route, used when no rule matches:
 ```toml
 [routing.default]
 model = "openai/gpt-5.5-mini"
-fallbacks = ["ollama/qwen2.5-coder"]
+fallbacks = ["ollama/qwen2.5-coder:7b"]
 ```
 
 When no route is authored, the built-in default route is
-`ollama/qwen2.5-coder`.
+`ollama/qwen2.5-coder:7b`.
 
 ## Task intents
 

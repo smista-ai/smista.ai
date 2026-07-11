@@ -19,6 +19,7 @@ const EDIT_FILE_TOOL: &str = "edit_file";
 const HISTORY_ENTRY_VERTICAL_PADDING: usize = 2;
 const INPUT_VERTICAL_PADDING: usize = 2;
 const DARK_USER_MESSAGE_ALPHA: f32 = 0.24;
+const DEFAULT_INPUT_BACKGROUND: Color = Color::Rgb(35, 35, 35);
 const LIGHT_USER_MESSAGE_ALPHA: f32 = 0.04;
 const PROMPT_MARKER_WIDTH: usize = 2;
 const WRITE_FILE_TOOL: &str = "write_file";
@@ -54,7 +55,9 @@ pub fn view_console<'a>(
     Clear.render(frame.area(), frame.buffer_mut());
 
     if let Some(status_line) = status_line {
-        Paragraph::new(status_line).render(status_area, frame.buffer_mut());
+        Paragraph::new(status_line)
+            .style(palette().input_area)
+            .render(status_area, frame.buffer_mut());
     }
 
     Paragraph::new(padded_input_lines(live_lines))
@@ -63,6 +66,7 @@ pub fn view_console<'a>(
         .render(input_area, frame.buffer_mut());
 
     Paragraph::new(footer_line(preferred_model, router_state, cwd))
+        .style(palette().input_area)
         .render(footer_area, frame.buffer_mut());
 
     if let Some(cursor_position) = prompt_cursor_position(console, execution_turn, input_area) {
@@ -100,6 +104,13 @@ pub(in crate::app::tui) fn render_history_lines(lines: Vec<Line<'static>>, buffe
     Paragraph::new(lines)
         .wrap(Wrap { trim: false })
         .render(buffer.area, buffer);
+}
+
+pub(in crate::app::tui) fn history_rendered_height(lines: &[Line<'_>], width: u16) -> u16 {
+    let height = Paragraph::new(lines.to_vec())
+        .wrap(Wrap { trim: false })
+        .line_count(width);
+    u16::try_from(height).unwrap_or(u16::MAX)
 }
 
 pub(in crate::app::tui) fn history_lines_for_width(
@@ -462,21 +473,86 @@ fn approval_history_lines(prompt: &ApprovalPrompt) -> Vec<Line<'static>> {
 }
 
 fn preview_lines(preview: &PreviewSummary) -> Vec<Line<'static>> {
-    let mut lines = vec![Line::from(vec![
-        Span::styled("preview: ", palette().preview.add_modifier(Modifier::BOLD)),
-        Span::styled(preview.task_type.clone(), palette().preview),
-        Span::raw(" -> "),
-        Span::styled(
-            format!("{}/{}", preview.provider, preview.model),
-            palette().preview,
+    let confidence = preview.classification_confidence.as_deref().map_or_else(
+        || preview.classification_source.clone(),
+        |confidence| {
+            format!(
+                "{} ({confidence} confidence)",
+                preview.classification_source
+            )
+        },
+    );
+    let mut lines = vec![
+        Line::from(Span::styled(
+            "Routing preview",
+            palette().preview.add_modifier(Modifier::BOLD),
+        )),
+        preview_detail_line("Model", format!("{}/{}", preview.provider, preview.model)),
+        preview_detail_line("Task", preview.task_type.clone()),
+        preview_detail_line("Classification", confidence),
+        preview_detail_line("Reason", preview.classification_reason.clone()),
+        preview_detail_line(
+            "Matched rule",
+            preview.matched_rule.as_deref().unwrap_or("default route"),
         ),
-    ])];
-    lines.extend(preview.required_permissions.iter().map(|permission| {
-        Line::from(vec![
-            Span::styled("permission: ", palette().dim),
-            Span::styled(permission.clone(), palette().preview),
-        ])
-    }));
+        preview_detail_line(
+            "Estimated cost",
+            format!(
+                "{}-{} {}",
+                preview.estimated_cost_min,
+                preview.estimated_cost_max,
+                preview.estimated_cost_currency
+            ),
+        ),
+    ];
+    lines.extend(preview_list_lines(
+        "Included context",
+        &preview.included_context,
+    ));
+    lines.extend(preview_list_lines(
+        "Excluded context",
+        &preview.excluded_context,
+    ));
+    lines.push(Line::from(Span::styled(
+        "Permissions",
+        palette().dim.add_modifier(Modifier::BOLD),
+    )));
+    if preview.required_permissions.is_empty() {
+        lines.push(Line::from(Span::styled("  none", palette().dim)));
+    } else {
+        lines.extend(preview.required_permissions.iter().map(|permission| {
+            Line::from(vec![
+                Span::styled("  • ", palette().dim),
+                Span::styled(permission.permission.clone(), palette().preview),
+                Span::styled(format!(" ({})", permission.mode), palette().dim),
+            ])
+        }));
+    }
+    lines
+}
+
+fn preview_detail_line(label: &str, value: impl Into<String>) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(format!("{label}: "), palette().dim),
+        Span::styled(value.into(), palette().preview),
+    ])
+}
+
+fn preview_list_lines(label: &str, values: &[String]) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(Span::styled(
+        label.to_owned(),
+        palette().dim.add_modifier(Modifier::BOLD),
+    ))];
+    if values.is_empty() {
+        lines.push(Line::from(Span::styled("  none", palette().dim)));
+    } else {
+        lines.extend(values.iter().map(|value| {
+            Line::from(vec![
+                Span::styled("  • ", palette().dim),
+                Span::styled(value.clone(), palette().preview),
+            ])
+        }));
+    }
     lines
 }
 
@@ -590,7 +666,7 @@ fn palette() -> Palette {
 fn input_area_style() -> Style {
     terminal_background()
         .map(|background| Style::default().bg(user_message_bg(background)))
-        .unwrap_or_default()
+        .unwrap_or_else(|| Style::default().bg(DEFAULT_INPUT_BACKGROUND))
 }
 
 fn terminal_background() -> Option<(u8, u8, u8)> {
@@ -662,6 +738,28 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
+    use crate::app::router_client::msg::PreviewPermissionSummary;
+
+    fn preview_summary() -> PreviewSummary {
+        PreviewSummary {
+            task_type: "review".to_owned(),
+            provider: "openai".to_owned(),
+            model: "gpt-5.5-thinking".to_owned(),
+            classification_source: "inferred".to_owned(),
+            classification_reason: "keyword 'review' matched".to_owned(),
+            classification_confidence: Some("high".to_owned()),
+            matched_rule: Some("review route".to_owned()),
+            included_context: vec!["current git diff".to_owned(), "AGENTS.md".to_owned()],
+            excluded_context: vec![".env".to_owned()],
+            estimated_cost_min: "0.03".to_owned(),
+            estimated_cost_max: "0.09".to_owned(),
+            estimated_cost_currency: "USD".to_owned(),
+            required_permissions: vec![PreviewPermissionSummary {
+                permission: "write_files".to_owned(),
+                mode: "ask".to_owned(),
+            }],
+        }
+    }
 
     #[test]
     fn diff_history_lines_are_numbered_and_signed() {
@@ -688,6 +786,31 @@ mod tests {
         assert_eq!(plain_text(&lines[0]), "");
         assert_eq!(plain_text(&lines[1]), "hello");
         assert_eq!(plain_text(&lines[2]), "");
+    }
+
+    #[test]
+    fn preview_history_is_a_detailed_multiline_report() {
+        let lines = history_lines_for_width(&[HistoryEntry::Preview(preview_summary())], 80);
+        let text = lines.iter().map(plain_text).collect::<Vec<_>>();
+
+        assert!(text.contains(&"Routing preview".to_owned()));
+        assert!(text.contains(&"Model: openai/gpt-5.5-thinking".to_owned()));
+        assert!(text.contains(&"Task: review".to_owned()));
+        assert!(text.contains(&"Classification: inferred (high confidence)".to_owned()));
+        assert!(text.contains(&"Reason: keyword 'review' matched".to_owned()));
+        assert!(text.contains(&"Matched rule: review route".to_owned()));
+        assert!(text.contains(&"Estimated cost: 0.03-0.09 USD".to_owned()));
+        assert!(text.contains(&"  • current git diff".to_owned()));
+        assert!(text.contains(&"  • .env".to_owned()));
+        assert!(text.contains(&"  • write_files (ask)".to_owned()));
+    }
+
+    #[test]
+    fn history_height_accounts_for_wrapped_rows() {
+        let lines = vec![Line::raw("123456 123456 123456")];
+
+        assert_eq!(history_rendered_height(&lines, 10), 3);
+        assert_eq!(history_rendered_height(&[Line::raw("")], 8), 1);
     }
 
     #[test]
@@ -727,12 +850,12 @@ mod tests {
     }
 
     #[test]
-    fn unknown_terminal_background_uses_default_style() {
+    fn unknown_terminal_background_uses_fallback_input_background() {
         assert_eq!(
             parse_colorfgbg_background("not-a-color")
                 .map(|background| Style::default().bg(user_message_bg(background)))
-                .unwrap_or_default(),
-            Style::default()
+                .unwrap_or_else(|| Style::default().bg(DEFAULT_INPUT_BACKGROUND)),
+            Style::default().bg(DEFAULT_INPUT_BACKGROUND)
         );
     }
 

@@ -89,30 +89,23 @@ where
                     tracing::debug!("input event is enter, but prompt input is empty, ignoring");
                     None
                 }
+                PromptState::FileAutocomplete(_)
+                    if console.prompt.is_command_file_autocomplete_active() =>
+                {
+                    console.prompt.cancel_file_autocomplete();
+                    let PromptState::Command(command) = &console.prompt else {
+                        unreachable!("command file completion must restore command state");
+                    };
+                    let prompt = console.prompt.input();
+                    let (command, args) = command.resolved();
+                    console.prompt.clear();
+                    self.state.push_prompt_history(prompt);
+                    self.handle_command(command, args)
+                }
                 PromptState::Text(_) | PromptState::FileAutocomplete(_) => {
                     let prompt = console.prompt.text().unwrap_or_default().trim().to_owned();
-                    let files = mentioned_files(&prompt, &self.context.cwd);
                     console.prompt.clear();
-
-                    if prompt.is_empty() {
-                        tracing::debug!(
-                            "input event is enter, but prompt input is empty, ignoring"
-                        );
-                        None
-                    } else {
-                        tracing::debug!(
-                            "input event is enter, pushing prompt to history and producing execute command"
-                        );
-                        self.state
-                            .push_history(HistoryEntry::UserMessage(prompt.clone()));
-                        self.state.push_prompt_history(prompt.clone());
-                        Some(Cmd::Execute {
-                            prompt,
-                            files,
-                            plan: false,
-                            explicit_model: self.state.preferred_model().cloned(),
-                        })
-                    }
+                    self.handle_prompt_exec(prompt)
                 }
                 PromptState::Command(command) => {
                     let prompt = console.prompt.input();
@@ -188,6 +181,28 @@ where
 
                 None
             }
+        }
+    }
+
+    fn handle_prompt_exec(&mut self, prompt: String) -> Option<Cmd> {
+        let files = mentioned_files(&prompt, &self.context.cwd);
+
+        if prompt.is_empty() {
+            tracing::debug!("input event is enter, but prompt input is empty, ignoring");
+            None
+        } else {
+            tracing::debug!(
+                "input event is enter, pushing prompt to history and producing execute command"
+            );
+            self.state
+                .push_history(HistoryEntry::UserMessage(prompt.clone()));
+            self.state.push_prompt_history(prompt.clone());
+            Some(Cmd::Execute {
+                prompt,
+                files,
+                plan: self.state.plan,
+                explicit_model: self.state.preferred_model().cloned(),
+            })
         }
     }
 
@@ -285,6 +300,7 @@ where
     fn handle_command(&mut self, command: Command, args: Vec<String>) -> Option<Cmd> {
         match command {
             Command::Model => self.handle_model_command(&args),
+            Command::Preview => self.handle_preview_command(&args),
             Command::Providers => {
                 tracing::debug!(
                     "input event is providers command, producing list providers command"
@@ -349,6 +365,26 @@ where
                 Some(Cmd::ListModels)
             }
         }
+    }
+
+    fn handle_preview_command(&mut self, args: &[String]) -> Option<Cmd> {
+        tracing::debug!("input event is preview command, producing preview routing command");
+        if args.is_empty() {
+            tracing::debug!("input event is preview command, but no prompt was provided");
+            self.state.push_history(HistoryEntry::Error(
+                "No prompt provided for preview command".to_owned(),
+            ));
+            return None;
+        }
+
+        let prompt = args.join(" ");
+        let files = mentioned_files(&prompt, &self.context.cwd);
+        Some(Cmd::Preview {
+            prompt,
+            files,
+            plan: self.state.plan,
+            explicit_model: self.state.preferred_model().cloned(),
+        })
     }
 
     fn handle_resume_command(&mut self, args: &[String]) -> Option<Cmd> {
@@ -1108,6 +1144,36 @@ mod tests {
 
         assert!(!console_file_autocomplete_active(&tui));
         assert_eq!(console_prompt_input(&tui), "review @file next");
+    }
+
+    #[test]
+    fn preview_completes_and_collects_file_mentions_without_at_prefix() {
+        let exit = CancellationToken::new();
+        let cwd = tempfile::tempdir()
+            .expect("temporary directory is created")
+            .keep();
+        let file = cwd.join("file.rs");
+        std::fs::write(&file, "file").expect("file is written");
+        let mut tui = Tui::<TestBackend>::new_test(app_context_for_cwd(exit, cwd));
+
+        tui.on_input(InputEvent::Paste("/preview review @fi".to_owned()));
+        assert_eq!(console_suggestion(&tui), Some("/preview review @file.rs"));
+        tui.on_input(InputEvent::Tab);
+
+        let cmd = tui
+            .on_input(InputEvent::Enter)
+            .expect("preview command is produced");
+        let Cmd::Preview { prompt, files, .. } = cmd else {
+            panic!("preview command expected");
+        };
+
+        assert_eq!(prompt, "review @file.rs");
+        assert_eq!(files, HashSet::from([file]));
+        assert!(
+            files
+                .iter()
+                .all(|path| !path.to_string_lossy().contains('@'))
+        );
     }
 
     #[test]

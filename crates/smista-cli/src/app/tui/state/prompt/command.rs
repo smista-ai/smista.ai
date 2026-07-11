@@ -4,6 +4,7 @@ use super::{PromptState, VerticalDirection, char_len, char_to_byte_index, move_v
 
 pub(super) const COMMAND_EXIT: &str = "exit";
 pub(super) const COMMAND_MODEL: &str = "model";
+pub(super) const COMMAND_PREVIEW: &str = "preview";
 pub(super) const COMMAND_PROVIDERS: &str = "providers";
 pub(super) const COMMAND_Q: &str = "q";
 pub(super) const COMMAND_QUIT: &str = "quit";
@@ -14,6 +15,7 @@ pub(super) const COMMAND_STATUS: &str = "status";
 const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_EXIT, Command::Quit),
     (COMMAND_MODEL, Command::Model),
+    (COMMAND_PREVIEW, Command::Preview),
     (COMMAND_PROVIDERS, Command::Providers),
     (COMMAND_Q, Command::Quit),
     (COMMAND_QUIT, Command::Quit),
@@ -27,6 +29,8 @@ const COMMAND_SPECS: &[(&str, Command)] = &[
 pub enum Command {
     /// `/model` command. Without arguments, lists available models. With a model name, sets the current model.
     Model,
+    /// `/preview` command, gets the preview routing for the given prompt.
+    Preview,
     /// `/providers` command. Lists available providers.
     Providers,
     /// `/quit`, `/q`, or `/exit` command, exits the application.
@@ -47,6 +51,7 @@ impl Command {
     pub fn input_name(&self) -> &str {
         match self {
             Self::Model => COMMAND_MODEL,
+            Self::Preview => COMMAND_PREVIEW,
             Self::Providers => COMMAND_PROVIDERS,
             Self::Quit => COMMAND_QUIT,
             Self::Resume => COMMAND_RESUME,
