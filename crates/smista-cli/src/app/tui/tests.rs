@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use ratatui::style::Color;
@@ -22,6 +22,23 @@ const PROMPT_PLACEHOLDER: &str = "Type a message or /command";
 const SESSION_TITLE: &str = "Fix resume flow";
 const SESSION_UPDATED_AT: &str = "2026-07-08T10:00:00Z";
 const TRACE_CREATED_AT: &str = "2026-07-08T11:00:00Z";
+
+#[derive(Clone)]
+struct RecordingWriter(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for RecordingWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        self.0
+            .lock()
+            .expect("recording writer lock is available")
+            .extend_from_slice(buffer);
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
 
 fn app_context(exit: CancellationToken) -> AppContext {
     let cwd = tempfile::tempdir()
@@ -75,6 +92,48 @@ fn handle_client_msg_applies_message_to_state() {
     );
     assert_backend_contains(&tui, ASSISTANT_MESSAGE);
     assert_backend_contains(&tui, PROMPT_PLACEHOLDER);
+}
+
+#[test]
+fn session_closed_clears_rendered_transcript_before_redrawing() {
+    let exit = CancellationToken::new();
+    let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+    tui.handle_client_msg(Msg::AssistantTurn(AssistantTurn {
+        message: ASSISTANT_MESSAGE.to_owned(),
+        trace_id: None,
+    }))
+    .expect("assistant message is handled");
+
+    tui.handle_client_msg(Msg::SessionClosed {
+        session_id: None,
+        usage: None,
+    })
+    .expect("session closed message is handled");
+
+    assert!(
+        !tui.terminal
+            .backend()
+            .to_string()
+            .contains(ASSISTANT_MESSAGE)
+    );
+    assert_backend_contains(&tui, PROMPT_PLACEHOLDER);
+    assert_eq!(tui.printed_history_entries, 0);
+}
+
+#[test]
+fn crossterm_clear_erases_visible_screen_and_scrollback() {
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let mut backend = CrosstermBackend::new(RecordingWriter(output.clone()));
+
+    backend
+        .clear_scrollback()
+        .expect("in-memory crossterm backend clears");
+
+    let output = output
+        .lock()
+        .expect("recorded terminal output is available");
+    assert!(output.windows(4).any(|window| window == b"\x1b[3J"));
+    assert!(output.windows(4).any(|window| window == b"\x1b[2J"));
 }
 
 #[test]

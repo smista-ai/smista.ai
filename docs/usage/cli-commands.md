@@ -327,6 +327,9 @@ smista 0.0.0
 
 Type slash commands at the interactive prompt.
 
+- `/clear` clears the terminal and ends the current session. When a session is
+  active, it prints final token usage when available and a `/resume` command
+  before the next prompt. The next message starts a new session.
 - `/model` lists models available through the router. Use arrow keys to choose
   a model, then press Enter to use it for later prompts in the session. The
   first option, `auto`, clears the preferred model and returns to deterministic

@@ -16,6 +16,7 @@ mod turn;
 use std::collections::VecDeque;
 
 use smista_sdk::core::model::ModelReference;
+use uuid::Uuid;
 
 pub use self::active_component::{ActiveComponentKind, ActiveComponentState, UsageState};
 pub use self::console::ConsoleState;
@@ -45,6 +46,7 @@ const MESSAGE_PREVIEW: &str = "preview";
 const MESSAGE_PROVIDERS_LIST: &str = "providers_list";
 const MESSAGE_RESUMED_SESSION: &str = "resumed_session";
 const MESSAGE_ROUTER_STATUS: &str = "router_status";
+const MESSAGE_SESSION_CLOSED: &str = "session_closed";
 const MESSAGE_SESSIONS_LIST: &str = "sessions_list";
 const MESSAGE_STREAMED_CONTENT_CHUNK: &str = "streamed_content_chunk";
 const MESSAGE_STREAMED_REASONING_CHUNK: &str = "streamed_reasoning_chunk";
@@ -270,9 +272,36 @@ impl State {
         self.trace_active_component(COMPONENT_SESSIONS_LIST, Some(entry_count));
     }
 
+    /// Handle [`Msg::SessionClosed`] by clearing history, showing the console, and displaying usage statistics if available.
+    fn close_session(
+        &mut self,
+        session_id: Option<Uuid>,
+        usage: Option<smista_sdk::core::api::SessionUsageResponse>,
+    ) {
+        self.reset_prompt_history_navigation();
+        self.clear_history();
+        self.show_console();
+        if let Some(usage) = usage {
+            let msg = format!(
+                "Token usage: total={total} input={input} output={output} cost={currency}{cost}",
+                total = usage.total.total_tokens.unwrap_or_default(),
+                input = usage.total.input_tokens.unwrap_or_default(),
+                output = usage.total.output_tokens.unwrap_or_default(),
+                currency = usage.total.currency.unwrap_or_default(),
+                cost = usage.total.estimated_cost.unwrap_or_default()
+            );
+            self.push_history(HistoryEntry::Notice(msg));
+        }
+        if let Some(session_id) = session_id {
+            self.push_history(HistoryEntry::Notice(format!(
+                "To continue this session, use the command: /resume {session_id}"
+            )));
+        }
+    }
+
     /// Applies a router-client message to state.
     pub fn apply_msg(&mut self, msg: Msg) {
-        let message = message_kind(&msg);
+        let message = crate::app::message_name(&msg);
         tracing::trace!(
             message,
             active_component = self.active_component.kind().to_string(),
@@ -343,6 +372,9 @@ impl State {
                     version = status.version
                 )));
             }
+            Msg::SessionClosed { session_id, usage } => {
+                self.close_session(session_id, usage);
+            }
             Msg::SessionsList(sessions) => {
                 self.show_sessions_list(sessions);
             }
@@ -410,28 +442,6 @@ impl State {
                 m.id == model || m.display_name == model || model_ref == model
             })
             .map(|m| m.reference.clone())
-    }
-}
-
-fn message_kind(msg: &Msg) -> &'static str {
-    match msg {
-        Msg::AssistantTurn(_) => MESSAGE_ASSISTANT_TURN,
-        Msg::StreamedContentChunk(_) => MESSAGE_STREAMED_CONTENT_CHUNK,
-        Msg::StreamedReasoningChunk(_) => MESSAGE_STREAMED_REASONING_CHUNK,
-        Msg::ToolCallStarted(_) => MESSAGE_TOOL_CALL_STARTED,
-        Msg::ApprovalPrompt(_) => MESSAGE_APPROVAL_PROMPT,
-        Msg::ModelsList(_) => MESSAGE_MODELS_LIST,
-        Msg::ProvidersList(_) => MESSAGE_PROVIDERS_LIST,
-        Msg::SessionsList(_) => MESSAGE_SESSIONS_LIST,
-        Msg::ResumedSession(_) => MESSAGE_RESUMED_SESSION,
-        Msg::Usage(_) => MESSAGE_USAGE,
-        Msg::Trace(_) => MESSAGE_TRACE,
-        Msg::Preview(_) => MESSAGE_PREVIEW,
-        Msg::RouterStatus(_) => MESSAGE_ROUTER_STATUS,
-        Msg::Error(_) => MESSAGE_ERROR,
-        Msg::Idle => MESSAGE_IDLE,
-        Msg::Thinking => MESSAGE_THINKING,
-        Msg::Interrupted => MESSAGE_INTERRUPTED,
     }
 }
 
@@ -796,6 +806,62 @@ mod tests {
             state.history,
             vec![HistoryEntry::AssistantMessage(RESUMED_MESSAGE.to_owned())]
         );
+    }
+
+    #[test]
+    fn closed_session_clears_history_and_reports_usage_and_resume_command() {
+        let mut state = State::default();
+        state.push_history(HistoryEntry::AssistantMessage(ASSISTANT_MESSAGE.to_owned()));
+        let session_id = Uuid::from_u128(42);
+
+        state.apply_msg(Msg::SessionClosed {
+            session_id: Some(session_id),
+            usage: Some(SessionUsageResponse {
+                total: Usage {
+                    input_tokens: Some(12),
+                    output_tokens: Some(5),
+                    total_tokens: Some(17),
+                    estimated_cost: Some(rust_decimal::Decimal::new(25, 3)),
+                    currency: Some("USD".to_owned()),
+                    ..Default::default()
+                },
+                by_model: Vec::new(),
+                by_task_type: Vec::new(),
+            }),
+        });
+
+        assert_eq!(
+            state.history,
+            vec![
+                HistoryEntry::Notice(
+                    "Token usage: total=17 input=12 output=5 cost=USD0.025".to_owned()
+                ),
+                HistoryEntry::Notice(format!(
+                    "To continue this session, use the command: /resume {session_id}"
+                )),
+            ]
+        );
+        assert!(matches!(
+            state.active_component,
+            ActiveComponentState::Console(_)
+        ));
+    }
+
+    #[test]
+    fn clear_without_session_clears_history_without_resume_notice() {
+        let mut state = State::default();
+        state.push_history(HistoryEntry::AssistantMessage(ASSISTANT_MESSAGE.to_owned()));
+
+        state.apply_msg(Msg::SessionClosed {
+            session_id: None,
+            usage: None,
+        });
+
+        assert!(state.history.is_empty());
+        assert!(matches!(
+            state.active_component,
+            ActiveComponentState::Console(_)
+        ));
     }
 
     #[test]

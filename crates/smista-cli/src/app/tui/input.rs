@@ -299,6 +299,10 @@ where
 
     fn handle_command(&mut self, command: Command, args: Vec<String>) -> Option<Cmd> {
         match command {
+            Command::Clear => {
+                tracing::debug!("input event is clear command, producing `Clear` command");
+                Some(Cmd::Clear)
+            }
             Command::Model => self.handle_model_command(&args),
             Command::Preview => self.handle_preview_command(&args),
             Command::Providers => {
@@ -1686,6 +1690,18 @@ mod tests {
         tui.on_input(InputEvent::Interrupt);
 
         assert!(exit.is_cancelled());
+    }
+
+    #[test]
+    fn handle_command_clear_requests_session_clear() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        let cmd = tui
+            .handle_command(Command::Clear, Vec::new())
+            .expect("clear command produces command");
+
+        assert_eq!(cmd, Cmd::Clear);
     }
 
     #[test]

@@ -6,7 +6,7 @@ use crate::app::tui::state::ActiveComponentState;
 
 impl<B> Tui<B>
 where
-    B: ratatui::backend::Backend,
+    B: super::ClearableBackend,
 {
     pub fn view(&mut self) -> anyhow::Result<()> {
         self.render_view(true)
