@@ -2,9 +2,11 @@
 
 use super::{PromptState, VerticalDirection, char_len, char_to_byte_index, move_vertical};
 
+pub(super) const COMMAND_CHAT: &str = "chat";
 pub(super) const COMMAND_CLEAR: &str = "clear";
 pub(super) const COMMAND_EXIT: &str = "exit";
 pub(super) const COMMAND_MODEL: &str = "model";
+pub(super) const COMMAND_PLAN: &str = "plan";
 pub(super) const COMMAND_PREVIEW: &str = "preview";
 pub(super) const COMMAND_PROVIDERS: &str = "providers";
 pub(super) const COMMAND_Q: &str = "q";
@@ -14,9 +16,11 @@ pub(super) const COMMAND_SKILLS: &str = "skills";
 pub(super) const COMMAND_STATUS: &str = "status";
 
 const COMMAND_SPECS: &[(&str, Command)] = &[
+    (COMMAND_CHAT, Command::Chat),
     (COMMAND_CLEAR, Command::Clear),
     (COMMAND_EXIT, Command::Quit),
     (COMMAND_MODEL, Command::Model),
+    (COMMAND_PLAN, Command::Plan),
     (COMMAND_PREVIEW, Command::Preview),
     (COMMAND_PROVIDERS, Command::Providers),
     (COMMAND_Q, Command::Quit),
@@ -29,10 +33,14 @@ const COMMAND_SPECS: &[(&str, Command)] = &[
 /// A recognized or in-progress slash command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
+    /// `/chat` command. Exit plan mode; resume chat mode.
+    Chat,
     /// `/clear` command. Clears the console and terminates the current session if one is active.
     Clear,
     /// `/model` command. Without arguments, lists available models. With a model name, sets the current model.
     Model,
+    /// `/plan` command. Enter plan mode.
+    Plan,
     /// `/preview` command, gets the preview routing for the given prompt.
     Preview,
     /// `/providers` command. Lists available providers.
@@ -54,8 +62,10 @@ impl Command {
     #[must_use]
     pub fn input_name(&self) -> &str {
         match self {
+            Self::Chat => COMMAND_CHAT,
             Self::Clear => COMMAND_CLEAR,
             Self::Model => COMMAND_MODEL,
+            Self::Plan => COMMAND_PLAN,
             Self::Preview => COMMAND_PREVIEW,
             Self::Providers => COMMAND_PROVIDERS,
             Self::Quit => COMMAND_QUIT,

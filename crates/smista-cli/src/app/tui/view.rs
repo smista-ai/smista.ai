@@ -26,11 +26,11 @@ where
                     console::view_console(
                         frame,
                         console_state,
-                        &self.state.history,
                         self.state.execution_turn.as_ref(),
                         self.state.preferred_model(),
                         self.state.router,
                         &self.context.cwd,
+                        self.state.plan,
                     );
                 }
                 ActiveComponentState::LogsList(logs_list) => {
