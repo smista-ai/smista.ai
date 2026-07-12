@@ -450,8 +450,8 @@ mod tests {
 
     use super::{Command, PromptState, TextPromptState};
     use crate::app::tui::state::prompt::command::{
-        COMMAND_MODEL, COMMAND_PREVIEW, COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME,
-        COMMAND_SKILLS, COMMAND_STATUS,
+        COMMAND_CLEAR, COMMAND_MODEL, COMMAND_PREVIEW, COMMAND_PROVIDERS, COMMAND_QUIT,
+        COMMAND_RESUME, COMMAND_SKILLS, COMMAND_STATUS,
     };
 
     const HELLO_INPUT: &str = "hello";
@@ -1127,6 +1127,21 @@ mod tests {
         state.move_end();
         state.move_down();
         assert_eq!(state.cursor_position(), 5);
+    }
+
+    #[test]
+    fn should_parse_clear() {
+        let mut state = PromptState::default();
+
+        state.push_str("/clear");
+
+        assert_eq!(state.command(), Some(&Command::Clear));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/clear");
+        assert_eq!(
+            state.command().map(Command::input_name),
+            Some(COMMAND_CLEAR)
+        );
     }
 
     #[test]

@@ -1827,6 +1827,13 @@ async fn handle_cmd_dispatches_session_usage_trace_and_clear_commands() {
         Msg::Trace(trace) if trace.events.len() == 1
     ));
     assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
+    assert!(matches!(
+        recv_msg(&mut msg_rx).await,
+        Msg::SessionClosed {
+            session_id: Some(session_id),
+            usage: Some(_),
+        } if session_id == Uuid::nil()
+    ));
     assert_eq!(router_client.state, State::Idle);
     assert_eq!(router_client.session_id(), None);
 }
@@ -2203,6 +2210,13 @@ async fn clear_interrupts_active_run_resets_state_and_emits_idle() {
     router_client.clear_session().await;
 
     assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
+    assert!(matches!(
+        recv_msg(&mut msg_rx).await,
+        Msg::SessionClosed {
+            session_id: Some(session_id),
+            usage: Some(_),
+        } if session_id == Uuid::nil()
+    ));
     assert_eq!(router_client.state, State::Idle);
     assert_eq!(router_client.session, None);
     assert!(
@@ -2221,6 +2235,46 @@ async fn clear_interrupts_active_run_resets_state_and_emits_idle() {
 }
 
 #[tokio::test]
+async fn clear_without_session_still_reports_completion() {
+    let router = MockRouter::start().await;
+    let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
+
+    router_client.clear_session().await;
+
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::SessionClosed {
+            session_id: None,
+            usage: None,
+        }
+    );
+    assert_eq!(router_client.state, State::Idle);
+}
+
+#[tokio::test]
+async fn clear_reports_completion_when_usage_is_unavailable() {
+    let router = MockRouter::builder()
+        .endpoint_status(Endpoint::SessionUsage, EndpointStatus::NotFound)
+        .start()
+        .await;
+    let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
+
+    router_client.clear_session().await;
+
+    assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
+    assert_eq!(
+        recv_msg(&mut msg_rx).await,
+        Msg::SessionClosed {
+            session_id: Some(Uuid::nil()),
+            usage: None,
+        }
+    );
+    assert_eq!(router_client.session, None);
+}
+
+#[tokio::test]
 async fn clear_reports_interrupt_errors_then_resets_state_and_emits_idle() {
     let router = MockRouter::builder()
         .endpoint_status(Endpoint::ContinueRun, EndpointStatus::NotFound)
@@ -2234,6 +2288,13 @@ async fn clear_reports_interrupt_errors_then_resets_state_and_emits_idle() {
 
     assert_error_contains(&mut msg_rx, "Failed to terminate active run").await;
     assert_eq!(recv_msg(&mut msg_rx).await, Msg::Idle);
+    assert!(matches!(
+        recv_msg(&mut msg_rx).await,
+        Msg::SessionClosed {
+            session_id: Some(session_id),
+            usage: Some(_),
+        } if session_id == Uuid::nil()
+    ));
     assert_eq!(router_client.state, State::Idle);
     assert_eq!(router_client.session, None);
 }

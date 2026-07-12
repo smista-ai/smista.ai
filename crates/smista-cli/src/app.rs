@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ratatui::backend::Backend;
 use smista_sdk::client::ReqwestClient;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
@@ -18,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::app::input_listener::{InputEvent, InputListener};
 use crate::app::router_client::{Cmd, Msg, RouterClient};
-use crate::app::tui::Tui;
+use crate::app::tui::{ClearableBackend, Tui};
 use crate::config::Config;
 use crate::credentials::E2eeKeysCredentials;
 use crate::skills::SkillStore;
@@ -47,7 +46,7 @@ pub struct AppContext {
 }
 
 /// Dependencies needed by the application run loop.
-struct RunLoopArgs<B: Backend> {
+struct RunLoopArgs<B: ClearableBackend> {
     cmd_tx: Sender<Cmd>,
     input_event_rx: Receiver<InputEvent>,
     initial_prompt: Option<String>,
@@ -162,7 +161,7 @@ impl App {
     ///
     /// Returns an error if forwarding a command fails before shutdown, or if a
     /// worker task panics while being joined.
-    async fn run_loop<B: Backend>(
+    async fn run_loop<B: ClearableBackend>(
         self,
         RunLoopArgs {
             cmd_tx,
@@ -279,23 +278,24 @@ fn command_name(cmd: &Cmd) -> &'static str {
 
 fn message_name(msg: &Msg) -> &'static str {
     match msg {
-        Msg::AssistantTurn(_) => "assistant_turn",
-        Msg::StreamedContentChunk(_) => "streamed_content_chunk",
-        Msg::StreamedReasoningChunk(_) => "streamed_reasoning_chunk",
-        Msg::ToolCallStarted(_) => "tool_call_started",
         Msg::ApprovalPrompt(_) => "approval_prompt",
-        Msg::ModelsList(_) => "models_list",
-        Msg::ProvidersList(_) => "providers_list",
-        Msg::SessionsList(_) => "sessions_list",
-        Msg::ResumedSession(_) => "resumed_session",
-        Msg::Usage(_) => "usage",
-        Msg::Trace(_) => "trace",
-        Msg::Preview(_) => "preview",
-        Msg::RouterStatus(_) => "router_status",
+        Msg::AssistantTurn(_) => "assistant_turn",
         Msg::Error(_) => "error",
         Msg::Idle => "idle",
-        Msg::Thinking => "thinking",
         Msg::Interrupted => "interrupted",
+        Msg::ModelsList(_) => "models_list",
+        Msg::Preview(_) => "preview",
+        Msg::ProvidersList(_) => "providers_list",
+        Msg::ResumedSession(_) => "resumed_session",
+        Msg::RouterStatus(_) => "router_status",
+        Msg::SessionClosed { .. } => "session_closed",
+        Msg::SessionsList(_) => "sessions_list",
+        Msg::StreamedContentChunk(_) => "streamed_content_chunk",
+        Msg::StreamedReasoningChunk(_) => "streamed_reasoning_chunk",
+        Msg::Thinking => "thinking",
+        Msg::ToolCallStarted(_) => "tool_call_started",
+        Msg::Trace(_) => "trace",
+        Msg::Usage(_) => "usage",
     }
 }
 

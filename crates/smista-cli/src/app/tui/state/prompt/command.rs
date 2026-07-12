@@ -2,6 +2,7 @@
 
 use super::{PromptState, VerticalDirection, char_len, char_to_byte_index, move_vertical};
 
+pub(super) const COMMAND_CLEAR: &str = "clear";
 pub(super) const COMMAND_EXIT: &str = "exit";
 pub(super) const COMMAND_MODEL: &str = "model";
 pub(super) const COMMAND_PREVIEW: &str = "preview";
@@ -13,6 +14,7 @@ pub(super) const COMMAND_SKILLS: &str = "skills";
 pub(super) const COMMAND_STATUS: &str = "status";
 
 const COMMAND_SPECS: &[(&str, Command)] = &[
+    (COMMAND_CLEAR, Command::Clear),
     (COMMAND_EXIT, Command::Quit),
     (COMMAND_MODEL, Command::Model),
     (COMMAND_PREVIEW, Command::Preview),
@@ -27,6 +29,8 @@ const COMMAND_SPECS: &[(&str, Command)] = &[
 /// A recognized or in-progress slash command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
+    /// `/clear` command. Clears the console and terminates the current session if one is active.
+    Clear,
     /// `/model` command. Without arguments, lists available models. With a model name, sets the current model.
     Model,
     /// `/preview` command, gets the preview routing for the given prompt.
@@ -50,6 +54,7 @@ impl Command {
     #[must_use]
     pub fn input_name(&self) -> &str {
         match self {
+            Self::Clear => COMMAND_CLEAR,
             Self::Model => COMMAND_MODEL,
             Self::Preview => COMMAND_PREVIEW,
             Self::Providers => COMMAND_PROVIDERS,

@@ -6,11 +6,12 @@ mod state;
 mod tests;
 mod view;
 
-use std::io::Stdout;
+use std::io::{Stdout, Write};
 
 use crossterm::event::{
     KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
+use crossterm::terminal::{Clear, ClearType};
 #[cfg(test)]
 use ratatui::backend::TestBackend;
 use ratatui::backend::{Backend, CrosstermBackend};
@@ -22,6 +23,28 @@ use crate::app::router_client::{Cmd, Msg};
 use crate::app::{AppContext, command_name};
 
 const INLINE_VIEWPORT_HEIGHT: u16 = 8;
+
+/// Backend operations needed to clear an inline terminal and its scrollback.
+pub(super) trait ClearableBackend: Backend {
+    /// Clears the visible screen and content committed above the inline viewport.
+    fn clear_scrollback(&mut self) -> Result<(), Self::Error>;
+}
+
+impl<W> ClearableBackend for CrosstermBackend<W>
+where
+    W: Write,
+{
+    fn clear_scrollback(&mut self) -> std::io::Result<()> {
+        crossterm::execute!(self, Clear(ClearType::Purge), Clear(ClearType::All))
+    }
+}
+
+#[cfg(test)]
+impl ClearableBackend for TestBackend {
+    fn clear_scrollback(&mut self) -> Result<(), Self::Error> {
+        self.clear()
+    }
+}
 
 /// Terminal UI facade for the interactive client.
 ///
@@ -148,7 +171,7 @@ impl Tui<TestBackend> {
     }
 }
 
-impl<B: Backend> Tui<B> {
+impl<B: ClearableBackend> Tui<B> {
     /// Handles one input event and optionally produces a router command.
     ///
     /// This scaffold does not map keys to commands yet.
@@ -173,6 +196,7 @@ impl<B: Backend> Tui<B> {
     ///
     /// This scaffold does not update UI state yet.
     pub fn handle_client_msg(&mut self, msg: Msg) -> anyhow::Result<()> {
+        let clear_terminal = matches!(msg, Msg::SessionClosed { .. });
         tracing::debug!(
             message = super::message_name(&msg),
             "handling client message"
@@ -180,6 +204,10 @@ impl<B: Backend> Tui<B> {
 
         // apply the message to the TUI state
         self.state.apply_msg(msg);
+
+        if clear_terminal {
+            self.clear_terminal()?;
+        }
 
         // then view
         self.view()
@@ -232,6 +260,18 @@ impl<B: Backend> Tui<B> {
             .map_err(|err| anyhow::anyhow!("failed to insert transcript entries: {err}"))?;
 
         Ok(true)
+    }
+
+    fn clear_terminal(&mut self) -> anyhow::Result<()> {
+        self.terminal
+            .backend_mut()
+            .clear_scrollback()
+            .map_err(|err| anyhow::anyhow!("failed to clear terminal scrollback: {err}"))?;
+        self.terminal
+            .clear()
+            .map_err(|err| anyhow::anyhow!("failed to clear terminal viewport: {err}"))?;
+        self.printed_history_entries = 0;
+        Ok(())
     }
 
     fn try_pin_inline_viewport_to_bottom(&mut self) -> anyhow::Result<()> {

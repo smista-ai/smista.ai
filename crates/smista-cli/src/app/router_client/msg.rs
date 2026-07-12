@@ -34,6 +34,14 @@ pub enum Msg {
     Preview(PreviewSummary),
     /// The router returned its health status.
     RouterStatus(RouterStatus),
+    /// The router cleared the console session and returned usage when available.
+    ///
+    /// This is the response to [`super::Cmd::Clear`]. `session_id` is absent
+    /// when no session was active.
+    SessionClosed {
+        session_id: Option<Uuid>,
+        usage: Option<SessionUsageResponse>,
+    },
     /// Error raised by the router during execution. This is sent to the UI to notify the user about the error.
     Error(String),
     /// The router has no active turn.
