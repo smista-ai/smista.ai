@@ -25,9 +25,10 @@ use smista_router::config::{RouterConfig, ValidationReport};
 use tokio_util::sync::CancellationToken;
 
 use self::pidfile::Pidfile;
+use crate::app::log;
 use crate::args::{RouterArgs, StopArgs};
 use crate::config::paths;
-use crate::{log, signal};
+use crate::signal;
 
 /// Starts a local router, daemonizing unless `--foreground` was given.
 ///

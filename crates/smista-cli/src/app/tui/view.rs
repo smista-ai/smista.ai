@@ -19,6 +19,9 @@ where
         if sync_history {
             self.insert_transcript_entries()?;
         }
+        if let ActiveComponentState::LogsList(logs_list) = &mut self.state.active_component {
+            logs_list.replace_entries(self.context.logs.entries());
+        }
 
         self.terminal
             .draw(|frame| match &self.state.active_component {
@@ -34,9 +37,7 @@ where
                     );
                 }
                 ActiveComponentState::LogsList(logs_list) => {
-                    select::view_select(frame, "Logs", "No logs", logs_list, |entry| {
-                        select::string_line(entry)
-                    });
+                    select::view_select(frame, "Logs", "No logs", logs_list, select::log_line);
                 }
                 ActiveComponentState::SkillList(list_state) => {
                     select::view_select(

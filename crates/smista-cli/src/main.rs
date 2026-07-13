@@ -18,7 +18,6 @@ mod client;
 mod command;
 mod config;
 mod credentials;
-mod log;
 mod signal;
 mod skills;
 mod telemetry;
@@ -45,17 +44,30 @@ async fn tokio_main() -> anyhow::Result<()> {
     // OpenTelemetry export from the router configuration — so it initializes
     // logging itself once that configuration is loaded. Every other invocation
     // uses plain logging, set up here and kept alive for the process lifetime.
-    let _telemetry = if args.is_foreground_start() {
-        None
-    } else if is_interactive_cli && args.log_file.is_none() {
-        Some(log::init_quiet(&args.log_filter)?)
+    let (_telemetry, log_sink) = if args.is_foreground_start() {
+        (None, None)
+    } else if is_interactive_cli {
+        (
+            None,
+            Some(crate::app::log::init_tui(
+                &args.log_filter,
+                args.log_file.as_deref(),
+            )?),
+        )
     } else {
-        Some(log::init(&args.log_filter, args.log_file.as_deref(), None)?)
+        (
+            Some(crate::app::log::init(
+                &args.log_filter,
+                args.log_file.as_deref(),
+                None,
+            )?),
+            None,
+        )
     };
     tracing::info!("smista-cli starting");
 
     // dispatch the selected subcommand. A foreground router runs until it is
     // told to stop and owns its own shutdown handling; one-shot commands return
     // as soon as their work is done.
-    command::run(args).await
+    command::run(args, log_sink).await
 }

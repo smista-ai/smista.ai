@@ -18,6 +18,7 @@ use crate::app::tui::state::{
 const EDIT_FILE_TOOL: &str = "edit_file";
 const MODEL_AUTO: &str = "auto";
 const WRITE_FILE_TOOL: &str = "write_file";
+const DEFAULT_LOG_LIMIT: usize = 100;
 
 impl<B> Tui<B>
 where
@@ -308,6 +309,7 @@ where
                 tracing::debug!("input event is clear command, producing `Clear` command");
                 Some(Cmd::Clear)
             }
+            Command::Log => self.handle_log(&args),
             Command::Model => self.handle_model_command(&args),
             Command::Plan => {
                 tracing::debug!("input event is plan command, entering plan mode");
@@ -355,6 +357,61 @@ where
                 None
             }
         }
+    }
+
+    fn handle_log(&mut self, args: &[String]) -> Option<Cmd> {
+        let (offset, limit) = match args {
+            [] => (0, DEFAULT_LOG_LIMIT),
+            [offset_str] => match offset_str.parse::<usize>() {
+                Ok(offset) => (offset, DEFAULT_LOG_LIMIT),
+                Err(_) => {
+                    tracing::debug!(
+                        offset_str,
+                        "input event is log command with invalid offset argument"
+                    );
+                    self.state.push_history(HistoryEntry::Error(format!(
+                        "Invalid offset argument {offset_str}"
+                    )));
+
+                    return None;
+                }
+            },
+            [offset_str, limit_str] => {
+                match (offset_str.parse::<usize>(), limit_str.parse::<usize>()) {
+                    (Ok(offset), Ok(limit)) => (offset, limit),
+                    _ => {
+                        tracing::debug!(
+                            offset = offset_str,
+                            limit = limit_str,
+                            "input event is log command with invalid offset or limit argument"
+                        );
+                        self.state.push_history(HistoryEntry::Error(format!(
+                            "Invalid offset or limit argument {offset_str} {limit_str}"
+                        )));
+
+                        return None;
+                    }
+                }
+            }
+            _ => {
+                tracing::debug!(
+                    args.count = args.len(),
+                    "input event is log command with invalid argument count"
+                );
+                self.state.push_history(HistoryEntry::Error(
+                    "Expected at most two arguments after /log".to_owned(),
+                ));
+
+                return None;
+            }
+        };
+
+        tracing::debug!("getting logs with offset {offset} and limit {limit}");
+        self.state.push_history(HistoryEntry::Log(
+            self.context.logs.entries_at(offset, limit),
+        ));
+
+        None
     }
 
     fn handle_model_command(&mut self, args: &[String]) -> Option<Cmd> {
@@ -805,6 +862,7 @@ mod tests {
 
     use super::*;
     use crate::app::AppContext;
+    use crate::app::log::{AppLogEntry, LogLevel};
     use crate::app::router_client::msg::{Model, Provider, SessionListItem};
     use crate::app::tui::state::{ActiveComponentState, RouterState, UsageState};
     use crate::config::Config;
@@ -841,6 +899,7 @@ mod tests {
             cwd: cwd.clone(),
             e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
             exit,
+            logs: crate::app::log::AppLogSink::new(),
             router_client: Arc::new(router_client),
             skills_store: Arc::new(SkillStore::discover(&cwd)),
         }
@@ -1733,6 +1792,83 @@ mod tests {
             .expect("clear command produces command");
 
         assert_eq!(cmd, Cmd::Clear);
+    }
+
+    #[test]
+    fn handle_log_command_reads_newest_entries_with_offset_and_limit() {
+        let exit = CancellationToken::new();
+        let context = app_context(exit);
+        for message in ["first", "second", "third", "fourth"] {
+            context
+                .logs
+                .push(AppLogEntry::new(LogLevel::Info, message.to_owned()));
+        }
+        let mut tui = Tui::<TestBackend>::new_test(context);
+
+        assert_eq!(
+            tui.handle_command(Command::Log, vec!["1".to_owned(), "2".to_owned()]),
+            None
+        );
+
+        assert_eq!(
+            tui.state.history.last(),
+            Some(&HistoryEntry::Log(vec![
+                AppLogEntry::new(LogLevel::Info, "third".to_owned()),
+                AppLogEntry::new(LogLevel::Info, "second".to_owned())
+            ]))
+        );
+    }
+
+    #[test]
+    fn handle_log_command_uses_default_page() {
+        let exit = CancellationToken::new();
+        let context = app_context(exit);
+        context.logs.push(AppLogEntry::new(
+            LogLevel::Warn,
+            "captured warning".to_owned(),
+        ));
+        let mut tui = Tui::<TestBackend>::new_test(context);
+
+        assert_eq!(tui.handle_command(Command::Log, Vec::new()), None);
+
+        assert_eq!(
+            tui.state.history.last(),
+            Some(&HistoryEntry::Log(vec![AppLogEntry::new(
+                LogLevel::Warn,
+                "captured warning".to_owned()
+            )]))
+        );
+    }
+
+    #[test]
+    fn handle_log_command_rejects_invalid_arguments() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        assert_eq!(
+            tui.handle_command(Command::Log, vec!["invalid".to_owned()]),
+            None
+        );
+        assert_eq!(
+            tui.state.history.last(),
+            Some(&HistoryEntry::Error(
+                "Invalid offset argument invalid".to_owned()
+            ))
+        );
+
+        assert_eq!(
+            tui.handle_command(
+                Command::Log,
+                vec!["0".to_owned(), "1".to_owned(), "extra".to_owned()]
+            ),
+            None
+        );
+        assert_eq!(
+            tui.state.history.last(),
+            Some(&HistoryEntry::Error(
+                "Expected at most two arguments after /log".to_owned()
+            ))
+        );
     }
 
     #[test]

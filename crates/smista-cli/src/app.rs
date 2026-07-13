@@ -1,6 +1,7 @@
 //! Main smista.ai cli application
 
 mod input_listener;
+pub mod log;
 mod router_client;
 mod tui;
 
@@ -15,6 +16,7 @@ use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 
+use self::log::AppLogSink;
 use crate::app::input_listener::{InputEvent, InputListener};
 use crate::app::router_client::{Cmd, Msg, RouterClient};
 use crate::app::tui::{ClearableBackend, Tui};
@@ -39,6 +41,8 @@ pub struct AppContext {
     pub e2ee_keys: Arc<E2eeKeysCredentials>,
     /// Shared cancellation token used to shut down all workers.
     pub exit: CancellationToken,
+    /// Bounded formatted log entries shared with the terminal UI.
+    pub logs: AppLogSink,
     /// Authenticated router HTTP client.
     pub router_client: Arc<ReqwestClient>,
     /// Discovered project and global skills.
@@ -342,6 +346,7 @@ mod tests {
             cwd: cwd.clone(),
             e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
             exit,
+            logs: AppLogSink::new(),
             router_client: Arc::new(router_client),
             skills_store: Arc::new(SkillStore::discover(&cwd)),
         }

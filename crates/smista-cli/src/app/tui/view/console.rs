@@ -12,6 +12,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Widget, Wrap};
 use smista_sdk::core::model::ModelReference;
 
+use crate::app::log::{AppLogEntry, LogLevel};
 use crate::app::router_client::msg::{ApprovalPrompt, PreviewSummary, TraceEvent};
 use crate::app::tui::state::{ConsoleState, ExecutionTurn, HistoryEntry, PromptState, RouterState};
 
@@ -134,17 +135,18 @@ fn padded_history_entry_lines(entry: &HistoryEntry, width: u16) -> Vec<Line<'sta
 
 fn history_entry_lines(entry: &HistoryEntry, width: u16) -> Vec<Line<'static>> {
     match entry {
-        HistoryEntry::UserMessage(message) => user_message_lines(message, width),
+        HistoryEntry::ApprovalRequest(prompt) => approval_history_lines(prompt),
         HistoryEntry::AssistantMessage(message) => plain_block(message, palette().assistant),
+        HistoryEntry::Diff { added, removed } => diff_lines(added, removed),
+        HistoryEntry::Error(error) => prefixed_block("ERROR", error, palette().error),
+        HistoryEntry::Log(entries) => log_lines(entries),
+        HistoryEntry::Notice(message) => prefixed_block("Notice", message, palette().notice),
+        HistoryEntry::Preview(preview) => preview_lines(preview),
         HistoryEntry::Reasoning(message) => prefixed_block("Thinking", message, palette().dim),
         HistoryEntry::ToolCall { name, input } => tool_call_lines(name, input),
         HistoryEntry::ToolResult { name, output } => tool_result_lines(name, output),
-        HistoryEntry::Diff { added, removed } => diff_lines(added, removed),
-        HistoryEntry::ApprovalRequest(prompt) => approval_history_lines(prompt),
         HistoryEntry::Trace(trace) => trace_lines(trace),
-        HistoryEntry::Preview(preview) => preview_lines(preview),
-        HistoryEntry::Error(error) => prefixed_block("ERROR", error, palette().error),
-        HistoryEntry::Notice(message) => prefixed_block("Notice", message, palette().notice),
+        HistoryEntry::UserMessage(message) => user_message_lines(message, width),
     }
 }
 
@@ -487,6 +489,25 @@ fn approval_history_lines(prompt: &ApprovalPrompt) -> Vec<Line<'static>> {
     lines
 }
 
+fn log_lines(entries: &[AppLogEntry]) -> Vec<Line<'static>> {
+    entries.iter().map(log_line).collect()
+}
+
+fn log_line(entry: &AppLogEntry) -> Line<'static> {
+    let (level_name, style) = match entry.level() {
+        LogLevel::Error => ("[ERROR]", palette().log_error),
+        LogLevel::Warn => ("[WARN]", palette().log_warn),
+        LogLevel::Info => ("[INFO]", palette().log_info),
+        LogLevel::Debug => ("[DEBUG]", palette().log_debug),
+        LogLevel::Trace => ("[TRACE]", palette().log_trace),
+    };
+    Line::from(vec![
+        Span::styled(level_name, style),
+        Span::raw(" "),
+        Span::styled(entry.message().to_owned(), style),
+    ])
+}
+
 fn preview_lines(preview: &PreviewSummary) -> Vec<Line<'static>> {
     let confidence = preview.classification_confidence.as_deref().map_or_else(
         || preview.classification_source.clone(),
@@ -642,6 +663,11 @@ struct Palette {
     input_text: Style,
     interrupted: Style,
     line_number: Style,
+    log_debug: Style,
+    log_error: Style,
+    log_info: Style,
+    log_trace: Style,
+    log_warn: Style,
     notice: Style,
     option: Style,
     placeholder: Style,
@@ -679,6 +705,11 @@ fn palette() -> Palette {
         input_text: Style::default(),
         interrupted: Style::default().fg(Color::LightRed),
         line_number: Style::default().fg(Color::DarkGray),
+        log_debug: Style::default().fg(Color::Gray),
+        log_error: Style::default().fg(Color::Red),
+        log_info: Style::default().fg(Color::LightGreen),
+        log_warn: Style::default().fg(Color::Yellow),
+        log_trace: Style::default().fg(Color::DarkGray),
         notice: Style::default()
             .fg(Color::Gray)
             .add_modifier(Modifier::BOLD),
@@ -833,6 +864,22 @@ mod tests {
         assert_eq!(plain_text(&lines[0]), "");
         assert_eq!(plain_text(&lines[1]), "hello");
         assert_eq!(plain_text(&lines[2]), "");
+    }
+
+    #[test]
+    fn log_history_lines_include_level_and_message() {
+        let lines = history_lines_for_width(
+            &[HistoryEntry::Log(vec![
+                AppLogEntry::new(LogLevel::Error, "failed".to_owned()),
+                AppLogEntry::new(LogLevel::Trace, "details".to_owned()),
+            ])],
+            80,
+        );
+
+        assert_eq!(plain_text(&lines[1]), "[ERROR] failed");
+        assert_eq!(lines[1].spans[0].style, palette().log_error);
+        assert_eq!(plain_text(&lines[2]), "[TRACE] details");
+        assert_eq!(lines[2].spans[0].style, palette().log_trace);
     }
 
     #[test]
