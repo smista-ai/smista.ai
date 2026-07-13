@@ -2,9 +2,9 @@
 
 use std::time::Instant;
 
-const ROUTER_IDLE: &str = "idle";
-const ROUTER_INTERRUPTED: &str = "interrupted";
-const ROUTER_THINKING: &str = "thinking";
+const ROUTER_IDLE: &str = "Idle";
+const ROUTER_INTERRUPTED: &str = "Interrupted";
+const ROUTER_THINKING: &str = "Thinking";
 
 /// Current router activity.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]

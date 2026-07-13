@@ -299,11 +299,21 @@ where
 
     fn handle_command(&mut self, command: Command, args: Vec<String>) -> Option<Cmd> {
         match command {
+            Command::Chat => {
+                tracing::debug!("input event is chat command, exiting plan mode");
+                self.state.plan = false;
+                None
+            }
             Command::Clear => {
                 tracing::debug!("input event is clear command, producing `Clear` command");
                 Some(Cmd::Clear)
             }
             Command::Model => self.handle_model_command(&args),
+            Command::Plan => {
+                tracing::debug!("input event is plan command, entering plan mode");
+                self.state.plan = true;
+                None
+            }
             Command::Preview => self.handle_preview_command(&args),
             Command::Providers => {
                 tracing::debug!(
@@ -1690,6 +1700,27 @@ mod tests {
         tui.on_input(InputEvent::Interrupt);
 
         assert!(exit.is_cancelled());
+    }
+
+    #[test]
+    fn handle_command_resume_plan() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        assert!(!tui.state.plan);
+        assert!(tui.handle_command(Command::Plan, Vec::new()).is_none());
+        assert!(tui.state.plan);
+    }
+
+    #[test]
+    fn handle_command_resume_chat() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+        tui.state.plan = true;
+
+        assert!(tui.state.plan);
+        assert!(tui.handle_command(Command::Chat, Vec::new()).is_none());
+        assert!(!tui.state.plan);
     }
 
     #[test]

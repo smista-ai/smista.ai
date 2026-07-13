@@ -450,8 +450,8 @@ mod tests {
 
     use super::{Command, PromptState, TextPromptState};
     use crate::app::tui::state::prompt::command::{
-        COMMAND_CLEAR, COMMAND_MODEL, COMMAND_PREVIEW, COMMAND_PROVIDERS, COMMAND_QUIT,
-        COMMAND_RESUME, COMMAND_SKILLS, COMMAND_STATUS,
+        COMMAND_CHAT, COMMAND_CLEAR, COMMAND_MODEL, COMMAND_PLAN, COMMAND_PREVIEW,
+        COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS, COMMAND_STATUS,
     };
 
     const HELLO_INPUT: &str = "hello";
@@ -1130,6 +1130,18 @@ mod tests {
     }
 
     #[test]
+    fn should_parse_chat() {
+        let mut state = PromptState::default();
+
+        state.push_str("/chat");
+
+        assert_eq!(state.command(), Some(&Command::Chat));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/chat");
+        assert_eq!(state.command().map(Command::input_name), Some(COMMAND_CHAT));
+    }
+
+    #[test]
     fn should_parse_clear() {
         let mut state = PromptState::default();
 
@@ -1157,6 +1169,18 @@ mod tests {
             state.command().map(Command::input_name),
             Some(COMMAND_MODEL)
         );
+    }
+
+    #[test]
+    fn should_parse_plan() {
+        let mut state = PromptState::default();
+
+        state.push_str("/plan");
+
+        assert_eq!(state.command(), Some(&Command::Plan));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/plan");
+        assert_eq!(state.command().map(Command::input_name), Some(COMMAND_PLAN));
     }
 
     #[test]

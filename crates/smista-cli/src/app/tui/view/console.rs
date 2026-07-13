@@ -29,11 +29,11 @@ const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦
 pub fn view_console<'a>(
     frame: &mut Frame<'a>,
     console: &ConsoleState,
-    _history: &[HistoryEntry],
     execution_turn: Option<&ExecutionTurn>,
     preferred_model: Option<&ModelReference>,
     router_state: RouterState,
     cwd: &Path,
+    plan_mode: bool,
 ) {
     let live_lines = live_lines(console, execution_turn);
     let input_height = input_area_height(
@@ -65,7 +65,7 @@ pub fn view_console<'a>(
         .wrap(Wrap { trim: false })
         .render(input_area, frame.buffer_mut());
 
-    Paragraph::new(footer_line(preferred_model, router_state, cwd))
+    Paragraph::new(footer_line(preferred_model, router_state, cwd, plan_mode))
         .style(palette().input_area)
         .render(footer_area, frame.buffer_mut());
 
@@ -371,16 +371,31 @@ fn footer_line(
     preferred_model: Option<&ModelReference>,
     router_state: RouterState,
     cwd: &Path,
+    plan_mode: bool,
 ) -> Line<'static> {
     let model = preferred_model
         .map(ToString::to_string)
         .unwrap_or_else(|| "auto".to_owned());
+    let (mode, mode_style) = if plan_mode {
+        ("Plan mode", palette().footer_plan_mode)
+    } else {
+        ("Chat mode", palette().footer_chat_mode)
+    };
+    let router_state_style = match router_state {
+        RouterState::Idle => palette().footer_router_idle,
+        RouterState::Interrupted => palette().footer_router_interrupted,
+        RouterState::Thinking(_) => palette().footer_router_thinking,
+    };
+
     Line::from(vec![
+        Span::raw("  "),
         Span::styled(model, palette().footer_model),
         Span::styled(" - ", palette().dim),
         Span::styled(cwd.display().to_string(), palette().footer_cwd),
         Span::styled(" - ", palette().dim),
-        Span::styled(router_state.kind(), palette().footer_router),
+        Span::styled(mode, mode_style),
+        Span::styled(" - ", palette().dim),
+        Span::styled(router_state.kind(), router_state_style),
     ])
 }
 
@@ -616,9 +631,13 @@ struct Palette {
     diff_removed: Style,
     dim: Style,
     error: Style,
+    footer_chat_mode: Style,
     footer_cwd: Style,
     footer_model: Style,
-    footer_router: Style,
+    footer_plan_mode: Style,
+    footer_router_idle: Style,
+    footer_router_interrupted: Style,
+    footer_router_thinking: Style,
     input_area: Style,
     input_text: Style,
     interrupted: Style,
@@ -647,9 +666,15 @@ fn palette() -> Palette {
         diff_removed: Style::default().fg(Color::Red),
         dim: Style::default().fg(Color::DarkGray),
         error: Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        footer_chat_mode: Style::default().fg(Color::LightBlue),
         footer_cwd: Style::default().fg(Color::LightGreen),
         footer_model: Style::default().fg(Color::LightCyan),
-        footer_router: Style::default().fg(Color::LightYellow),
+        footer_plan_mode: Style::default()
+            .fg(Color::LightMagenta)
+            .add_modifier(Modifier::BOLD),
+        footer_router_idle: Style::default(),
+        footer_router_interrupted: Style::default().fg(Color::LightRed),
+        footer_router_thinking: Style::default().fg(Color::LightGreen),
         input_area: input_area_style(),
         input_text: Style::default(),
         interrupted: Style::default().fg(Color::LightRed),
@@ -659,6 +684,7 @@ fn palette() -> Palette {
             .add_modifier(Modifier::BOLD),
         option: Style::default().fg(Color::Gray),
         placeholder: Style::default().fg(Color::DarkGray),
+
         preview: Style::default().fg(Color::Magenta),
         prompt: Style::default()
             .fg(Color::Blue)
@@ -925,12 +951,31 @@ mod tests {
     #[test]
     fn footer_entries_have_separate_bright_colors() {
         let cwd = Path::new("/tmp/workspace");
-        let line = footer_line(None, RouterState::Interrupted, cwd);
+        let line = footer_line(None, RouterState::Interrupted, cwd, false);
 
-        assert_eq!(plain_text(&line), "auto - /tmp/workspace - interrupted");
-        assert_eq!(line.spans[0].style.fg, Some(Color::LightCyan));
-        assert_eq!(line.spans[2].style.fg, Some(Color::LightGreen));
-        assert_eq!(line.spans[4].style.fg, Some(Color::LightYellow));
+        assert_eq!(
+            plain_text(&line),
+            "  auto - /tmp/workspace - Chat mode - Interrupted"
+        );
+        assert_eq!(line.spans[1].style.fg, Some(Color::LightCyan));
+        assert_eq!(line.spans[3].style.fg, Some(Color::LightGreen));
+        assert_eq!(line.spans[5].style.fg, Some(Color::LightBlue));
+        assert_eq!(line.spans[7].style.fg, Some(Color::LightRed));
+    }
+
+    #[test]
+    fn footer_entries_have_separate_bright_colors_in_plan_mode() {
+        let cwd = Path::new("/tmp/workspace");
+        let line = footer_line(None, RouterState::Idle, cwd, true);
+
+        assert_eq!(
+            plain_text(&line),
+            "  auto - /tmp/workspace - Plan mode - Idle"
+        );
+        assert_eq!(line.spans[1].style.fg, Some(Color::LightCyan));
+        assert_eq!(line.spans[3].style.fg, Some(Color::LightGreen));
+        assert_eq!(line.spans[5].style.fg, Some(Color::LightMagenta));
+        assert_eq!(line.spans[7].style.fg, None);
     }
 
     #[test]

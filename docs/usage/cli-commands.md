@@ -327,6 +327,7 @@ smista 0.0.0
 
 Type slash commands at the interactive prompt.
 
+- `/chat` leaves plan mode and enters chat mode, which is the default mode for interactive sesssions.
 - `/clear` clears the terminal and ends the current session. When a session is
   active, it prints final token usage when available and a `/resume` command
   before the next prompt. The next message starts a new session.
@@ -341,6 +342,7 @@ Type slash commands at the interactive prompt.
   provider and model, matched routing rule, estimated cost, included and
   excluded context, and required permissions. File references use the same
   `@path` completion and attachment behavior as normal prompts.
+- `/plan` leaves chat mode and enters plan mode
 - `/providers` lists configured providers and whether each one is local or
   remote.
 - `/quit`, `/q`, or `/exit` closes the interactive CLI.

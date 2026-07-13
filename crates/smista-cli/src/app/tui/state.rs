@@ -893,7 +893,7 @@ mod tests {
         let mut state = State::default();
 
         state.apply_msg(Msg::Thinking);
-        assert_eq!(state.router.kind(), "thinking");
+        assert_eq!(state.router.kind(), "Thinking");
 
         state.apply_msg(Msg::Preview(PreviewSummary {
             routing: smista_sdk::core::routing::RoutingDecision {
@@ -938,7 +938,7 @@ mod tests {
         );
 
         state.apply_msg(Msg::Interrupted);
-        assert_eq!(state.router.kind(), "interrupted");
+        assert_eq!(state.router.kind(), "Interrupted");
         assert!(state.execution_turn.is_none());
         assert_eq!(
             state.history.last(),
@@ -948,7 +948,7 @@ mod tests {
         state.execution_turn = Some(ExecutionTurn::streaming());
         state.apply_msg(Msg::Idle);
 
-        assert_eq!(state.router.kind(), "idle");
+        assert_eq!(state.router.kind(), "Idle");
         assert!(state.execution_turn.is_none());
     }
 
