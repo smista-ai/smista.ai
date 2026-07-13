@@ -6,6 +6,7 @@ use smista_sdk::core::api::SessionUsageResponse;
 
 use super::ModelListEntry;
 use super::list::ListState;
+use crate::app::log::AppLogEntry;
 use crate::app::router_client::msg::{Provider, SessionListItem, TraceEvent};
 use crate::app::tui::state::console::ConsoleState;
 use crate::skills::SkillEntry;
@@ -25,7 +26,7 @@ pub enum ActiveComponentState {
     /// Main console view.
     Console(ConsoleState),
     /// Logs list view.
-    LogsList(ListState<String>),
+    LogsList(ListState<AppLogEntry>),
     /// Models list view.
     ModelsList(ListState<ModelListEntry>),
     /// Providers list view.

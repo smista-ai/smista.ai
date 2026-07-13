@@ -1,3 +1,5 @@
+alias lint := clippy
+
 # Format all sources (Markdown, TOML, YAML and Rust via nightly rustfmt) with dprint
 [group('code_check')]
 fmt args="":

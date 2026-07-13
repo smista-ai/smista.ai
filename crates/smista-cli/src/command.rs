@@ -11,6 +11,7 @@ mod login;
 mod router;
 mod status;
 
+use crate::app::log::AppLogSink;
 use crate::args::{Args, Command};
 
 /// Runs the subcommand selected on the command line.
@@ -21,7 +22,7 @@ use crate::args::{Args, Command};
 /// # Errors
 ///
 /// Returns an error when the selected subcommand fails.
-pub async fn run(args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args, log_sink: Option<AppLogSink>) -> anyhow::Result<()> {
     let Args {
         command,
         enforce_keyring,
@@ -38,6 +39,15 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         Some(Command::Start(start)) => router::start(start, log_file.as_deref(), &log_filter).await,
         Some(Command::Status(args)) => status::run(args).await,
         Some(Command::Stop(stop)) => router::stop(stop),
-        None => cli::run(prompt, enforce_keyring, log_file.as_deref(), &log_filter).await,
+        None => {
+            cli::run(
+                prompt,
+                enforce_keyring,
+                log_file.as_deref(),
+                &log_filter,
+                log_sink.expect("interactive logging must provide a TUI log sink"),
+            )
+            .await
+        }
     }
 }

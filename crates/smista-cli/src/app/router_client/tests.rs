@@ -2557,6 +2557,7 @@ async fn app_context_for_router(
         cwd: cwd.clone(),
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
         exit,
+        logs: crate::app::log::AppLogSink::new(),
         router_client: Arc::new(router_client),
         skills_store: Arc::new(SkillStore::discover(&cwd)),
     }
@@ -2730,6 +2731,7 @@ fn app_context(exit: CancellationToken) -> AppContext {
         cwd: cwd.clone(),
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
         exit,
+        logs: crate::app::log::AppLogSink::new(),
         router_client: Arc::new(router_client),
         skills_store: Arc::new(SkillStore::discover(&cwd)),
     }

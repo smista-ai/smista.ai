@@ -58,6 +58,7 @@ fn app_context(exit: CancellationToken) -> AppContext {
         cwd: cwd.clone(),
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
         exit,
+        logs: crate::app::log::AppLogSink::new(),
         router_client: Arc::new(router_client),
         skills_store: Arc::new(SkillStore::discover(&cwd)),
     }
@@ -157,9 +158,13 @@ fn handle_sessions_list_renders_select_view() {
 #[test]
 fn render_logs_list_select_view() {
     let exit = CancellationToken::new();
-    let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
-    tui.state.active_component =
-        ActiveComponentState::LogsList(ListState::new(vec!["log row".to_owned()]));
+    let context = app_context(exit);
+    context.logs.push(crate::app::log::AppLogEntry::new(
+        crate::app::log::LogLevel::Warn,
+        "log row".to_owned(),
+    ));
+    let mut tui = Tui::<TestBackend>::new_test(context);
+    tui.state.active_component = ActiveComponentState::LogsList(ListState::default());
 
     tui.view().expect("logs list view renders");
 

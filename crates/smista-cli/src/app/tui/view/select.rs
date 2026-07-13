@@ -8,6 +8,7 @@ use ratatui::widgets::{
     Block, Borders, Clear, List, ListItem, ListState as RatatuiListState, Widget,
 };
 
+use crate::app::log::{AppLogEntry, LogLevel};
 use crate::app::router_client::msg::{Provider, SessionListItem, TraceEvent};
 use crate::app::tui::state::{ListState, ModelListEntry};
 use crate::skills::SkillEntry;
@@ -55,8 +56,15 @@ pub(in crate::app::tui) fn view_select<'a, T, F>(
     frame.render_widget(Line::styled(FOOTER, palette().footer), footer_area);
 }
 
-pub(in crate::app::tui) fn string_line(entry: &str) -> Line<'static> {
-    Line::from(entry.to_owned())
+pub(in crate::app::tui) fn log_line(entry: &AppLogEntry) -> Line<'static> {
+    let color = match entry.level() {
+        LogLevel::Trace => Color::DarkGray,
+        LogLevel::Debug => Color::Cyan,
+        LogLevel::Info => Color::White,
+        LogLevel::Warn => Color::Yellow,
+        LogLevel::Error => Color::Red,
+    };
+    Line::styled(entry.message().to_owned(), Style::default().fg(color))
 }
 
 pub(in crate::app::tui) fn skill_line((name, entry): &(String, SkillEntry)) -> Line<'static> {
@@ -182,7 +190,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 view_select(frame, "Items", "No items", &state, |entry| {
-                    string_line(entry)
+                    Line::from(entry.clone())
                 })
             })
             .expect("select view renders");
@@ -202,7 +210,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 view_select(frame, "Items", "No items", &state, |entry| {
-                    string_line(entry)
+                    Line::from(entry.clone())
                 })
             })
             .expect("empty select view renders");
@@ -214,14 +222,11 @@ mod tests {
     }
 
     #[test]
-    fn string_line_renders_the_entry_text() {
-        let rendered = string_line("log entry")
-            .spans
-            .iter()
-            .map(|span| span.content.as_ref())
-            .collect::<String>();
+    fn log_line_renders_the_entry_with_its_level_color() {
+        let rendered = log_line(&AppLogEntry::new(LogLevel::Warn, "log entry".to_owned()));
 
-        assert_eq!(rendered, "log entry");
+        assert_eq!(line_text(rendered.clone()), "log entry");
+        assert_eq!(rendered.style.fg, Some(Color::Yellow));
     }
 
     #[test]

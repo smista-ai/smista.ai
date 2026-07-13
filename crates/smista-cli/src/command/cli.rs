@@ -13,6 +13,7 @@ use smista_sdk::client::{ApiKey, Client as _, ReqwestClient};
 use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 
+use crate::app::log::AppLogSink;
 use crate::app::{App, AppContext};
 use crate::args::RouterArgs;
 use crate::config::Config;
@@ -33,6 +34,7 @@ pub async fn run(
     enforce_keyring: bool,
     log_file: Option<&Path>,
     log_filter: &str,
+    log_sink: AppLogSink,
 ) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
     tracing::info!(
@@ -88,6 +90,7 @@ pub async fn run(
         config: Arc::new(config),
         e2ee_keys: Arc::new(E2eeKeysCredentials::new(credentials.clone(), &cwd)),
         exit: CancellationToken::new(),
+        logs: log_sink,
         router_client: Arc::new(router_client),
         skills_store: Arc::new(skills_store),
         cwd,
