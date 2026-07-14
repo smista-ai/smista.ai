@@ -331,7 +331,7 @@ Type slash commands at the interactive prompt.
 - `/clear` clears the terminal and ends the current session. When a session is
   active, it prints final token usage when available and a `/resume` command
   before the next prompt. The next message starts a new session.
-- `/log [offset] [limit]` prints retained application logs, newest first. The
+- `/logs [offset] [limit]` prints retained application logs, newest first. The
   default offset is `0` and the default limit is `100`. Start the CLI with a
   log filter, such as `smista --log-filter info`, to retain messages for this
   command.

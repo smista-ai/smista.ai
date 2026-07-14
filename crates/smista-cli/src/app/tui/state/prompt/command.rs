@@ -5,7 +5,7 @@ use super::{PromptState, VerticalDirection, char_len, char_to_byte_index, move_v
 pub(super) const COMMAND_CHAT: &str = "chat";
 pub(super) const COMMAND_CLEAR: &str = "clear";
 pub(super) const COMMAND_EXIT: &str = "exit";
-pub(super) const COMMAND_LOG: &str = "log";
+pub(super) const COMMAND_LOGS: &str = "logs";
 pub(super) const COMMAND_MODEL: &str = "model";
 pub(super) const COMMAND_PLAN: &str = "plan";
 pub(super) const COMMAND_PREVIEW: &str = "preview";
@@ -20,7 +20,7 @@ const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_CHAT, Command::Chat),
     (COMMAND_CLEAR, Command::Clear),
     (COMMAND_EXIT, Command::Quit),
-    (COMMAND_LOG, Command::Log),
+    (COMMAND_LOGS, Command::Logs),
     (COMMAND_MODEL, Command::Model),
     (COMMAND_PLAN, Command::Plan),
     (COMMAND_PREVIEW, Command::Preview),
@@ -39,8 +39,8 @@ pub enum Command {
     Chat,
     /// `/clear` command. Clears the console and terminates the current session if one is active.
     Clear,
-    /// `/log` command. Shows the log.
-    Log,
+    /// `/logs` command. Shows the logs.
+    Logs,
     /// `/model` command. Without arguments, lists available models. With a model name, sets the current model.
     Model,
     /// `/plan` command. Enter plan mode.
@@ -68,7 +68,7 @@ impl Command {
         match self {
             Self::Chat => COMMAND_CHAT,
             Self::Clear => COMMAND_CLEAR,
-            Self::Log => COMMAND_LOG,
+            Self::Logs => COMMAND_LOGS,
             Self::Model => COMMAND_MODEL,
             Self::Plan => COMMAND_PLAN,
             Self::Preview => COMMAND_PREVIEW,
