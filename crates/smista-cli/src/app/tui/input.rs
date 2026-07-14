@@ -309,7 +309,7 @@ where
                 tracing::debug!("input event is clear command, producing `Clear` command");
                 Some(Cmd::Clear)
             }
-            Command::Log => self.handle_log(&args),
+            Command::Logs => self.handle_log(&args),
             Command::Model => self.handle_model_command(&args),
             Command::Plan => {
                 tracing::debug!("input event is plan command, entering plan mode");
@@ -1806,7 +1806,7 @@ mod tests {
         let mut tui = Tui::<TestBackend>::new_test(context);
 
         assert_eq!(
-            tui.handle_command(Command::Log, vec!["1".to_owned(), "2".to_owned()]),
+            tui.handle_command(Command::Logs, vec!["1".to_owned(), "2".to_owned()]),
             None
         );
 
@@ -1829,7 +1829,7 @@ mod tests {
         ));
         let mut tui = Tui::<TestBackend>::new_test(context);
 
-        assert_eq!(tui.handle_command(Command::Log, Vec::new()), None);
+        assert_eq!(tui.handle_command(Command::Logs, Vec::new()), None);
 
         assert_eq!(
             tui.state.history.last(),
@@ -1846,7 +1846,7 @@ mod tests {
         let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
 
         assert_eq!(
-            tui.handle_command(Command::Log, vec!["invalid".to_owned()]),
+            tui.handle_command(Command::Logs, vec!["invalid".to_owned()]),
             None
         );
         assert_eq!(
@@ -1858,7 +1858,7 @@ mod tests {
 
         assert_eq!(
             tui.handle_command(
-                Command::Log,
+                Command::Logs,
                 vec!["0".to_owned(), "1".to_owned(), "extra".to_owned()]
             ),
             None

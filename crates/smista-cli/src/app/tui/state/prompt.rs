@@ -450,7 +450,7 @@ mod tests {
 
     use super::{Command, PromptState, TextPromptState};
     use crate::app::tui::state::prompt::command::{
-        COMMAND_CHAT, COMMAND_CLEAR, COMMAND_LOG, COMMAND_MODEL, COMMAND_PLAN, COMMAND_PREVIEW,
+        COMMAND_CHAT, COMMAND_CLEAR, COMMAND_LOGS, COMMAND_MODEL, COMMAND_PLAN, COMMAND_PREVIEW,
         COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS, COMMAND_STATUS,
     };
 
@@ -744,16 +744,16 @@ mod tests {
     fn log_command_parses_offset_and_limit() {
         let mut state = PromptState::default();
 
-        state.push_str("/log 10 25");
+        state.push_str("/logs 10 25");
 
-        assert_eq!(state.command(), Some(&Command::Log));
-        assert_eq!(state.command().map(Command::input_name), Some(COMMAND_LOG));
+        assert_eq!(state.command(), Some(&Command::Logs));
+        assert_eq!(state.command().map(Command::input_name), Some(COMMAND_LOGS));
         let PromptState::Command(command) = state else {
             panic!("command prompt expected");
         };
         assert_eq!(
             command.resolved(),
-            (Command::Log, vec!["10".to_owned(), "25".to_owned()])
+            (Command::Logs, vec!["10".to_owned(), "25".to_owned()])
         );
     }
 
