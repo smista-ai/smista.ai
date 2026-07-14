@@ -26,7 +26,7 @@ pub use self::prompt::{Command, PromptState};
 pub use self::router::RouterState;
 pub use self::turn::ExecutionTurn;
 use crate::app::router_client::Msg;
-use crate::app::router_client::msg::{Model, Provider, SessionListItem, TraceEvent};
+use crate::app::router_client::msg::{Model, Provider, SessionListItem};
 use crate::skills::SkillEntry;
 
 const COMPONENT_MODELS_LIST: &str = "models_list";
@@ -258,13 +258,6 @@ impl State {
         self.trace_active_component(COMPONENT_USAGE, None);
     }
 
-    /// Shows the tracing list view without changing history.
-    pub fn show_tracing_list(&mut self, trace_events: Vec<TraceEvent>) {
-        let entry_count = trace_events.len();
-        self.active_component = ActiveComponentState::TracingList(ListState::new(trace_events));
-        self.trace_active_component(COMPONENT_TRACING_LIST, Some(entry_count));
-    }
-
     /// Shows the sessions list view without changing history.
     pub fn show_sessions_list(&mut self, sessions: Vec<SessionListItem>) {
         let entry_count = sessions.len();
@@ -399,9 +392,7 @@ impl State {
                 });
             }
             Msg::Trace(trace) => {
-                self.show_tracing_list(trace.events.clone());
-                self.history
-                    .extend(trace.events.into_iter().map(HistoryEntry::Trace));
+                self.push_history(HistoryEntry::Trace(trace.events));
             }
             Msg::Usage(usage) => {
                 self.show_usage(UsageState::new(usage));
@@ -704,12 +695,6 @@ mod tests {
             ActiveComponentState::Usage(_)
         ));
 
-        state.show_tracing_list(Vec::new());
-        assert!(matches!(
-            state.active_component,
-            ActiveComponentState::TracingList(_)
-        ));
-
         state.show_sessions_list(Vec::new());
         assert!(matches!(
             state.active_component,
@@ -865,7 +850,7 @@ mod tests {
     }
 
     #[test]
-    fn trace_message_updates_trace_view_and_history() {
+    fn trace_message_appends_history_without_replacing_console() {
         let mut state = State::default();
         let trace_event = TraceEvent {
             event_type: TRACE_EVENT_TYPE,
@@ -881,11 +866,11 @@ mod tests {
             events: vec![trace_event.clone()],
         }));
 
-        let ActiveComponentState::TracingList(trace_events) = &state.active_component else {
-            panic!("tracing list expected");
-        };
-        assert_eq!(trace_events.selected(), Some(&trace_event));
-        assert_eq!(state.history, vec![HistoryEntry::Trace(trace_event)]);
+        assert_eq!(state.history, vec![HistoryEntry::Trace(vec![trace_event])]);
+        assert!(matches!(
+            state.active_component,
+            ActiveComponentState::Console(_)
+        ));
     }
 
     #[test]

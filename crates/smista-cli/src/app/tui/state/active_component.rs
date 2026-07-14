@@ -6,18 +6,15 @@ use smista_sdk::core::api::SessionUsageResponse;
 
 use super::ModelListEntry;
 use super::list::ListState;
-use crate::app::log::AppLogEntry;
-use crate::app::router_client::msg::{Provider, SessionListItem, TraceEvent};
+use crate::app::router_client::msg::{Provider, SessionListItem};
 use crate::app::tui::state::console::ConsoleState;
 use crate::skills::SkillEntry;
 
 const COMPONENT_CONSOLE: &str = "console";
-const COMPONENT_LOGS_LIST: &str = "logs_list";
 const COMPONENT_MODELS_LIST: &str = "models_list";
 const COMPONENT_PROVIDERS_LIST: &str = "providers_list";
 const COMPONENT_SESSIONS_LIST: &str = "sessions_list";
 const COMPONENT_SKILL_LIST: &str = "skill_list";
-const COMPONENT_TRACING_LIST: &str = "tracing_list";
 const COMPONENT_USAGE: &str = "usage";
 
 /// The state of the active component in the TUI.
@@ -25,8 +22,6 @@ const COMPONENT_USAGE: &str = "usage";
 pub enum ActiveComponentState {
     /// Main console view.
     Console(ConsoleState),
-    /// Logs list view.
-    LogsList(ListState<AppLogEntry>),
     /// Models list view.
     ModelsList(ListState<ModelListEntry>),
     /// Providers list view.
@@ -35,8 +30,6 @@ pub enum ActiveComponentState {
     SessionsList(ListState<SessionListItem>),
     /// Skill list view.
     SkillList(ListState<(String, SkillEntry)>),
-    /// Tracing list view.
-    TracingList(ListState<TraceEvent>),
     /// Usage information view.
     Usage(UsageState),
 }
@@ -44,13 +37,11 @@ pub enum ActiveComponentState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveComponentKind {
     Console,
-    SkillList,
-    LogsList,
     ModelsList,
     ProvidersList,
-    Usage,
-    TracingList,
     SessionsList,
+    SkillList,
+    Usage,
 }
 
 impl fmt::Display for ActiveComponentKind {
@@ -58,11 +49,9 @@ impl fmt::Display for ActiveComponentKind {
         let kind_str = match self {
             Self::Console => COMPONENT_CONSOLE,
             Self::SkillList => COMPONENT_SKILL_LIST,
-            Self::LogsList => COMPONENT_LOGS_LIST,
             Self::ModelsList => COMPONENT_MODELS_LIST,
             Self::ProvidersList => COMPONENT_PROVIDERS_LIST,
             Self::Usage => COMPONENT_USAGE,
-            Self::TracingList => COMPONENT_TRACING_LIST,
             Self::SessionsList => COMPONENT_SESSIONS_LIST,
         };
         write!(f, "{}", kind_str)
@@ -76,11 +65,9 @@ impl ActiveComponentState {
         match self {
             Self::Console(_) => ActiveComponentKind::Console,
             Self::SkillList(_) => ActiveComponentKind::SkillList,
-            Self::LogsList(_) => ActiveComponentKind::LogsList,
             Self::ModelsList(_) => ActiveComponentKind::ModelsList,
             Self::ProvidersList(_) => ActiveComponentKind::ProvidersList,
             Self::Usage(_) => ActiveComponentKind::Usage,
-            Self::TracingList(_) => ActiveComponentKind::TracingList,
             Self::SessionsList(_) => ActiveComponentKind::SessionsList,
         }
     }
@@ -182,24 +169,6 @@ impl ActiveComponentState {
         }
     }
 
-    /// Returns the tracing list state when active.
-    #[must_use]
-    pub fn tracing_list(&self) -> Option<&ListState<TraceEvent>> {
-        match self {
-            Self::TracingList(state) => Some(state),
-            _ => None,
-        }
-    }
-
-    /// Returns the mutable tracing list state when active.
-    #[must_use]
-    pub fn tracing_list_mut(&mut self) -> Option<&mut ListState<TraceEvent>> {
-        match self {
-            Self::TracingList(state) => Some(state),
-            _ => None,
-        }
-    }
-
     /// Returns the sessions list state when active.
     #[must_use]
     pub fn sessions_list(&self) -> Option<&ListState<SessionListItem>> {
@@ -264,12 +233,6 @@ mod tests {
     const MODEL_ID: &str = "gpt-4.1";
     const PROVIDER_NAME: &str = "openai";
     const SESSION_UPDATED_AT: &str = "2026-07-08T10:00:00Z";
-    const TRACE_CREATED_AT: &str = "2026-07-08T10:00:00Z";
-    const TRACE_EVENT_TYPE: &str = "route";
-    const TRACE_MODEL: &str = "gpt-4.1";
-    const TRACE_PAYLOAD: &str = "{}";
-    const TRACE_TASK_TYPE: &str = "plan";
-
     fn usage_response(input_tokens: u64) -> SessionUsageResponse {
         SessionUsageResponse {
             total: Usage {
@@ -294,18 +257,6 @@ mod tests {
             max_output_tokens: Some(16_000),
             input_cost_per_million_tokens: None,
             output_cost_per_million_tokens: None,
-        }
-    }
-
-    fn trace_event() -> TraceEvent {
-        TraceEvent {
-            event_type: TRACE_EVENT_TYPE,
-            task_type: TRACE_TASK_TYPE,
-            provider: PROVIDER_NAME.to_owned(),
-            model: TRACE_MODEL.to_owned(),
-            matched_rule: None,
-            created_at: TRACE_CREATED_AT.to_owned(),
-            payload: TRACE_PAYLOAD.to_owned(),
         }
     }
 
@@ -373,19 +324,6 @@ mod tests {
             .expect("providers list")
             .next();
 
-        let mut traces = ActiveComponentState::TracingList(ListState::new(vec![trace_event()]));
-        assert_eq!(traces.kind(), ActiveComponentKind::TracingList);
-        assert_eq!(
-            traces
-                .tracing_list()
-                .expect("tracing list")
-                .selected()
-                .expect("trace")
-                .model,
-            TRACE_MODEL
-        );
-        traces.tracing_list_mut().expect("tracing list").next();
-
         let mut sessions =
             ActiveComponentState::SessionsList(ListState::new(vec![SessionListItem {
                 id: Uuid::nil(),
@@ -407,8 +345,6 @@ mod tests {
 
         assert!(skills.models_list().is_none());
         assert!(models.providers_list().is_none());
-        assert!(providers.tracing_list().is_none());
-        assert!(traces.sessions_list().is_none());
         assert!(sessions.skill_list().is_none());
     }
 

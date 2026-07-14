@@ -31,8 +31,8 @@ pub enum HistoryEntry {
     ToolCall { name: String, input: String },
     /// A tool result shown in the transcript.
     ToolResult { name: String, output: String },
-    /// A trace event shown in the transcript.
-    Trace(TraceEvent),
+    /// A block of trace events shown in the transcript.
+    Trace(Vec<TraceEvent>),
     /// A user-authored prompt.
     UserMessage(String),
 }

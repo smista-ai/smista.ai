@@ -8,8 +8,7 @@ use ratatui::widgets::{
     Block, Borders, Clear, List, ListItem, ListState as RatatuiListState, Widget,
 };
 
-use crate::app::log::{AppLogEntry, LogLevel};
-use crate::app::router_client::msg::{Provider, SessionListItem, TraceEvent};
+use crate::app::router_client::msg::{Provider, SessionListItem};
 use crate::app::tui::state::{ListState, ModelListEntry};
 use crate::skills::SkillEntry;
 
@@ -54,17 +53,6 @@ pub(in crate::app::tui) fn view_select<'a, T, F>(
 
     frame.render_stateful_widget(list, list_area, &mut widget_state);
     frame.render_widget(Line::styled(FOOTER, palette().footer), footer_area);
-}
-
-pub(in crate::app::tui) fn log_line(entry: &AppLogEntry) -> Line<'static> {
-    let color = match entry.level() {
-        LogLevel::Trace => Color::DarkGray,
-        LogLevel::Debug => Color::Cyan,
-        LogLevel::Info => Color::White,
-        LogLevel::Warn => Color::Yellow,
-        LogLevel::Error => Color::Red,
-    };
-    Line::styled(entry.message().to_owned(), Style::default().fg(color))
 }
 
 pub(in crate::app::tui) fn skill_line((name, entry): &(String, SkillEntry)) -> Line<'static> {
@@ -132,18 +120,6 @@ pub(in crate::app::tui) fn session_line(session: &SessionListItem) -> Line<'stat
     ])
 }
 
-pub(in crate::app::tui) fn trace_line(trace: &TraceEvent) -> Line<'static> {
-    Line::from(vec![
-        Span::styled(trace.event_type, palette().name),
-        Span::raw(" "),
-        Span::styled(trace.task_type, palette().metadata),
-        Span::raw(" "),
-        Span::styled(format!("{}/{}", trace.provider, trace.model), palette().dim),
-        Span::raw(" "),
-        Span::styled(trace.created_at.clone(), palette().id),
-    ])
-}
-
 #[derive(Debug, Clone, Copy)]
 struct Palette {
     dim: Style,
@@ -174,13 +150,12 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::app::router_client::msg::{Model, Provider, TraceEvent};
+    use crate::app::router_client::msg::{Model, Provider};
     use crate::skills::SkillStore;
 
     const SESSION_UPDATED_AT: &str = "2026-07-08T10:00:00Z";
     const SKILL_DESCRIPTION: &str = "Review code changes.";
     const SKILL_NAME: &str = "code-review";
-    const TRACE_CREATED_AT: &str = "2026-07-08T11:00:00Z";
 
     #[test]
     fn view_select_renders_entries_and_footer() {
@@ -219,14 +194,6 @@ mod tests {
         assert!(screen.contains("Items"));
         assert!(screen.contains("No items"));
         assert!(screen.contains("enter select"));
-    }
-
-    #[test]
-    fn log_line_renders_the_entry_with_its_level_color() {
-        let rendered = log_line(&AppLogEntry::new(LogLevel::Warn, "log entry".to_owned()));
-
-        assert_eq!(line_text(rendered.clone()), "log entry");
-        assert_eq!(rendered.style.fg, Some(Color::Yellow));
     }
 
     #[test]
@@ -349,26 +316,6 @@ mod tests {
 
         assert!(rendered.contains(UNTITLED_SESSION));
         assert!(rendered.contains("default"));
-    }
-
-    #[test]
-    fn trace_line_includes_event_metadata() {
-        let trace = TraceEvent {
-            event_type: "route",
-            task_type: "code",
-            provider: "openai".to_owned(),
-            model: "gpt-4.1".to_owned(),
-            matched_rule: None,
-            created_at: TRACE_CREATED_AT.to_owned(),
-            payload: "{}".to_owned(),
-        };
-
-        let rendered = line_text(trace_line(&trace));
-
-        assert!(rendered.contains("route"));
-        assert!(rendered.contains("code"));
-        assert!(rendered.contains("openai/gpt-4.1"));
-        assert!(rendered.contains(TRACE_CREATED_AT));
     }
 
     #[test]

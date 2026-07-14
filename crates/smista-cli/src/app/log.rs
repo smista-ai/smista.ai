@@ -122,12 +122,6 @@ impl AppLogSink {
         Self::with_capacity(LOG_CAPACITY)
     }
 
-    /// Returns retained entries from oldest to newest.
-    #[must_use]
-    pub fn entries(&self) -> Vec<AppLogEntry> {
-        self.lock_entries().iter().cloned().collect()
-    }
-
     /// Returns a slice of retained entries from `offset` to `offset + limit`.
     ///
     /// Newest entries are at the beginning of the slice.
@@ -413,10 +407,10 @@ mod tests {
         sink.push(AppLogEntry::new(LogLevel::Error, "third".to_owned()));
 
         assert_eq!(
-            sink.entries(),
+            sink.entries_at(0, 100),
             [
+                AppLogEntry::new(LogLevel::Error, "third".to_owned()),
                 AppLogEntry::new(LogLevel::Warn, "second".to_owned()),
-                AppLogEntry::new(LogLevel::Error, "third".to_owned())
             ]
         );
     }
@@ -449,13 +443,13 @@ mod tests {
             tracing::warn!("warning event");
         });
 
-        let entries = sink.entries();
+        let entries = sink.entries_at(0, 100);
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].level(), LogLevel::Info);
-        assert!(entries[0].message().contains("captured event"));
-        assert!(entries[0].message().contains("event.answer=42"));
-        assert!(!entries[0].message().ends_with('\n'));
-        assert_eq!(entries[1].level(), LogLevel::Warn);
-        assert!(entries[1].message().contains("warning event"));
+        assert_eq!(entries[1].level(), LogLevel::Info);
+        assert!(entries[1].message().contains("captured event"));
+        assert!(entries[1].message().contains("event.answer=42"));
+        assert!(!entries[1].message().ends_with('\n'));
+        assert_eq!(entries[0].level(), LogLevel::Warn);
+        assert!(entries[0].message().contains("warning event"));
     }
 }

@@ -205,9 +205,10 @@ impl RouterClient {
             None
         };
         let title = session_title(prompt);
+        let encrypted = key_id.is_some();
 
         tracing::debug!(
-            encrypted = key_id.is_some(),
+            encrypted = encrypted,
             title.bytes = title.len(),
             "creating session",
         );
@@ -221,7 +222,8 @@ impl RouterClient {
             })
             .await?;
 
-        tracing::debug!(
+        tracing::info!(
+            encrypted = encrypted,
             "created new session with id: {session_id}",
             session_id = response.session.id
         );

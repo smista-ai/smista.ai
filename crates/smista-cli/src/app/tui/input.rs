@@ -35,13 +35,11 @@ where
             ActiveComponentKind::Console => self.handle_input_on_console(event),
             ActiveComponentKind::ModelsList => self.handle_input_on_list(event, Self::set_model),
             ActiveComponentKind::Usage => self.handle_input_on_usage(event),
-            ActiveComponentKind::SkillList
-            | ActiveComponentKind::LogsList
-            | ActiveComponentKind::ProvidersList
-            | ActiveComponentKind::TracingList => self.handle_input_on_list(event, |tui| {
-                tui.state.show_console();
-                None
-            }),
+            ActiveComponentKind::SkillList | ActiveComponentKind::ProvidersList => self
+                .handle_input_on_list(event, |tui| {
+                    tui.state.show_console();
+                    None
+                }),
             ActiveComponentKind::SessionsList => {
                 self.handle_input_on_list(event, Self::resume_selected_session)
             }
@@ -347,6 +345,10 @@ where
                 );
                 Some(Cmd::GetRouterStatus)
             }
+            Command::Trace => {
+                tracing::debug!("input event is trace command, producing get trace command");
+                Some(Cmd::GetTrace)
+            }
             Command::Unresolved(unresolved) => {
                 tracing::debug!(
                     "input event is unresolved '{unresolved}' command, producing execute command"
@@ -561,72 +563,60 @@ where
 
     fn previous_active_list_entry(&mut self) {
         match &mut self.state.active_component {
-            ActiveComponentState::LogsList(state) => state.previous(),
             ActiveComponentState::ModelsList(state) => state.previous(),
             ActiveComponentState::ProvidersList(state) => state.previous(),
             ActiveComponentState::SessionsList(state) => state.previous(),
             ActiveComponentState::SkillList(state) => state.previous(),
-            ActiveComponentState::TracingList(state) => state.previous(),
             ActiveComponentState::Console(_) | ActiveComponentState::Usage(_) => {}
         }
     }
 
     fn next_active_list_entry(&mut self) {
         match &mut self.state.active_component {
-            ActiveComponentState::LogsList(state) => state.next(),
             ActiveComponentState::ModelsList(state) => state.next(),
             ActiveComponentState::ProvidersList(state) => state.next(),
             ActiveComponentState::SessionsList(state) => state.next(),
             ActiveComponentState::SkillList(state) => state.next(),
-            ActiveComponentState::TracingList(state) => state.next(),
             ActiveComponentState::Console(_) | ActiveComponentState::Usage(_) => {}
         }
     }
 
     fn first_active_list_entry(&mut self) {
         match &mut self.state.active_component {
-            ActiveComponentState::LogsList(state) => state.first(),
             ActiveComponentState::ModelsList(state) => state.first(),
             ActiveComponentState::ProvidersList(state) => state.first(),
             ActiveComponentState::SessionsList(state) => state.first(),
             ActiveComponentState::SkillList(state) => state.first(),
-            ActiveComponentState::TracingList(state) => state.first(),
             ActiveComponentState::Console(_) | ActiveComponentState::Usage(_) => {}
         }
     }
 
     fn last_active_list_entry(&mut self) {
         match &mut self.state.active_component {
-            ActiveComponentState::LogsList(state) => state.last(),
             ActiveComponentState::ModelsList(state) => state.last(),
             ActiveComponentState::ProvidersList(state) => state.last(),
             ActiveComponentState::SessionsList(state) => state.last(),
             ActiveComponentState::SkillList(state) => state.last(),
-            ActiveComponentState::TracingList(state) => state.last(),
             ActiveComponentState::Console(_) | ActiveComponentState::Usage(_) => {}
         }
     }
 
     fn page_previous_active_list_entry(&mut self) {
         match &mut self.state.active_component {
-            ActiveComponentState::LogsList(state) => state.page_previous(),
             ActiveComponentState::ModelsList(state) => state.page_previous(),
             ActiveComponentState::ProvidersList(state) => state.page_previous(),
             ActiveComponentState::SessionsList(state) => state.page_previous(),
             ActiveComponentState::SkillList(state) => state.page_previous(),
-            ActiveComponentState::TracingList(state) => state.page_previous(),
             ActiveComponentState::Console(_) | ActiveComponentState::Usage(_) => {}
         }
     }
 
     fn page_next_active_list_entry(&mut self) {
         match &mut self.state.active_component {
-            ActiveComponentState::LogsList(state) => state.page_next(),
             ActiveComponentState::ModelsList(state) => state.page_next(),
             ActiveComponentState::ProvidersList(state) => state.page_next(),
             ActiveComponentState::SessionsList(state) => state.page_next(),
             ActiveComponentState::SkillList(state) => state.page_next(),
-            ActiveComponentState::TracingList(state) => state.page_next(),
             ActiveComponentState::Console(_) | ActiveComponentState::Usage(_) => {}
         }
     }
@@ -1795,6 +1785,22 @@ mod tests {
     }
 
     #[test]
+    fn handle_command_trace_requests_session_trace() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        let cmd = tui
+            .handle_command(Command::Trace, Vec::new())
+            .expect("trace command produces command");
+
+        assert_eq!(cmd, Cmd::GetTrace);
+        assert!(matches!(
+            tui.state.active_component,
+            ActiveComponentState::Console(_)
+        ));
+    }
+
+    #[test]
     fn handle_log_command_reads_newest_entries_with_offset_and_limit() {
         let exit = CancellationToken::new();
         let context = app_context(exit);
@@ -1817,6 +1823,10 @@ mod tests {
                 AppLogEntry::new(LogLevel::Info, "second".to_owned())
             ]))
         );
+        assert!(matches!(
+            tui.state.active_component,
+            ActiveComponentState::Console(_)
+        ));
     }
 
     #[test]

@@ -19,9 +19,6 @@ where
         if sync_history {
             self.insert_transcript_entries()?;
         }
-        if let ActiveComponentState::LogsList(logs_list) = &mut self.state.active_component {
-            logs_list.replace_entries(self.context.logs.entries());
-        }
 
         self.terminal
             .draw(|frame| match &self.state.active_component {
@@ -35,9 +32,6 @@ where
                         &self.context.cwd,
                         self.state.plan,
                     );
-                }
-                ActiveComponentState::LogsList(logs_list) => {
-                    select::view_select(frame, "Logs", "No logs", logs_list, select::log_line);
                 }
                 ActiveComponentState::SkillList(list_state) => {
                     select::view_select(
@@ -67,15 +61,6 @@ where
                     );
                 }
                 ActiveComponentState::Usage(_usage_state) => todo!(),
-                ActiveComponentState::TracingList(list_state) => {
-                    select::view_select(
-                        frame,
-                        "Trace",
-                        "No trace events",
-                        list_state,
-                        select::trace_line,
-                    );
-                }
                 ActiveComponentState::SessionsList(list_state) => {
                     select::view_select(
                         frame,

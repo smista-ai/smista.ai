@@ -604,18 +604,31 @@ fn preview_list_lines(label: &str, values: &[String]) -> Vec<Line<'static>> {
     lines
 }
 
-fn trace_lines(trace: &TraceEvent) -> Vec<Line<'static>> {
-    vec![Line::from(vec![
-        Span::styled("trace: ", palette().trace.add_modifier(Modifier::BOLD)),
-        Span::styled(trace.event_type.to_owned(), palette().trace),
-        Span::raw(" "),
+fn trace_lines(trace: &[TraceEvent]) -> Vec<Line<'static>> {
+    trace.iter().map(trace_line).collect()
+}
+
+fn trace_line(trace: &TraceEvent) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(trace.created_at.to_owned(), palette().dim),
+        Span::raw(": "),
         Span::styled(trace.task_type.to_owned(), palette().trace),
-        Span::raw(" -> "),
+        Span::raw(" "),
+        Span::styled(trace.event_type.to_owned(), palette().trace),
+        Span::raw(" ("),
         Span::styled(
             format!("{}/{}", trace.provider, trace.model),
             palette().trace,
         ),
-    ])]
+        Span::raw(")"),
+        if let Some(matched_rule) = trace.matched_rule.as_deref() {
+            Span::raw(format!(" (matched rule: {matched_rule})"))
+        } else {
+            Span::raw("")
+        },
+        Span::styled(": ", palette().trace),
+        Span::raw(trace.payload.to_owned()),
+    ])
 }
 
 fn diff_lines(added: &str, removed: &str) -> Vec<Line<'static>> {
@@ -880,6 +893,28 @@ mod tests {
         assert_eq!(lines[1].spans[0].style, palette().log_error);
         assert_eq!(plain_text(&lines[2]), "[TRACE] details");
         assert_eq!(lines[2].spans[0].style, palette().log_trace);
+    }
+
+    #[test]
+    fn trace_history_lines_include_event_metadata_and_payload() {
+        let lines = history_lines_for_width(
+            &[HistoryEntry::Trace(vec![TraceEvent {
+                event_type: "routing_decision",
+                task_type: "edit",
+                provider: "openai".to_owned(),
+                model: "gpt-4.1".to_owned(),
+                matched_rule: Some("code edits".to_owned()),
+                created_at: "2026-07-08T11:00:00Z".to_owned(),
+                payload: "selected by policy".to_owned(),
+            }])],
+            80,
+        );
+
+        assert_eq!(
+            plain_text(&lines[1]),
+            "2026-07-08T11:00:00Z: edit routing_decision (openai/gpt-4.1) \
+             (matched rule: code edits): selected by policy"
+        );
     }
 
     #[test]
