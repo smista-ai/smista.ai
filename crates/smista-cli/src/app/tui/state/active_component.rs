@@ -11,17 +11,105 @@ use crate::app::tui::state::console::ConsoleState;
 use crate::skills::SkillEntry;
 
 const COMPONENT_CONSOLE: &str = "console";
+const COMPONENT_HELP: &str = "help";
 const COMPONENT_MODELS_LIST: &str = "models_list";
 const COMPONENT_PROVIDERS_LIST: &str = "providers_list";
 const COMPONENT_SESSIONS_LIST: &str = "sessions_list";
 const COMPONENT_SKILL_LIST: &str = "skill_list";
 const COMPONENT_USAGE: &str = "usage";
 
+const HELP_ENTRIES: &[HelpEntry] = &[
+    HelpEntry::new("/chat", "/chat", "Leave plan mode and enter chat mode."),
+    HelpEntry::new(
+        "/clear",
+        "/clear",
+        "Clear the terminal and end the current session.",
+    ),
+    HelpEntry::new("/help", "/help", "Show this command reference."),
+    HelpEntry::new(
+        "/logs",
+        "/logs [offset] [limit]",
+        "Show retained application logs.",
+    ),
+    HelpEntry::new(
+        "/model",
+        "/model [model]",
+        "List models or set the preferred model.",
+    ),
+    HelpEntry::new("/plan", "/plan", "Enter plan mode."),
+    HelpEntry::new(
+        "/preview",
+        "/preview <prompt>",
+        "Preview routing without invoking a model.",
+    ),
+    HelpEntry::new("/providers", "/providers", "List configured providers."),
+    HelpEntry::new("/quit", "/quit | /q | /exit", "Close the interactive CLI."),
+    HelpEntry::new(
+        "/resume",
+        "/resume [session-id]",
+        "List sessions or resume one.",
+    ),
+    HelpEntry::new("/skills", "/skills", "List available workspace skills."),
+    HelpEntry::new("/status", "/status", "Show router status and version."),
+    HelpEntry::new(
+        "/trace",
+        "/trace",
+        "Show the current session execution trace.",
+    ),
+    HelpEntry::new(
+        "/usage",
+        "/usage",
+        "Show current session token and cost usage.",
+    ),
+];
+
+/// A slash command displayed by the help component.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HelpEntry {
+    input: &'static str,
+    usage: &'static str,
+    description: &'static str,
+}
+
+impl HelpEntry {
+    const fn new(input: &'static str, usage: &'static str, description: &'static str) -> Self {
+        Self {
+            input,
+            usage,
+            description,
+        }
+    }
+
+    /// Returns the command inserted into the prompt when selected.
+    #[must_use]
+    pub fn input(&self) -> &'static str {
+        self.input
+    }
+
+    /// Returns the command usage signature.
+    #[must_use]
+    pub fn usage(&self) -> &'static str {
+        self.usage
+    }
+
+    /// Returns the command description.
+    #[must_use]
+    pub fn description(&self) -> &'static str {
+        self.description
+    }
+}
+
+pub(super) fn help_entries() -> Vec<HelpEntry> {
+    HELP_ENTRIES.to_vec()
+}
+
 /// The state of the active component in the TUI.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ActiveComponentState {
     /// Main console view.
     Console(ConsoleState),
+    /// Slash-command help view.
+    Help(ListState<HelpEntry>),
     /// Models list view.
     ModelsList(ListState<ModelListEntry>),
     /// Providers list view.
@@ -37,6 +125,7 @@ pub enum ActiveComponentState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveComponentKind {
     Console,
+    Help,
     ModelsList,
     ProvidersList,
     SessionsList,
@@ -48,6 +137,7 @@ impl fmt::Display for ActiveComponentKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let kind_str = match self {
             Self::Console => COMPONENT_CONSOLE,
+            Self::Help => COMPONENT_HELP,
             Self::SkillList => COMPONENT_SKILL_LIST,
             Self::ModelsList => COMPONENT_MODELS_LIST,
             Self::ProvidersList => COMPONENT_PROVIDERS_LIST,
@@ -64,6 +154,7 @@ impl ActiveComponentState {
     pub fn kind(&self) -> ActiveComponentKind {
         match self {
             Self::Console(_) => ActiveComponentKind::Console,
+            Self::Help(_) => ActiveComponentKind::Help,
             Self::SkillList(_) => ActiveComponentKind::SkillList,
             Self::ModelsList(_) => ActiveComponentKind::ModelsList,
             Self::ProvidersList(_) => ActiveComponentKind::ProvidersList,
@@ -86,6 +177,24 @@ impl ActiveComponentState {
     pub fn console_mut(&mut self) -> Option<&mut ConsoleState> {
         match self {
             Self::Console(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the help list state when active.
+    #[must_use]
+    pub fn help(&self) -> Option<&ListState<HelpEntry>> {
+        match self {
+            Self::Help(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Returns the mutable help list state when active.
+    #[must_use]
+    pub fn help_mut(&mut self) -> Option<&mut ListState<HelpEntry>> {
+        match self {
+            Self::Help(state) => Some(state),
             _ => None,
         }
     }
@@ -289,6 +398,18 @@ mod tests {
 
     #[test]
     fn list_accessors_only_match_their_component() {
+        let mut help = ActiveComponentState::Help(ListState::new(help_entries()));
+        assert_eq!(help.kind(), ActiveComponentKind::Help);
+        assert_eq!(help.kind().to_string(), COMPONENT_HELP);
+        assert_eq!(help.help().expect("help list").entries().len(), 14);
+        help.help_mut().expect("help list").last();
+        assert_eq!(
+            help.help()
+                .and_then(ListState::selected)
+                .map(HelpEntry::input),
+            Some("/usage")
+        );
+
         let mut skills = ActiveComponentState::SkillList(ListState::default());
         assert_eq!(skills.kind(), ActiveComponentKind::SkillList);
         assert!(skills.skill_list().expect("skill list").is_empty());
@@ -346,6 +467,7 @@ mod tests {
         assert!(skills.models_list().is_none());
         assert!(models.providers_list().is_none());
         assert!(sessions.skill_list().is_none());
+        assert!(models.help().is_none());
     }
 
     #[test]

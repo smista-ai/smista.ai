@@ -5,6 +5,7 @@ use super::{PromptState, VerticalDirection, char_len, char_to_byte_index, move_v
 pub(super) const COMMAND_CHAT: &str = "chat";
 pub(super) const COMMAND_CLEAR: &str = "clear";
 pub(super) const COMMAND_EXIT: &str = "exit";
+pub(super) const COMMAND_HELP: &str = "help";
 pub(super) const COMMAND_LOGS: &str = "logs";
 pub(super) const COMMAND_MODEL: &str = "model";
 pub(super) const COMMAND_PLAN: &str = "plan";
@@ -22,6 +23,7 @@ const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_CHAT, Command::Chat),
     (COMMAND_CLEAR, Command::Clear),
     (COMMAND_EXIT, Command::Quit),
+    (COMMAND_HELP, Command::Help),
     (COMMAND_LOGS, Command::Logs),
     (COMMAND_MODEL, Command::Model),
     (COMMAND_PLAN, Command::Plan),
@@ -43,6 +45,8 @@ pub enum Command {
     Chat,
     /// `/clear` command. Clears the console and terminates the current session if one is active.
     Clear,
+    /// `/help` command. Shows available slash commands and their usage.
+    Help,
     /// `/logs` command. Shows the logs.
     Logs,
     /// `/model` command. Without arguments, lists available models. With a model name, sets the current model.
@@ -76,6 +80,7 @@ impl Command {
         match self {
             Self::Chat => COMMAND_CHAT,
             Self::Clear => COMMAND_CLEAR,
+            Self::Help => COMMAND_HELP,
             Self::Logs => COMMAND_LOGS,
             Self::Model => COMMAND_MODEL,
             Self::Plan => COMMAND_PLAN,

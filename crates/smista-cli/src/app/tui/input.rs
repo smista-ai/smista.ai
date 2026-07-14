@@ -33,8 +33,11 @@ where
                 self.handle_input_on_execution_turn(event)
             }
             ActiveComponentKind::Console => self.handle_input_on_console(event),
+            ActiveComponentKind::Help => {
+                self.handle_input_on_list(event, Self::select_help_command)
+            }
+            ActiveComponentKind::Usage => self.handle_input_on_information(event),
             ActiveComponentKind::ModelsList => self.handle_input_on_list(event, Self::set_model),
-            ActiveComponentKind::Usage => self.handle_input_on_usage(event),
             ActiveComponentKind::SkillList | ActiveComponentKind::ProvidersList => self
                 .handle_input_on_list(event, |tui| {
                     tui.state.show_console();
@@ -307,6 +310,11 @@ where
                 tracing::trace!("input event is clear command, producing `Clear` command");
                 Some(Cmd::Clear)
             }
+            Command::Help => {
+                tracing::trace!("input event is help command, showing help view");
+                self.state.show_help();
+                None
+            }
             Command::Logs => self.handle_log(&args),
             Command::Model => self.handle_model_command(&args),
             Command::Plan => {
@@ -555,7 +563,7 @@ where
         None
     }
 
-    fn handle_input_on_usage(&mut self, event: InputEvent) -> Option<Cmd> {
+    fn handle_input_on_information(&mut self, event: InputEvent) -> Option<Cmd> {
         match event {
             InputEvent::Enter | InputEvent::Escape => self.state.show_console(),
             InputEvent::Interrupt => self.context.exit.cancel(),
@@ -565,8 +573,26 @@ where
         None
     }
 
+    fn select_help_command(&mut self) -> Option<Cmd> {
+        let command = self
+            .state
+            .active_component
+            .help()
+            .and_then(|state| state.selected())
+            .map(|entry| entry.input().to_owned());
+        self.state.show_console();
+        if let Some(command) = command
+            && let Some(console) = self.state.active_component.console_mut()
+        {
+            console.prompt.replace_with_input(command);
+        }
+
+        None
+    }
+
     fn previous_active_list_entry(&mut self) {
         match &mut self.state.active_component {
+            ActiveComponentState::Help(state) => state.previous(),
             ActiveComponentState::ModelsList(state) => state.previous(),
             ActiveComponentState::ProvidersList(state) => state.previous(),
             ActiveComponentState::SessionsList(state) => state.previous(),
@@ -577,6 +603,7 @@ where
 
     fn next_active_list_entry(&mut self) {
         match &mut self.state.active_component {
+            ActiveComponentState::Help(state) => state.next(),
             ActiveComponentState::ModelsList(state) => state.next(),
             ActiveComponentState::ProvidersList(state) => state.next(),
             ActiveComponentState::SessionsList(state) => state.next(),
@@ -587,6 +614,7 @@ where
 
     fn first_active_list_entry(&mut self) {
         match &mut self.state.active_component {
+            ActiveComponentState::Help(state) => state.first(),
             ActiveComponentState::ModelsList(state) => state.first(),
             ActiveComponentState::ProvidersList(state) => state.first(),
             ActiveComponentState::SessionsList(state) => state.first(),
@@ -597,6 +625,7 @@ where
 
     fn last_active_list_entry(&mut self) {
         match &mut self.state.active_component {
+            ActiveComponentState::Help(state) => state.last(),
             ActiveComponentState::ModelsList(state) => state.last(),
             ActiveComponentState::ProvidersList(state) => state.last(),
             ActiveComponentState::SessionsList(state) => state.last(),
@@ -607,6 +636,7 @@ where
 
     fn page_previous_active_list_entry(&mut self) {
         match &mut self.state.active_component {
+            ActiveComponentState::Help(state) => state.page_previous(),
             ActiveComponentState::ModelsList(state) => state.page_previous(),
             ActiveComponentState::ProvidersList(state) => state.page_previous(),
             ActiveComponentState::SessionsList(state) => state.page_previous(),
@@ -617,6 +647,7 @@ where
 
     fn page_next_active_list_entry(&mut self) {
         match &mut self.state.active_component {
+            ActiveComponentState::Help(state) => state.page_next(),
             ActiveComponentState::ModelsList(state) => state.page_next(),
             ActiveComponentState::ProvidersList(state) => state.page_next(),
             ActiveComponentState::SessionsList(state) => state.page_next(),
@@ -1745,6 +1776,20 @@ mod tests {
     }
 
     #[test]
+    fn escape_restores_console_from_help() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+        tui.state.show_help();
+
+        assert_eq!(tui.on_input(InputEvent::Escape), None);
+
+        assert!(matches!(
+            tui.state.active_component,
+            ActiveComponentState::Console(_)
+        ));
+    }
+
+    #[test]
     fn interrupt_on_list_exits_application() {
         let exit = CancellationToken::new();
         let mut tui = Tui::<TestBackend>::new_test(app_context(exit.clone()));
@@ -1786,6 +1831,51 @@ mod tests {
             .expect("clear command produces command");
 
         assert_eq!(cmd, Cmd::Clear);
+    }
+
+    #[test]
+    fn handle_command_help_shows_help() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        assert_eq!(tui.handle_command(Command::Help, Vec::new()), None);
+
+        assert!(matches!(
+            tui.state.active_component,
+            ActiveComponentState::Help(_)
+        ));
+        assert!(tui.state.history.is_empty());
+    }
+
+    #[test]
+    fn enter_on_help_command_shows_help() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+
+        assert_eq!(tui.on_input(InputEvent::Paste("/help".to_owned())), None);
+        assert_eq!(tui.on_input(InputEvent::Enter), None);
+
+        assert!(matches!(
+            tui.state.active_component,
+            ActiveComponentState::Help(_)
+        ));
+    }
+
+    #[test]
+    fn help_navigation_and_enter_load_selected_command_into_prompt() {
+        let exit = CancellationToken::new();
+        let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
+        tui.state.show_help();
+
+        assert_eq!(tui.on_input(InputEvent::Down), None);
+        assert_eq!(tui.on_input(InputEvent::Enter), None);
+
+        let console = tui
+            .state
+            .active_component
+            .console()
+            .expect("console view is active");
+        assert_eq!(console.prompt.input(), "/clear");
     }
 
     #[test]

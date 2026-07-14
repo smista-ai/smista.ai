@@ -1,4 +1,5 @@
 pub(in crate::app::tui) mod console;
+mod help;
 mod select;
 mod usage;
 
@@ -32,6 +33,15 @@ where
                         self.state.router,
                         &self.context.cwd,
                         self.state.plan,
+                    );
+                }
+                ActiveComponentState::Help(list_state) => {
+                    select::view_select(
+                        frame,
+                        "Help",
+                        "No commands found",
+                        list_state,
+                        help::help_line,
                     );
                 }
                 ActiveComponentState::SkillList(list_state) => {
