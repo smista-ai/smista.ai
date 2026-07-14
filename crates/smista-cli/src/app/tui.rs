@@ -177,13 +177,13 @@ impl<B: ClearableBackend> Tui<B> {
     /// This scaffold does not map keys to commands yet.
     pub fn handle_input_event(&mut self, event: InputEvent) -> anyhow::Result<Option<Cmd>> {
         let event_kind = event.kind();
-        tracing::debug!(
+        tracing::trace!(
             input.event = event_kind,
             "handling input event {{input.event}}",
         );
 
         let cmd = self.on_input(event);
-        tracing::debug!(
+        tracing::trace!(
             "event {event_kind} has produced command {cmd}",
             cmd = cmd.as_ref().map(|cmd| command_name(cmd)).unwrap_or("none")
         );
@@ -197,7 +197,7 @@ impl<B: ClearableBackend> Tui<B> {
     /// This scaffold does not update UI state yet.
     pub fn handle_client_msg(&mut self, msg: Msg) -> anyhow::Result<()> {
         let clear_terminal = matches!(msg, Msg::SessionClosed { .. });
-        tracing::debug!(
+        tracing::trace!(
             message = super::message_name(&msg),
             "handling client message"
         );

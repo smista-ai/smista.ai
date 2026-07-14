@@ -452,7 +452,7 @@ mod tests {
     use crate::app::tui::state::prompt::command::{
         COMMAND_CHAT, COMMAND_CLEAR, COMMAND_LOGS, COMMAND_MODEL, COMMAND_PLAN, COMMAND_PREVIEW,
         COMMAND_PROVIDERS, COMMAND_QUIT, COMMAND_RESUME, COMMAND_SKILLS, COMMAND_STATUS,
-        COMMAND_TRACE,
+        COMMAND_TRACE, COMMAND_USAGE,
     };
 
     const HELLO_INPUT: &str = "hello";
@@ -1284,6 +1284,21 @@ mod tests {
         assert_eq!(
             state.command().map(Command::input_name),
             Some(COMMAND_TRACE)
+        );
+    }
+
+    #[test]
+    fn should_parse_usage() {
+        let mut state = PromptState::default();
+
+        state.push_str("/usage");
+
+        assert_eq!(state.command(), Some(&Command::Usage));
+        assert_eq!(state.command_args(), Some(""));
+        assert_eq!(state.input(), "/usage");
+        assert_eq!(
+            state.command().map(Command::input_name),
+            Some(COMMAND_USAGE)
         );
     }
 

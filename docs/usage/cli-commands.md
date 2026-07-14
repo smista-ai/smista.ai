@@ -359,6 +359,10 @@ Type slash commands at the interactive prompt.
 - `/trace` prints the current session's execution trace in the transcript. Each
   event includes its timestamp, task and event types, provider and model,
   matched routing rule when available, and decrypted payload.
+- `/usage` shows the current session's token and cost totals, followed by
+  per-model and per-task breakdowns with their percentage of session tokens.
+  Models and tasks with no token usage are omitted. Press Escape to return to
+  the main view.
 
 ## Referencing files
 

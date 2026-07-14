@@ -85,7 +85,7 @@ where
             }
             InputEvent::Enter => match &console.prompt {
                 PromptState::Empty => {
-                    tracing::debug!("input event is enter, but prompt input is empty, ignoring");
+                    tracing::trace!("input event is enter, but prompt input is empty, ignoring");
                     None
                 }
                 PromptState::FileAutocomplete(_)
@@ -169,14 +169,14 @@ where
             }
             InputEvent::Interrupt | InputEvent::Escape => self.handle_interrupt(),
             InputEvent::Char(char) => {
-                tracing::debug!("input event is character, pushing to prompt input state");
+                tracing::trace!("input event is character, pushing to prompt input state");
                 console.prompt.push(char);
                 self.refresh_file_autocomplete();
 
                 None
             }
             _ => {
-                tracing::debug!("input event is not handled by the TUI scaffold");
+                tracing::trace!("input event is not handled by the TUI scaffold");
 
                 None
             }
@@ -187,10 +187,10 @@ where
         let files = mentioned_files(&prompt, &self.context.cwd);
 
         if prompt.is_empty() {
-            tracing::debug!("input event is enter, but prompt input is empty, ignoring");
+            tracing::trace!("input event is enter, but prompt input is empty, ignoring");
             None
         } else {
-            tracing::debug!(
+            tracing::trace!(
                 "input event is enter, pushing prompt to history and producing execute command"
             );
             self.state
@@ -299,37 +299,37 @@ where
     fn handle_command(&mut self, command: Command, args: Vec<String>) -> Option<Cmd> {
         match command {
             Command::Chat => {
-                tracing::debug!("input event is chat command, exiting plan mode");
+                tracing::trace!("input event is chat command, exiting plan mode");
                 self.state.plan = false;
                 None
             }
             Command::Clear => {
-                tracing::debug!("input event is clear command, producing `Clear` command");
+                tracing::trace!("input event is clear command, producing `Clear` command");
                 Some(Cmd::Clear)
             }
             Command::Logs => self.handle_log(&args),
             Command::Model => self.handle_model_command(&args),
             Command::Plan => {
-                tracing::debug!("input event is plan command, entering plan mode");
+                tracing::trace!("input event is plan command, entering plan mode");
                 self.state.plan = true;
                 None
             }
             Command::Preview => self.handle_preview_command(&args),
             Command::Providers => {
-                tracing::debug!(
+                tracing::trace!(
                     "input event is providers command, producing list providers command"
                 );
                 Some(Cmd::ListProviders)
             }
             Command::Quit => {
-                tracing::debug!("input event is quit command, producing exit command");
+                tracing::trace!("input event is quit command, producing exit command");
                 self.context.exit.cancel();
 
                 None
             }
             Command::Resume => self.handle_resume_command(&args),
             Command::Skills => {
-                tracing::debug!("input event is skills command, producing list skills command");
+                tracing::trace!("input event is skills command, producing list skills command");
                 self.state.show_skill_list(
                     self.context
                         .skills_store
@@ -340,17 +340,21 @@ where
                 None
             }
             Command::Status => {
-                tracing::debug!(
+                tracing::trace!(
                     "input event is status command, producing get router status command"
                 );
                 Some(Cmd::GetRouterStatus)
             }
             Command::Trace => {
-                tracing::debug!("input event is trace command, producing get trace command");
+                tracing::trace!("input event is trace command, producing get trace command");
                 Some(Cmd::GetTrace)
             }
+            Command::Usage => {
+                tracing::trace!("input event is usage command, producing get usage command");
+                Some(Cmd::GetUsage)
+            }
             Command::Unresolved(unresolved) => {
-                tracing::debug!(
+                tracing::trace!(
                     "input event is unresolved '{unresolved}' command, producing execute command"
                 );
                 self.state
@@ -367,7 +371,7 @@ where
             [offset_str] => match offset_str.parse::<usize>() {
                 Ok(offset) => (offset, DEFAULT_LOG_LIMIT),
                 Err(_) => {
-                    tracing::debug!(
+                    tracing::trace!(
                         offset_str,
                         "input event is log command with invalid offset argument"
                     );
@@ -382,7 +386,7 @@ where
                 match (offset_str.parse::<usize>(), limit_str.parse::<usize>()) {
                     (Ok(offset), Ok(limit)) => (offset, limit),
                     _ => {
-                        tracing::debug!(
+                        tracing::trace!(
                             offset = offset_str,
                             limit = limit_str,
                             "input event is log command with invalid offset or limit argument"
@@ -396,7 +400,7 @@ where
                 }
             }
             _ => {
-                tracing::debug!(
+                tracing::trace!(
                     args.count = args.len(),
                     "input event is log command with invalid argument count"
                 );
@@ -408,7 +412,7 @@ where
             }
         };
 
-        tracing::debug!("getting logs with offset {offset} and limit {limit}");
+        tracing::trace!("getting logs with offset {offset} and limit {limit}");
         self.state.push_history(HistoryEntry::Log(
             self.context.logs.entries_at(offset, limit),
         ));
@@ -419,20 +423,20 @@ where
     fn handle_model_command(&mut self, args: &[String]) -> Option<Cmd> {
         match args {
             [] => {
-                tracing::debug!("input event is model command, listing models");
+                tracing::trace!("input event is model command, listing models");
 
                 Some(Cmd::ListModels)
             }
             model => {
                 let model = model.join(" ");
                 if model == MODEL_AUTO {
-                    tracing::debug!("input event is model auto command, clearing preferred model");
+                    tracing::trace!("input event is model auto command, clearing preferred model");
                     self.state.clear_preferred_model();
 
                     return None;
                 }
 
-                tracing::debug!(%model, "input event is model command with model id; awaiting list of models to validate");
+                tracing::trace!(%model, "input event is model command with model id; awaiting list of models to validate");
                 self.state.set_awaited_model(model);
 
                 Some(Cmd::ListModels)
@@ -441,9 +445,9 @@ where
     }
 
     fn handle_preview_command(&mut self, args: &[String]) -> Option<Cmd> {
-        tracing::debug!("input event is preview command, producing preview routing command");
+        tracing::trace!("input event is preview command, producing preview routing command");
         if args.is_empty() {
-            tracing::debug!("input event is preview command, but no prompt was provided");
+            tracing::trace!("input event is preview command, but no prompt was provided");
             self.state.push_history(HistoryEntry::Error(
                 "No prompt provided for preview command".to_owned(),
             ));
@@ -463,18 +467,18 @@ where
     fn handle_resume_command(&mut self, args: &[String]) -> Option<Cmd> {
         match args {
             [] => {
-                tracing::debug!("input event is resume command, listing sessions");
+                tracing::trace!("input event is resume command, listing sessions");
 
                 Some(Cmd::ListSessions)
             }
             [session_id] => match Uuid::parse_str(session_id) {
                 Ok(session_id) => {
-                    tracing::debug!(%session_id, "input event is resume command with session id");
+                    tracing::trace!(%session_id, "input event is resume command with session id");
 
                     Some(Cmd::ResumeSession(session_id))
                 }
                 Err(_) => {
-                    tracing::debug!(
+                    tracing::trace!(
                         session_id,
                         "input event is resume command with invalid session id"
                     );
@@ -486,7 +490,7 @@ where
                 }
             },
             _ => {
-                tracing::debug!(
+                tracing::trace!(
                     args.count = args.len(),
                     "input event is resume command with invalid argument count"
                 );
@@ -667,18 +671,18 @@ where
                 crate::app::tui::state::RouterState::Thinking(_)
             )
         {
-            tracing::debug!(
+            tracing::trace!(
                 "input event is interrupt, producing continue command to break execution"
             );
             Some(Cmd::Continue(ContinueExecution::Break))
         } else if let Some(console) = self.state.active_component.console_mut()
             && !console.prompt.is_empty()
         {
-            tracing::debug!("input event is interrupt, clearing console prompt input");
+            tracing::trace!("input event is interrupt, clearing console prompt input");
             console.prompt.clear();
             None
         } else {
-            tracing::debug!("input event is interrupt, but router is not thinking, exiting");
+            tracing::trace!("input event is interrupt, but router is not thinking, exiting");
             self.context.exit.cancel();
             None
         }

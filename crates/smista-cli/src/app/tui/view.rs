@@ -1,5 +1,6 @@
 pub(in crate::app::tui) mod console;
 mod select;
+mod usage;
 
 use super::Tui;
 use crate::app::tui::state::ActiveComponentState;
@@ -13,7 +14,7 @@ where
     }
 
     pub(in crate::app::tui) fn render_view(&mut self, sync_history: bool) -> anyhow::Result<()> {
-        tracing::debug!("rendering TUI view");
+        tracing::trace!("rendering TUI view");
 
         self.try_pin_inline_viewport_to_bottom()?;
         if sync_history {
@@ -60,7 +61,7 @@ where
                         select::provider_line,
                     );
                 }
-                ActiveComponentState::Usage(_usage_state) => todo!(),
+                ActiveComponentState::Usage(usage_state) => usage::view(frame, usage_state),
                 ActiveComponentState::SessionsList(list_state) => {
                     select::view_select(
                         frame,

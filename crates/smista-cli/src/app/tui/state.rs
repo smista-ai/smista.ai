@@ -182,7 +182,7 @@ impl State {
         let previous_history_entries = self.history.len();
         self.history.clear();
         self.execution_turn = None;
-        tracing::debug!(
+        tracing::trace!(
             history.previous_entries = previous_history_entries,
             "cleared tui history"
         );
@@ -197,7 +197,7 @@ impl State {
     /// Sets the preferred model selected by the user.
     pub fn set_preferred_model(&mut self, model: ModelReference) {
         self.preferred_model = Some(model);
-        tracing::debug!(preferred_model.present = true, "set tui preferred model");
+        tracing::trace!(preferred_model.present = true, "set tui preferred model");
     }
 
     /// Returns the awaited model selected by the user.
@@ -216,7 +216,7 @@ impl State {
     /// Clears the preferred model selected by the user.
     pub fn clear_preferred_model(&mut self) {
         self.preferred_model = None;
-        tracing::debug!(
+        tracing::trace!(
             preferred_model.present = false,
             "cleared tui preferred model"
         );
@@ -410,14 +410,14 @@ impl State {
 
     fn trace_active_component(&self, component: &'static str, entry_count: Option<usize>) {
         if let Some(entry_count) = entry_count {
-            tracing::debug!(
+            tracing::trace!(
                 component,
                 entry.count = entry_count,
                 history.entries = self.history.len(),
                 "show tui active component"
             );
         } else {
-            tracing::debug!(
+            tracing::trace!(
                 component,
                 history.entries = self.history.len(),
                 "show tui active component"
