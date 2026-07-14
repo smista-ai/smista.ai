@@ -170,7 +170,7 @@ pub struct TraceEvent {
     pub matched_rule: Option<String>,
     /// When the event occurred.
     pub created_at: String,
-    /// Typed event payload, in clear or sealed.
+    /// Typed event payload, already decrypted.
     pub payload: String,
 }
 

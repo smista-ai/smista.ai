@@ -356,6 +356,9 @@ Type slash commands at the interactive prompt.
 - `/skills` lists available skills from the current workspace.
 - `/status` queries the router's `/status` endpoint and prints the router state and
   version.
+- `/trace` prints the current session's execution trace in the transcript. Each
+  event includes its timestamp, task and event types, provider and model,
+  matched routing rule when available, and decrypted payload.
 
 ## Referencing files
 

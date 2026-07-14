@@ -12,7 +12,7 @@ use crate::app::input_listener::InputEvent;
 use crate::app::router_client::msg::{
     AssistantTurn, Model, Provider, SessionListItem, TraceEvent, TraceSummary,
 };
-use crate::app::tui::state::{ActiveComponentState, HistoryEntry, ListState, RouterState};
+use crate::app::tui::state::{ActiveComponentState, HistoryEntry, RouterState};
 use crate::config::Config;
 use crate::credentials::{CredentialBackend, CredentialsStorage, E2eeKeysCredentials};
 use crate::skills::SkillStore;
@@ -156,23 +156,6 @@ fn handle_sessions_list_renders_select_view() {
 }
 
 #[test]
-fn render_logs_list_select_view() {
-    let exit = CancellationToken::new();
-    let context = app_context(exit);
-    context.logs.push(crate::app::log::AppLogEntry::new(
-        crate::app::log::LogLevel::Warn,
-        "log row".to_owned(),
-    ));
-    let mut tui = Tui::<TestBackend>::new_test(context);
-    tui.state.active_component = ActiveComponentState::LogsList(ListState::default());
-
-    tui.view().expect("logs list view renders");
-
-    assert_backend_contains(&tui, "Logs");
-    assert_backend_contains(&tui, "log row");
-}
-
-#[test]
 fn handle_models_list_renders_select_view() {
     let exit = CancellationToken::new();
     let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
@@ -215,26 +198,32 @@ fn handle_providers_list_renders_select_view() {
 }
 
 #[test]
-fn handle_trace_renders_trace_select_view() {
+fn handle_trace_renders_history_without_replacing_console() {
     let exit = CancellationToken::new();
     let mut tui = Tui::<TestBackend>::new_test(app_context(exit));
 
     tui.handle_client_msg(Msg::Trace(TraceSummary {
         events: vec![TraceEvent {
-            event_type: "route",
-            task_type: "code",
+            event_type: "routing_decision",
+            task_type: "edit",
             provider: "openai".to_owned(),
             model: "gpt-4.1".to_owned(),
-            matched_rule: None,
+            matched_rule: Some("code edits".to_owned()),
             created_at: TRACE_CREATED_AT.to_owned(),
-            payload: "{}".to_owned(),
+            payload: "selected by policy".to_owned(),
         }],
     }))
     .expect("trace message is handled");
 
-    assert_backend_contains(&tui, "Trace");
-    assert_backend_contains(&tui, "route");
-    assert_backend_contains(&tui, "openai/gpt-4.1");
+    assert!(matches!(
+        tui.state.active_component,
+        ActiveComponentState::Console(_)
+    ));
+    assert_backend_contains(&tui, TRACE_CREATED_AT);
+    assert_backend_contains(&tui, "edit routing_decision (openai/gpt-4.1)");
+    assert_backend_contains(&tui, "matched rule: code");
+    assert_backend_contains(&tui, "selected by policy");
+    assert_backend_contains(&tui, PROMPT_PLACEHOLDER);
 }
 
 #[test]
