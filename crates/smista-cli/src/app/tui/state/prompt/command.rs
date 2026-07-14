@@ -16,6 +16,7 @@ pub(super) const COMMAND_RESUME: &str = "resume";
 pub(super) const COMMAND_SKILLS: &str = "skills";
 pub(super) const COMMAND_STATUS: &str = "status";
 pub(super) const COMMAND_TRACE: &str = "trace";
+pub(super) const COMMAND_USAGE: &str = "usage";
 
 const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_CHAT, Command::Chat),
@@ -32,6 +33,7 @@ const COMMAND_SPECS: &[(&str, Command)] = &[
     (COMMAND_SKILLS, Command::Skills),
     (COMMAND_STATUS, Command::Status),
     (COMMAND_TRACE, Command::Trace),
+    (COMMAND_USAGE, Command::Usage),
 ];
 
 /// A recognized or in-progress slash command.
@@ -61,6 +63,8 @@ pub enum Command {
     Status,
     /// `/trace` command, shows the current trace of the router.
     Trace,
+    /// `/usage` command, shows the current usage of models - tokens and cost.
+    Usage,
     /// Still unresolved
     Unresolved(String),
 }
@@ -82,6 +86,7 @@ impl Command {
             Self::Skills => COMMAND_SKILLS,
             Self::Status => COMMAND_STATUS,
             Self::Trace => COMMAND_TRACE,
+            Self::Usage => COMMAND_USAGE,
             Self::Unresolved(command) => command,
         }
     }

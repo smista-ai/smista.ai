@@ -7,13 +7,6 @@ use smista_sdk::core::model::ModelReference;
 use uuid::Uuid;
 
 /// Commands are sent by the UI to the router client to be executed on the smista-router.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Router command variants are scaffolded before TUI routing is wired."
-    )
-)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cmd {
     /// Execute a user prompt through the router.
