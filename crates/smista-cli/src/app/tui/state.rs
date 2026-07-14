@@ -18,7 +18,10 @@ use std::collections::VecDeque;
 use smista_sdk::core::model::ModelReference;
 use uuid::Uuid;
 
-pub use self::active_component::{ActiveComponentKind, ActiveComponentState, UsageState};
+use self::active_component::help_entries;
+pub use self::active_component::{
+    ActiveComponentKind, ActiveComponentState, HelpEntry, UsageState,
+};
 pub use self::console::ConsoleState;
 pub use self::history::HistoryEntry;
 pub use self::list::ListState;
@@ -31,6 +34,7 @@ use crate::skills::SkillEntry;
 
 const COMPONENT_MODELS_LIST: &str = "models_list";
 const COMPONENT_CONSOLE: &str = "console";
+const COMPONENT_HELP: &str = "help";
 const COMPONENT_PROVIDERS_LIST: &str = "providers_list";
 const COMPONENT_SESSIONS_LIST: &str = "sessions_list";
 const COMPONENT_SKILL_LIST: &str = "skill_list";
@@ -226,6 +230,14 @@ impl State {
     pub fn show_console(&mut self) {
         self.active_component = ActiveComponentState::Console(ConsoleState::default());
         self.trace_active_component(COMPONENT_CONSOLE, None);
+    }
+
+    /// Shows slash-command help without changing history.
+    pub fn show_help(&mut self) {
+        let entries = help_entries();
+        let entry_count = entries.len();
+        self.active_component = ActiveComponentState::Help(ListState::new(entries));
+        self.trace_active_component(COMPONENT_HELP, Some(entry_count));
     }
 
     /// Shows the skill list view without changing history.
@@ -666,6 +678,12 @@ mod tests {
     fn show_methods_switch_active_component_without_touching_history() {
         let mut state = State::default();
         state.push_history(HistoryEntry::AssistantMessage(ASSISTANT_MESSAGE.to_owned()));
+
+        state.show_help();
+        assert!(matches!(
+            state.active_component,
+            ActiveComponentState::Help(_)
+        ));
 
         state.show_skill_list(Vec::new());
         assert!(matches!(
