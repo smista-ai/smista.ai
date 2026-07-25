@@ -82,7 +82,7 @@ pub enum PromptHistoryNavigation {
 }
 
 /// Terminal UI state for the smista-cli user interface.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct State {
     /// State of the active component in the TUI.
     ///
@@ -317,8 +317,7 @@ impl State {
 
         match msg {
             Msg::ApprovalPrompt(prompt) => {
-                self.execution_turn = Some(ExecutionTurn::Approval(prompt.clone()));
-                self.history.push(HistoryEntry::ApprovalRequest(prompt));
+                self.execution_turn = Some(ExecutionTurn::Approval(prompt));
             }
             Msg::AssistantTurn(turn) => {
                 self.execution_turn = None;
@@ -747,7 +746,7 @@ mod tests {
     }
 
     #[test]
-    fn tool_call_and_approval_messages_update_history_and_execution_turn() {
+    fn tool_call_and_approval_messages_update_execution_state_without_duplicate_history() {
         let mut state = State::default();
 
         state.apply_msg(Msg::ToolCallStarted(ToolCallStarted {
@@ -778,11 +777,14 @@ mod tests {
 
         assert_eq!(
             state.history.last(),
-            Some(&HistoryEntry::ApprovalRequest(approval))
+            Some(&HistoryEntry::ToolCall {
+                name: TOOL_NAME.to_owned(),
+                input: TOOL_CALL_ID.to_owned(),
+            })
         );
         assert!(matches!(
             state.execution_turn,
-            Some(ExecutionTurn::Approval(_))
+            Some(ExecutionTurn::Approval(prompt)) if prompt == approval
         ));
     }
 

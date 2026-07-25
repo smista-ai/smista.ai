@@ -3,7 +3,7 @@
 use crate::app::router_client::msg::{ApprovalPrompt, ToolCallStarted};
 
 /// State for content that has not yet become a durable history entry.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExecutionTurn {
     /// The assistant is streaming content.
     Streaming {

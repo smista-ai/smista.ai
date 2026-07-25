@@ -14,7 +14,7 @@ mod server;
 
 pub use self::endpoint::{Endpoint, EndpointStatus};
 pub use self::request::Request;
-pub use self::response::{ResponseTemplate, api_error, sse};
+pub use self::response::{ResponseGate, ResponseTemplate, api_error, sse};
 pub use self::server::{MockRouter, MockRouterBuilder};
 
 #[cfg(test)]
@@ -86,6 +86,115 @@ mod tests {
         assert_eq!(status, 500);
         assert_eq!(body.error.code, "internal_error");
         assert_eq!(body.error.message, "boom");
+    }
+
+    #[tokio::test]
+    async fn should_serve_scripted_responses_then_fall_back_to_override() {
+        let first = StatusResponse {
+            status: "first".to_owned(),
+            version: "1".to_owned(),
+        };
+        let second = StatusResponse {
+            status: "second".to_owned(),
+            version: "2".to_owned(),
+        };
+        let fallback = StatusResponse {
+            status: "fallback".to_owned(),
+            version: "3".to_owned(),
+        };
+        let router = MockRouter::builder()
+            .respond_sequence(
+                Endpoint::Status,
+                [
+                    ResponseTemplate::new(200).set_body_json(first.clone()),
+                    ResponseTemplate::new(200).set_body_json(second.clone()),
+                ],
+            )
+            .respond(
+                Endpoint::Status,
+                ResponseTemplate::new(200).set_body_json(fallback.clone()),
+            )
+            .start()
+            .await;
+
+        assert_eq!(
+            get_json::<StatusResponse>(&router, "/status").await.1,
+            first
+        );
+        assert_eq!(
+            get_json::<StatusResponse>(&router, "/status").await.1,
+            second
+        );
+        assert_eq!(
+            get_json::<StatusResponse>(&router, "/status").await.1,
+            fallback
+        );
+    }
+
+    #[tokio::test]
+    async fn should_fall_back_to_default_after_scripted_responses() {
+        let scripted = StatusResponse {
+            status: "scripted".to_owned(),
+            version: "1".to_owned(),
+        };
+        let router = MockRouter::builder()
+            .respond_sequence(
+                Endpoint::Status,
+                [ResponseTemplate::new(200).set_body_json(scripted.clone())],
+            )
+            .start()
+            .await;
+
+        assert_eq!(
+            get_json::<StatusResponse>(&router, "/status").await.1,
+            scripted
+        );
+        assert_eq!(
+            get_json::<StatusResponse>(&router, "/status").await.1,
+            defaults::status()
+        );
+    }
+
+    #[tokio::test]
+    async fn should_gate_a_response_until_the_test_opens_it() {
+        let gate = ResponseGate::new();
+        let router = MockRouter::builder()
+            .respond(
+                Endpoint::Status,
+                ResponseTemplate::new(200)
+                    .set_body_json(defaults::status())
+                    .set_gate(gate.clone()),
+            )
+            .start()
+            .await;
+        let uri = format!("{}/status", router.uri());
+        let request = tokio::spawn(async move {
+            reqwest::Client::new()
+                .get(uri)
+                .send()
+                .await
+                .expect("the request reaches the mock")
+        });
+
+        gate.wait_until_blocked().await;
+        assert!(!request.is_finished());
+        gate.open();
+
+        let response = request.await.expect("the request task should not panic");
+        assert_eq!(response.status().as_u16(), 200);
+    }
+
+    #[tokio::test]
+    async fn should_serialize_positive_default_usage_and_estimated_cost() {
+        let router = MockRouter::start().await;
+        let path = format!("/api/v1/sessions/{}/usage", Uuid::nil());
+        let (_, body) = get_json::<serde_json::Value>(&router, &path).await;
+
+        assert_eq!(body["total"]["input_tokens"], 1_200);
+        assert_eq!(body["total"]["output_tokens"], 500);
+        assert_eq!(body["total"]["total_tokens"], 1_700);
+        assert_eq!(body["total"]["estimated_cost"], "0.042");
+        assert_eq!(body["total"]["currency"], "USD");
     }
 
     #[tokio::test]

@@ -17,7 +17,12 @@ use ratatui::backend::TestBackend;
 use ratatui::backend::{Backend, CrosstermBackend};
 use ratatui::{TerminalOptions, Viewport};
 
+#[cfg(not(test))]
 use self::state::State;
+#[cfg(test)]
+pub(super) use self::state::{
+    ActiveComponentState, ExecutionTurn, HistoryEntry, RouterState, State,
+};
 use crate::app::input_listener::InputEvent;
 use crate::app::router_client::{Cmd, Msg};
 use crate::app::{AppContext, command_name};
@@ -168,6 +173,18 @@ impl Tui<TestBackend> {
         tui.view().expect("test backend terminal is infallible");
 
         tui
+    }
+}
+
+#[cfg(test)]
+impl<B> Tui<B>
+where
+    B: Backend,
+{
+    /// Returns a clone of the observable TUI state for app-level tests.
+    #[must_use]
+    pub(super) fn snapshot(&self) -> State {
+        self.state.clone()
     }
 }
 

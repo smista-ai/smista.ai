@@ -4,8 +4,8 @@
 //! input into the provider-agnostic [`RequestMessage`] sequence the model is
 //! invoked with. The included instruction, skill and memory candidates frame
 //! the conversation in a single system message; the file and diff candidates are
-//! inlined as a user context block; history and any prior-turn tool exchanges
-//! are replayed in order.
+//! inlined with the active user request; history and any prior-turn tool
+//! exchanges are replayed in order.
 use smista_core::message::MessageRole;
 use smista_providers::api::RequestMessage;
 
@@ -16,10 +16,10 @@ use crate::router::resolver::context::{CandidateKind, RecalledMessage, ResolvedC
 ///
 /// Layout: one `System` message (the `preamble` followed by every included
 /// instruction, skill and memory candidate), the recalled `history` as
-/// `User`/`Assistant` messages, the included file and diff candidates inlined as
-/// one `User` context block, the user `input` as the final `User` message, then
-/// any `tool_followups` (assistant tool-call and tool-result pairs accumulated
-/// earlier in this request) appended verbatim.
+/// `User`/`Assistant` messages, the included file and diff candidates inlined
+/// with the active user `input`, then any `tool_followups` (assistant tool-call
+/// and tool-result pairs accumulated earlier in this request) appended
+/// verbatim.
 pub(crate) fn build_messages(
     preamble: &str,
     ctx: &ResolvedContext,
@@ -35,20 +35,32 @@ pub(crate) fn build_messages(
 
     messages.extend(history.iter().map(recalled_to_message));
 
-    if let Some(context_block) = build_context_block(ctx) {
-        messages.push(RequestMessage::User {
-            content: context_block,
-        });
-    }
-
     messages.push(RequestMessage::User {
-        content: input.text.clone(),
+        content: build_user_prompt(ctx, input),
     });
 
     messages.extend(tool_followups.iter().cloned());
 
     tracing::trace!(messages = messages.len(), "assembled prompt");
     messages
+}
+
+/// Builds the active prompt, keeping attached context in the same user turn.
+///
+/// Provider adapters distinguish the active prompt from chat history. Keeping
+/// attached files here ensures providers such as Ollama receive their contents
+/// as part of the request they must answer.
+fn build_user_prompt(ctx: &ResolvedContext, input: &TaskInput) -> String {
+    build_context_block(ctx).map_or_else(
+        || input.text.clone(),
+        |context| {
+            format!(
+                "The following context is attached and available for this request:\n\n\
+                 {context}\n\nUser request:\n{}",
+                input.text
+            )
+        },
+    )
 }
 
 /// Concatenates the preamble with the included framing candidates.
@@ -134,9 +146,11 @@ mod tests {
 
     #[test]
     fn should_assemble_system_history_and_user_input() {
+        let mut file = candidate(CandidateKind::File, "fn main() {}");
+        file.path = Some(std::path::PathBuf::from("src/main.rs"));
         let ctx = resolved_context_with(vec![
             candidate(CandidateKind::Instruction, "AGENTS.md body"),
-            candidate(CandidateKind::File, "fn main() {}"),
+            file,
         ]);
         let history = vec![RecalledMessage {
             role: MessageRole::User,
@@ -150,6 +164,7 @@ mod tests {
         };
         let messages = build_messages("PREAMBLE", &ctx, &history, &input, &[]);
 
+        assert_eq!(messages.len(), 3);
         assert!(matches!(
             messages.first(),
             Some(RequestMessage::System { content })
@@ -161,11 +176,26 @@ mod tests {
         )));
         assert!(matches!(
             messages.last(),
-            Some(RequestMessage::User { content }) if content == "refactor"
+            Some(RequestMessage::User { content })
+                if content.contains("# src/main.rs\nfn main() {}")
+                    && content.ends_with("User request:\nrefactor")
         ));
-        assert!(messages.iter().any(|message| matches!(
-            message,
-            RequestMessage::User { content } if content.contains("fn main")
-        )));
+    }
+
+    #[test]
+    fn should_leave_active_prompt_unchanged_without_attached_context() {
+        let ctx = resolved_context_with(Vec::new());
+        let input = TaskInput {
+            text: "explain this".to_string(),
+            command: None,
+            explicit_model: None,
+        };
+
+        let messages = build_messages("PREAMBLE", &ctx, &[], &input, &[]);
+
+        assert!(matches!(
+            messages.last(),
+            Some(RequestMessage::User { content }) if content == "explain this"
+        ));
     }
 }

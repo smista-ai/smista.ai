@@ -54,6 +54,9 @@ fn usage() -> Usage {
     Usage {
         input_tokens: Some(1_200),
         output_tokens: Some(500),
+        total_tokens: Some(1_700),
+        estimated_cost: Some(rust_decimal::Decimal::new(42, 3)),
+        currency: Some("USD".to_owned()),
         ..Default::default()
     }
 }

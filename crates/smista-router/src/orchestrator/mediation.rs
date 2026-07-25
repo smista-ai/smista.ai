@@ -5,6 +5,8 @@
 //! file-changing tool) is refused with a reason fed back to the model; an
 //! `allow` runs without confirmation; an `ask` (or an unset mode) runs only
 //! after the user approves. Read-only tools are never denied by plan mode.
+use std::collections::BTreeSet;
+
 use smista_core::api::ToolApproval;
 use smista_core::policy::{PermissionMode, ToolsConfig};
 use smista_providers::api::ToolCall;
@@ -34,10 +36,20 @@ pub(crate) struct ClientCall {
 /// mode; read-only tools are unaffected. Otherwise a `deny` is refused, an
 /// `allow` runs without confirmation, and an `ask` (or unset mode) runs only
 /// after approval.
-pub(crate) fn mediate(calls: Vec<ToolCall>, policy: &ToolsConfig, plan_mode: bool) -> Mediated {
+pub(crate) fn mediate(
+    calls: Vec<ToolCall>,
+    offered: &BTreeSet<String>,
+    policy: &ToolsConfig,
+    plan_mode: bool,
+) -> Mediated {
     let mut denied = Vec::new();
     let mut client = Vec::new();
     for call in calls {
+        if !offered.contains(&call.name) {
+            tracing::debug!(tool = %call.name, "denying tool not offered to the model");
+            denied.push((call, "denied: tool was not offered"));
+            continue;
+        }
         if plan_mode && tool_changes_files(&call.name) {
             tracing::debug!(tool = %call.name, "denying file-changing tool while planning");
             denied.push((call, "denied: planning mode forbids changing the machine"));
@@ -82,7 +94,11 @@ mod tests {
         config.set("shell", PermissionMode::Deny);
         // edit_file unset -> Ask
         let calls = vec![call("read_file"), call("shell"), call("edit_file")];
-        let mediated = mediate(calls, &config, false);
+        let offered = ["read_file", "shell", "edit_file"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let mediated = mediate(calls, &offered, &config, false);
 
         assert_eq!(mediated.denied.len(), 1);
         assert!(
@@ -104,7 +120,16 @@ mod tests {
     #[test]
     fn should_deny_file_changing_tools_in_plan_mode() {
         let config = ToolsConfig::default();
-        let mediated = mediate(vec![call("write_file"), call("read_file")], &config, true);
+        let offered = ["write_file", "read_file"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let mediated = mediate(
+            vec![call("write_file"), call("read_file")],
+            &offered,
+            &config,
+            true,
+        );
         assert!(mediated.denied.iter().any(|(c, _)| c.name == "write_file"));
         assert!(
             mediated
@@ -112,5 +137,18 @@ mod tests {
                 .iter()
                 .any(|client| client.call.name == "read_file")
         );
+    }
+
+    #[test]
+    fn should_deny_a_tool_that_was_not_offered() {
+        let config = ToolsConfig::default();
+        let offered = ["read_file"].into_iter().map(str::to_owned).collect();
+
+        let mediated = mediate(vec![call("smista-conventions")], &offered, &config, false);
+
+        assert!(mediated.client.is_empty());
+        assert_eq!(mediated.denied.len(), 1);
+        assert_eq!(mediated.denied[0].0.name, "smista-conventions");
+        assert_eq!(mediated.denied[0].1, "denied: tool was not offered");
     }
 }

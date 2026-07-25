@@ -1,6 +1,7 @@
 //! Ollama [`Provider`] implementation.
 
 pub mod client;
+pub(crate) mod tool_call;
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -3,15 +3,28 @@
 use std::collections::BTreeMap;
 
 use anyhow::bail;
-use smista_sdk::client::Client;
+use futures::stream::BoxStream;
+use smista_sdk::client::{Client, RouterClientError};
 use smista_sdk::core::api::{
     ApprovalDecision as ApiApprovalDecision, ApprovalDecisionEntry, ContentRef, ContinueRequest,
-    EncryptedPayload, ToolRequest, ToolResult, UserMessage,
+    EncryptedPayload, ToolRequest, ToolResult, TurnEvent, UserMessage,
 };
 
 use crate::app::router_client::state::State;
-use crate::app::router_client::{Msg, RouterClient, cmd, continuation_name, tool_changes_files};
+use crate::app::router_client::{
+    Msg, READ_FILE_TOOL, RouterClient, cmd, continuation_name, tool_changes_files,
+};
 use crate::tools::{ToolCall, ToolExecutor};
+
+/// Result of routing one user-authored continuation command.
+pub(in crate::app::router_client) enum UserContinuation {
+    /// The command does not match the current router state.
+    Ignored,
+    /// The command was handled without opening a replacement stream.
+    Handled,
+    /// Drain this stream instead of the active model stream.
+    Replace(BoxStream<'static, Result<TurnEvent, RouterClientError>>),
+}
 
 impl RouterClient {
     /// Sends a continuation that answers the current router pause.
@@ -23,12 +36,35 @@ impl RouterClient {
         &mut self,
         continue_execution: cmd::ContinueExecution,
     ) -> bool {
+        match self.open_user_continuation(continue_execution).await {
+            UserContinuation::Ignored => return false,
+            UserContinuation::Handled => {}
+            UserContinuation::Replace(stream) => {
+                self.handle_turn_stream(stream).await;
+                if self.state == State::Streaming {
+                    self.state = State::Idle;
+                }
+            }
+        }
+
+        if self.state == State::Idle {
+            self.send_msg(Msg::Idle).await;
+        }
+
+        true
+    }
+
+    /// Opens a continuation without recursively draining its response stream.
+    pub(in crate::app::router_client) async fn open_user_continuation(
+        &mut self,
+        continue_execution: cmd::ContinueExecution,
+    ) -> UserContinuation {
         let Some(session) = self.session.clone() else {
             tracing::warn!(
                 continuation = continuation_name(&continue_execution),
                 "tried to continue execution, but no session id is present",
             );
-            return false;
+            return UserContinuation::Ignored;
         };
 
         let session_id = session.id;
@@ -44,7 +80,7 @@ impl RouterClient {
                     Ok(request) => request,
                     Err(err) => {
                         self.report_continuation_build_error(err).await;
-                        return true;
+                        return UserContinuation::Handled;
                     }
                 }
             }
@@ -53,7 +89,7 @@ impl RouterClient {
                     Ok(request) => request,
                     Err(err) => {
                         self.report_continuation_build_error(err).await;
-                        return true;
+                        return UserContinuation::Handled;
                     }
                 }
             }
@@ -62,7 +98,7 @@ impl RouterClient {
                     Ok(request) => request,
                     Err(err) => {
                         self.report_continuation_build_error(err).await;
-                        return true;
+                        return UserContinuation::Handled;
                     }
                 }
             }
@@ -88,7 +124,7 @@ impl RouterClient {
                     Ok(request) => request,
                     Err(err) => {
                         self.report_continuation_build_error(err).await;
-                        return true;
+                        return UserContinuation::Handled;
                     }
                 }
             }
@@ -99,7 +135,7 @@ impl RouterClient {
                     "received continuation in state, ignoring",
                 );
 
-                return false;
+                return UserContinuation::Ignored;
             }
         };
 
@@ -111,10 +147,7 @@ impl RouterClient {
         {
             Ok(stream) => {
                 self.state = State::Streaming;
-                self.handle_turn_stream(stream).await;
-                if self.state == State::Streaming {
-                    self.state = State::Idle;
-                }
+                UserContinuation::Replace(stream)
             }
             Err(err) => {
                 tracing::error!(
@@ -125,10 +158,10 @@ impl RouterClient {
                     "failed to send continuation request to router: {err}"
                 )))
                 .await;
+                self.state = State::Idle;
+                UserContinuation::Handled
             }
         }
-
-        true
     }
 
     async fn tool_results_request(
@@ -172,6 +205,13 @@ impl RouterClient {
                 && tool_changes_files(&request.name)
             {
                 self.accept_edits = true;
+            }
+
+            if decision.outcome == cmd::ApprovalOutcome::Approved
+                && decision.scope == cmd::ApprovalScope::AlwaysForSession
+                && request.name == READ_FILE_TOOL
+            {
+                self.accept_reads = true;
             }
 
             if decision.outcome == cmd::ApprovalOutcome::Approved

@@ -23,6 +23,7 @@ const DARK_USER_MESSAGE_ALPHA: f32 = 0.24;
 const DEFAULT_INPUT_BACKGROUND: Color = Color::Rgb(35, 35, 35);
 const LIGHT_USER_MESSAGE_ALPHA: f32 = 0.04;
 const PROMPT_MARKER_WIDTH: usize = 2;
+const READ_FILE_TOOL: &str = "read_file";
 const WRITE_FILE_TOOL: &str = "write_file";
 const PROMPT_MARKER: &str = "› ";
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -43,7 +44,7 @@ pub fn view_console<'a>(
         live_lines.len(),
         frame.area().width,
     );
-    let status_line = status_line(router_state);
+    let status_line = status_line(router_state, execution_turn);
     let status_height = u16::from(status_line.is_some());
     let [_history_area, status_area, input_area, footer_area] = Layout::vertical([
         Constraint::Min(0),
@@ -75,7 +76,14 @@ pub fn view_console<'a>(
     }
 }
 
-fn status_line(router_state: RouterState) -> Option<Line<'static>> {
+fn status_line(
+    router_state: RouterState,
+    execution_turn: Option<&ExecutionTurn>,
+) -> Option<Line<'static>> {
+    if matches!(execution_turn, Some(ExecutionTurn::Approval(_))) {
+        return None;
+    }
+
     match router_state {
         RouterState::Idle => None,
         RouterState::Interrupted => Some(Line::from(Span::styled(
@@ -346,23 +354,34 @@ fn approval_live_lines(console: &ConsoleState, prompt: &ApprovalPrompt) -> Vec<L
 }
 
 fn approval_options(prompt: &ApprovalPrompt) -> Vec<String> {
+    let once = "1. Yes, proceed (y)".to_owned();
+    let reject = "No, and tell Smista what to do differently (n)";
+
+    if prompt.tool_name.as_deref() == Some(READ_FILE_TOOL) {
+        return vec![
+            once,
+            "2. Yes, and don't ask again for reading files (a)".to_owned(),
+            format!("3. {reject}"),
+        ];
+    }
+
     if prompt.tool_name.as_deref().is_some_and(tool_changes_files) {
         return vec![
-            "Yes, apply this edit".to_owned(),
-            "Yes, accept edits in this session".to_owned(),
-            "No".to_owned(),
+            once,
+            "2. Yes, and don't ask again for writing files (a)".to_owned(),
+            format!("3. {reject}"),
         ];
     }
 
     if let Some(alias) = &prompt.wildcard_alias {
         return vec![
-            "Yes, run once".to_owned(),
-            format!("Yes, always approve {alias} in this session"),
-            "No".to_owned(),
+            once,
+            format!("2. Yes, and don't ask again for commands that start with `{alias}` (a)"),
+            format!("3. {reject}"),
         ];
     }
 
-    vec!["Yes".to_owned(), "No".to_owned()]
+    vec![once, format!("2. {reject}")]
 }
 
 fn tool_changes_files(name: &str) -> bool {
@@ -992,7 +1011,14 @@ mod tests {
     }
 
     #[test]
-    fn edit_approvals_offer_session_acceptance() {
+    fn file_approvals_offer_numbered_session_choices() {
+        let read_prompt = ApprovalPrompt {
+            id: "read-1".to_owned(),
+            title: "Approve read_file".to_owned(),
+            detail: "Cargo.toml".to_owned(),
+            tool_name: Some(READ_FILE_TOOL.to_owned()),
+            wildcard_alias: None,
+        };
         let prompt = ApprovalPrompt {
             id: "edit-1".to_owned(),
             title: "Approve edit_file".to_owned(),
@@ -1002,20 +1028,50 @@ mod tests {
         };
 
         assert_eq!(
+            approval_options(&read_prompt),
+            vec![
+                "1. Yes, proceed (y)".to_owned(),
+                "2. Yes, and don't ask again for reading files (a)".to_owned(),
+                "3. No, and tell Smista what to do differently (n)".to_owned(),
+            ]
+        );
+        assert_eq!(
             approval_options(&prompt),
             vec![
-                "Yes, apply this edit".to_owned(),
-                "Yes, accept edits in this session".to_owned(),
-                "No".to_owned(),
+                "1. Yes, proceed (y)".to_owned(),
+                "2. Yes, and don't ask again for writing files (a)".to_owned(),
+                "3. No, and tell Smista what to do differently (n)".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn command_approvals_name_the_session_alias() {
+        let prompt = ApprovalPrompt {
+            id: "shell-1".to_owned(),
+            title: "Approve shell".to_owned(),
+            detail: "cargo test -p smista-cli".to_owned(),
+            tool_name: Some("shell".to_owned()),
+            wildcard_alias: Some("cargo test *".to_owned()),
+        };
+
+        assert_eq!(
+            approval_options(&prompt),
+            vec![
+                "1. Yes, proceed (y)".to_owned(),
+                "2. Yes, and don't ask again for commands that start with `cargo test *` (a)"
+                    .to_owned(),
+                "3. No, and tell Smista what to do differently (n)".to_owned(),
             ]
         );
     }
 
     #[test]
     fn thinking_status_line_shows_elapsed_interrupt_hint() {
-        let line = status_line(RouterState::Thinking(
-            Instant::now() - Duration::from_secs(3),
-        ))
+        let line = status_line(
+            RouterState::Thinking(Instant::now() - Duration::from_secs(3)),
+            None,
+        )
         .expect("thinking router state renders a status line");
 
         assert!(plain_text(&line).contains("Working (3s - esc to interrupt)"));
@@ -1023,11 +1079,30 @@ mod tests {
 
     #[test]
     fn interrupted_status_line_is_red() {
-        let line = status_line(RouterState::Interrupted)
+        let line = status_line(RouterState::Interrupted, None)
             .expect("interrupted router state renders a status line");
 
         assert_eq!(plain_text(&line), "Interrupted. What should we do instead?");
         assert_eq!(line.spans[0].style.fg, Some(Color::LightRed));
+    }
+
+    #[test]
+    fn approval_prompt_suppresses_working_status() {
+        let prompt = ApprovalPrompt {
+            id: "read-1".to_owned(),
+            title: "Approve read_file".to_owned(),
+            detail: "Path: Cargo.toml".to_owned(),
+            tool_name: Some("read_file".to_owned()),
+            wildcard_alias: None,
+        };
+
+        assert!(
+            status_line(
+                RouterState::Thinking(Instant::now()),
+                Some(&ExecutionTurn::Approval(prompt)),
+            )
+            .is_none()
+        );
     }
 
     #[test]

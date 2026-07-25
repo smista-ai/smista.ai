@@ -6,9 +6,6 @@ use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-#[cfg(test)]
-pub mod mock;
-
 /// Input events emitted by the input listener.
 ///
 /// These variants keep terminal-specific input details out of the application
