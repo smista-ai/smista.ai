@@ -1,0 +1,189 @@
+name: Release and publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without a leading v"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate and run npm publish in dry-run mode only"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-publish
+  cancel-in-progress: false
+
+jobs:
+  publish-sdk:
+    name: Publish npm package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+      - name: Install just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - name: Validate release metadata
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]]; then
+            echo "::error::Releases must run from $DEFAULT_BRANCH."
+            exit 1
+          fi
+
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Version must be a valid semantic version without a leading v."
+            exit 1
+          fi
+
+          workspace_version=$(sed -n \
+            '/^\[workspace\.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' \
+            Cargo.toml)
+          sdk_version=$(jq -r '.version' sdk/package.json)
+          sdk_lock_version=$(jq -r '.packages[""].version' sdk/package-lock.json)
+
+          if [[ "$workspace_version" != "$VERSION" ]]; then
+            echo "::error::Cargo.toml version is $workspace_version, expected $VERSION."
+            exit 1
+          fi
+          if [[ "$sdk_version" != "$VERSION" ]]; then
+            echo "::error::sdk/package.json version is $sdk_version, expected $VERSION."
+            exit 1
+          fi
+          if [[ "$sdk_lock_version" != "$VERSION" ]]; then
+            echo "::error::sdk/package-lock.json version is $sdk_lock_version, expected $VERSION."
+            exit 1
+          fi
+          if git rev-parse --verify --quiet "refs/tags/v$VERSION"; then
+            echo "::error::Tag v$VERSION already exists."
+            exit 1
+          fi
+
+          awk -v version="$VERSION" '
+            function heading_version(line, label) {
+              if (line !~ /^##[[:space:]]+/) {
+                return ""
+              }
+              label = line
+              sub(/^##[[:space:]]+/, "", label)
+              sub(/[[:space:]].*$/, "", label)
+              sub(/^\[/, "", label)
+              sub(/\]$/, "", label)
+              sub(/^v/, "", label)
+              return label
+            }
+
+            heading_version($0) == version {
+              found = 1
+              next
+            }
+            found && /^##[[:space:]]+/ {
+              exit
+            }
+            found {
+              print
+            }
+            END {
+              if (!found) {
+                exit 2
+              }
+            }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md" || {
+            echo "::error::CHANGELOG.md has no section for version $VERSION."
+            exit 1
+          }
+
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "::error::The CHANGELOG.md section for $VERSION is empty."
+            exit 1
+          fi
+
+          cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install npm dependencies
+        run: just sdk_install
+      - name: Check npm version is unpublished
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if npm view "@smista-ai/sdk@$VERSION" version >/dev/null 2>&1; then
+            echo "::error::@smista-ai/sdk@$VERSION is already published."
+            exit 1
+          fi
+      - name: Dry-run npm publish
+        if: ${{ inputs.dry_run }}
+        run: just sdk_npm publish --dry-run
+      - name: Publish npm package
+        if: ${{ !inputs.dry_run }}
+        run: just publish_sdk
+
+  github-release:
+    name: Create GitHub release
+    needs: publish-sdk
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Generate release notes from changelog
+        run: |
+          set -euo pipefail
+
+          awk -v version="$VERSION" '
+            function heading_version(line, label) {
+              if (line !~ /^##[[:space:]]+/) {
+                return ""
+              }
+              label = line
+              sub(/^##[[:space:]]+/, "", label)
+              sub(/[[:space:]].*$/, "", label)
+              sub(/^\[/, "", label)
+              sub(/\]$/, "", label)
+              sub(/^v/, "", label)
+              return label
+            }
+
+            heading_version($0) == version {
+              found = 1
+              next
+            }
+            found && /^##[[:space:]]+/ {
+              exit
+            }
+            found {
+              print
+            }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
