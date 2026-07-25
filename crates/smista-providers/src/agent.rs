@@ -35,6 +35,7 @@ use crate::api::{
     ToolChoice, ToolDefinition,
 };
 use crate::memory::{MemoryRecord, MemoryScope, MemoryStorage, MemoryTool};
+use crate::provider::tool_call::{TextToolCallStream, decoder_for_provider};
 
 /// Maximum number of memory records to load from each memory type (user and session) when building the agent preamble.
 const MEMORIES_MAX_RECORDS: usize = 40;
@@ -203,6 +204,7 @@ where
             request.tools = tools.len(),
             "starting completion"
         );
+        let text_tool_call_decoder = decoder_for_provider(&self.descriptor.provider);
 
         let mut history: Vec<RigMessage> = messages.into_iter().map(into_rig_message).collect();
         let Some(mut prompt) = history.pop() else {
@@ -245,6 +247,26 @@ where
                     AssistantContent::Reasoning(_) | AssistantContent::Image(_) => {}
                 }
             }
+            let recovered_text_tool_calls = if tool_calls.is_empty() {
+                text_tool_call_decoder.and_then(|decoder| {
+                    decoder.decode(&content).map(|calls| {
+                        tracing::debug!(
+                            tool.calls = calls.len(),
+                            "promoting textual model output to structured tool calls"
+                        );
+                        content.clear();
+                        tool_calls.extend(calls.into_iter().enumerate().map(|(index, call)| {
+                            RigToolCall::new(
+                                format!("text-tool-call-{index}"),
+                                ToolFunction::new(call.name, call.arguments),
+                            )
+                        }));
+                    })
+                })
+            } else {
+                None
+            }
+            .is_some();
 
             let all_internal = !tool_calls.is_empty()
                 && tool_calls
@@ -260,7 +282,11 @@ where
                     "completion finished with tool calls to mediate"
                 );
                 return Ok(CompletionResponse {
-                    finish_reason: finish_reason(&response.raw_response, !tool_calls.is_empty()),
+                    finish_reason: if recovered_text_tool_calls {
+                        FinishReason::ToolCalls
+                    } else {
+                        finish_reason(&response.raw_response, !tool_calls.is_empty())
+                    },
                     content,
                     tool_calls: tool_calls.into_iter().map(api_tool_call).collect(),
                     usage: api_usage(usage, self.pricing()),
@@ -337,6 +363,7 @@ where
             request.tools = tools.len(),
             "starting streaming completion"
         );
+        let text_tool_call_decoder = decoder_for_provider(&self.descriptor.provider);
 
         let mut history: Vec<RigMessage> = messages.into_iter().map(into_rig_message).collect();
         let Some(prompt) = history.pop() else {
@@ -387,7 +414,12 @@ where
                     Some(item)
                 };
                 futures::future::ready(next)
-            });
+            })
+            .scan(
+                TextToolCallStream::new(text_tool_call_decoder),
+                |normalizer, item| futures::future::ready(Some(normalizer.push(item))),
+            )
+            .flat_map(futures::stream::iter);
 
         Ok(ResponseStream::new(events))
     }

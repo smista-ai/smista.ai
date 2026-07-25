@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write as _;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use gix::bstr::ByteSlice;
 use sha2::{Digest, Sha256};
@@ -16,8 +17,9 @@ use smista_sdk::core::intent::TaskIntent;
 use smista_sdk::core::model::ModelReference;
 use smista_sdk::core::skill::Skill;
 
+use crate::app::router_client::handler::continuation::UserContinuation;
 use crate::app::router_client::state::State;
-use crate::app::router_client::{Msg, RouterClient};
+use crate::app::router_client::{Cmd, Msg, RouterClient, command_name};
 use crate::skills::SkillStore;
 
 const AGENTS_MD: &str = "AGENTS.md";
@@ -61,16 +63,60 @@ impl RouterClient {
         // send Thinking state
         self.send_msg(Msg::Thinking).await;
 
-        match self
-            .context
-            .router_client
-            .stream_execute(session_id, execute_request)
-            .await
-        {
+        self.state = State::Streaming;
+        let router_client = Arc::clone(&self.context.router_client);
+        let execute = router_client.stream_execute(session_id, execute_request);
+        tokio::pin!(execute);
+        let mut commands_open = true;
+
+        let response = loop {
+            tokio::select! {
+                _ = self.context.exit.cancelled() => {
+                    tracing::debug!("execute request cancelled");
+                    return;
+                }
+                result = &mut execute => break result,
+                maybe_cmd = self.cmd_rx.recv(), if commands_open => {
+                    let Some(cmd) = maybe_cmd else {
+                        tracing::debug!("router command channel closed while opening execute stream");
+                        commands_open = false;
+                        continue;
+                    };
+                    let Cmd::Continue(continuation) = cmd else {
+                        tracing::warn!(
+                            command = command_name(&cmd),
+                            ?self.state,
+                            "received command while opening execute stream, ignoring",
+                        );
+                        continue;
+                    };
+
+                    match self.open_user_continuation(continuation).await {
+                        UserContinuation::Ignored => {}
+                        UserContinuation::Handled if self.state == State::Idle => {
+                            self.send_msg(Msg::Idle).await;
+                            return;
+                        }
+                        UserContinuation::Handled => {}
+                        UserContinuation::Replace(stream) => {
+                            self.handle_turn_stream(stream).await;
+                            if self.state == State::Streaming {
+                                self.state = State::Idle;
+                            }
+                            if self.state == State::Idle {
+                                self.send_msg(Msg::Idle).await;
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+        };
+
+        match response {
             Ok(response) => {
                 tracing::debug!("execute stream accepted, starting to stream results");
 
-                self.state = State::Streaming;
                 self.handle_turn_stream(response).await;
                 if self.state == State::Streaming {
                     self.state = State::Idle;
@@ -107,6 +153,7 @@ impl RouterClient {
         };
         let mut referenced_paths = files.into_iter().collect::<Vec<_>>();
         referenced_paths.sort();
+        let prompt = strip_attached_file_sigils(&prompt, &self.context.cwd, &referenced_paths);
         let (git_branch, git_diff) = git_snapshot(&self.context.cwd);
         let attached_files = load_context_files(&self.context.cwd, &referenced_paths).await;
         let instructions = load_instructions(&self.context.cwd).await;
@@ -158,6 +205,27 @@ impl RouterClient {
             self.init_new_session(prompt).await
         }
     }
+}
+
+/// Removes the `@` sigil from file mentions resolved by the TUI.
+///
+/// The path remains in the user request so the model can associate it with the
+/// attached context, but it no longer resembles an unresolved local reference.
+fn strip_attached_file_sigils(prompt: &str, cwd: &Path, referenced_paths: &[PathBuf]) -> String {
+    let mut rewritten = String::with_capacity(prompt.len());
+    for segment in prompt.split_inclusive(char::is_whitespace) {
+        let token = segment.trim_end_matches(char::is_whitespace);
+        let whitespace = &segment[token.len()..];
+        let replacement = token.strip_prefix('@').filter(|path| {
+            let mentioned = resolve_workspace_path(cwd, Path::new(path));
+            referenced_paths
+                .iter()
+                .any(|attached| resolve_workspace_path(cwd, attached) == mentioned)
+        });
+        rewritten.push_str(replacement.unwrap_or(token));
+        rewritten.push_str(whitespace);
+    }
+    rewritten
 }
 
 fn git_snapshot(cwd: &Path) -> (Option<String>, Option<String>) {

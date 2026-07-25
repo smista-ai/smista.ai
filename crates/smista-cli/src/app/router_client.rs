@@ -28,6 +28,7 @@ use crate::app::AppContext;
 
 const MAX_SESSION_TITLE_LENGTH: usize = 100;
 const EDIT_FILE_TOOL: &str = "edit_file";
+const READ_FILE_TOOL: &str = "read_file";
 const WRITE_FILE_TOOL: &str = "write_file";
 
 /// Worker responsible for communicating with `smista-router`.
@@ -38,6 +39,8 @@ const WRITE_FILE_TOOL: &str = "write_file";
 pub struct RouterClient {
     /// Whether file edits are accepted without prompting for the current session.
     accept_edits: bool,
+    /// Whether file reads are accepted without prompting for the current session.
+    accept_reads: bool,
     /// Storage for pending approvals, indexed by approval id.
     approvals: ApprovalsStorage,
     /// Channel to receive commands from the UI.
@@ -74,6 +77,7 @@ impl RouterClient {
         let accept_edits = context.config.local.auto_apply.unwrap_or_default();
         Self {
             accept_edits,
+            accept_reads: false,
             approvals: ApprovalsStorage::new(),
             cmd_rx,
             msg_tx,

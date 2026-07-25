@@ -1,6 +1,8 @@
 //! Main smista.ai cli application
 
 mod input_listener;
+#[cfg(test)]
+mod integration_tests;
 pub mod log;
 mod router_client;
 mod tui;
@@ -12,6 +14,8 @@ use std::time::Duration;
 
 use smista_sdk::client::ReqwestClient;
 use tokio::sync::mpsc::{Receiver, Sender};
+#[cfg(test)]
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
@@ -57,6 +61,8 @@ struct RunLoopArgs<B: ClearableBackend> {
     input_listener: JoinHandle<()>,
     msg_rx: Receiver<Msg>,
     router_client: JoinHandle<()>,
+    #[cfg(test)]
+    snapshot_tx: Option<watch::Sender<tui::State>>,
     tui: Tui<B>,
 }
 
@@ -114,33 +120,30 @@ impl App {
             input_listener,
             msg_rx,
             router_client,
+            #[cfg(test)]
+            snapshot_tx: None,
             tui,
         })
         .await
     }
 
-    /// Starts the run loop with a deterministic test input listener.
+    /// Starts the run loop with an interactive deterministic test driver.
     #[cfg(test)]
-    pub fn mock(context: AppContext, input_events: Vec<InputEvent>) -> JoinHandle<()> {
-        use std::time::Duration;
-
-        use crate::app::input_listener::mock::MockInputListener;
-
+    fn mock(context: AppContext) -> AppTestDriver {
         let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel(100);
         let (msg_tx, msg_rx) = tokio::sync::mpsc::channel(100);
         let (input_event_tx, input_event_rx) = tokio::sync::mpsc::channel(100);
+        let (snapshot_tx, snapshot_rx) = watch::channel(tui::State::default());
 
-        let input_listener = MockInputListener::new(
-            input_events,
-            context.exit.clone(),
-            Duration::from_millis(100),
-            input_event_tx,
-        )
-        .run();
+        let input_exit = context.exit.clone();
+        let input_listener = tokio::spawn(async move {
+            input_exit.cancelled().await;
+        });
         let tui = Tui::new_test(context.clone());
         let router_client = RouterClient::new(cmd_rx, msg_tx, context.clone()).run();
+        let exit = context.exit.clone();
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             App { context }
                 .run_loop(RunLoopArgs {
                     cmd_tx,
@@ -149,11 +152,19 @@ impl App {
                     input_listener,
                     msg_rx,
                     router_client,
+                    snapshot_tx: Some(snapshot_tx),
                     tui,
                 })
                 .await
                 .expect("Run loop failed");
-        })
+        });
+
+        AppTestDriver {
+            exit,
+            handle,
+            input_event_tx,
+            snapshot_rx,
+        }
     }
 
     /// Routes events and router messages until cancellation.
@@ -174,6 +185,8 @@ impl App {
             input_listener,
             mut msg_rx,
             router_client,
+            #[cfg(test)]
+            snapshot_tx,
             mut tui,
         }: RunLoopArgs<B>,
     ) -> anyhow::Result<()> {
@@ -197,6 +210,8 @@ impl App {
 
         // view the TUI before entering the loop to ensure the initial state is rendered
         tui.view()?;
+        #[cfg(test)]
+        publish_snapshot(snapshot_tx.as_ref(), &tui);
         let mut refresh_tick = tokio::time::interval(TUI_REFRESH_INTERVAL);
         refresh_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
@@ -228,6 +243,8 @@ impl App {
                             );
                         }
                     }
+                    #[cfg(test)]
+                    publish_snapshot(snapshot_tx.as_ref(), &tui);
                 }
                 _ = refresh_tick.tick() => {
                     if let Err(err) = tui.refresh() {
@@ -248,6 +265,8 @@ impl App {
                             "failed to handle client message"
                         );
                     }
+                    #[cfg(test)]
+                    publish_snapshot(snapshot_tx.as_ref(), &tui);
                 }
             }
         }
@@ -261,6 +280,81 @@ impl App {
         tracing::info!("shutting down run loop");
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+fn publish_snapshot<B>(snapshot_tx: Option<&watch::Sender<tui::State>>, tui: &Tui<B>)
+where
+    B: ClearableBackend,
+{
+    if let Some(snapshot_tx) = snapshot_tx {
+        snapshot_tx.send_replace(tui.snapshot());
+    }
+}
+
+/// Interactive app-level test driver.
+#[cfg(test)]
+struct AppTestDriver {
+    exit: CancellationToken,
+    handle: JoinHandle<()>,
+    input_event_tx: Sender<InputEvent>,
+    snapshot_rx: watch::Receiver<tui::State>,
+}
+
+#[cfg(test)]
+impl AppTestDriver {
+    /// Sends one decoded terminal event through the app input path.
+    async fn send(&self, event: InputEvent) {
+        self.input_event_tx
+            .send(event)
+            .await
+            .expect("test app accepts input events");
+    }
+
+    /// Pastes and submits one prompt or slash command.
+    async fn submit(&self, input: &str) {
+        self.send(InputEvent::Paste(input.to_owned())).await;
+        self.send(InputEvent::Enter).await;
+    }
+
+    /// Waits for a state predicate with a bounded timeout.
+    async fn wait_for<F>(&mut self, predicate: F) -> tui::State
+    where
+        F: Fn(&tui::State) -> bool,
+    {
+        const TEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+        tokio::time::timeout(TEST_TIMEOUT, async {
+            loop {
+                let snapshot = self.snapshot_rx.borrow_and_update().clone();
+                if predicate(&snapshot) {
+                    return snapshot;
+                }
+                self.snapshot_rx
+                    .changed()
+                    .await
+                    .expect("test app snapshot channel remains open");
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "timed out waiting for TUI state; last snapshot: {:?}",
+                self.snapshot_rx.borrow()
+            )
+        })
+    }
+
+    /// Stops the app and waits for every worker to shut down.
+    async fn shutdown(self) {
+        const TEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+        self.exit.cancel();
+        tokio::time::timeout(TEST_TIMEOUT, self.handle)
+            .await
+            .expect("test app stops after cancellation")
+            .expect("test app run loop does not panic");
     }
 }
 
@@ -306,7 +400,6 @@ fn message_name(msg: &Msg) -> &'static str {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use std::time::Duration;
 
     use smista_sdk::client::{ReqwestClient, RouterClientConfig};
     use tokio_util::sync::CancellationToken;
@@ -318,14 +411,11 @@ mod tests {
     #[tokio::test]
     async fn should_terminate_when_cancelled() {
         let exit = CancellationToken::new();
-        let app = App::mock(app_context(exit.clone()), Vec::new());
+        let app = App::mock(app_context(exit.clone()));
 
         exit.cancel();
 
-        tokio::time::timeout(Duration::from_secs(1), app)
-            .await
-            .expect("app run loop stops after cancellation")
-            .expect("app run loop does not panic during cancellation");
+        app.shutdown().await;
     }
 
     fn app_context(exit: CancellationToken) -> AppContext {

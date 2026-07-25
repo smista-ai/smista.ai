@@ -21,6 +21,7 @@ impl RouterClient {
     pub(in crate::app::router_client) fn reset_session_state(&mut self) {
         self.session = None;
         self.accept_edits = self.default_accept_edits();
+        self.accept_reads = false;
         self.approvals.clear();
         self.pending_seals.clear();
         self.pending_tool_prompts.clear();

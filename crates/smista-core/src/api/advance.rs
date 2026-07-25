@@ -56,10 +56,10 @@ pub enum ContinueRequest {
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         encrypted: BTreeMap<ContentRef, EncryptedPayload>,
     },
-    /// Plaintext of records the client opened, answering an `awaiting_decrypt`
-    /// turn. Keyed by [`ContentRef`].
+    /// Plaintext needed to resume an `awaiting_decrypt` turn.
     Decrypted {
-        /// [`ContentRef`] -> opened plaintext.
+        /// Opened `to_decrypt` records plus plaintext from same-turn
+        /// `to_encrypt` records, keyed by [`ContentRef`].
         plaintext: BTreeMap<ContentRef, String>,
         /// Sealed forms of router-authored rows the turn asked to seal alongside
         /// the decrypt (for example the run-input bundle), keyed by

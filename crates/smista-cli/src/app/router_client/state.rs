@@ -2,13 +2,11 @@
 
 /// The router client state machine phase during execution.
 ///
-/// Buffered execute and continue calls block inside the worker until the router
-/// responds, so there is no separate waiting-for-router-response state.
-/// [`Streaming`](Self::Streaming) is reserved for streaming execution and
-/// continuation, where the worker must poll stream events and incoming commands
+/// [`Streaming`](Self::Streaming) covers opening and draining execute or
+/// continuation streams. The worker polls router progress and incoming commands
 /// together so [`Break`](crate::app::router_client::cmd::ContinueExecution::Break)
-/// or [`Inject`](crate::app::router_client::cmd::ContinueExecution::Inject)
-/// can interrupt the stream.
+/// or [`Inject`](crate::app::router_client::cmd::ContinueExecution::Inject) can
+/// interrupt an active request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum State {
     /// The router client is idle and ready to receive commands.
@@ -17,6 +15,6 @@ pub enum State {
     AwaitingTool,
     /// The router is waiting for a user approval decision.
     AwaitingApproval,
-    /// The router is streaming a turn and can be interrupted.
+    /// The router is opening or streaming a turn and can be interrupted.
     Streaming,
 }

@@ -5,7 +5,7 @@
 //! wire response. The loop reuses the pure [`Resolver`] verbatim: it only feeds
 //! it the recalled, plaintext inputs and acts on its output, so routing never
 //! depends on an LLM.
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::time::Duration;
 
 use secrecy::SecretString;
@@ -357,6 +357,10 @@ async fn run_turn_inner(
             &bundle.attachments.invoked_skills,
             &bundle.attachments.available_skills,
         );
+        let offered_tool_names = tools
+            .iter()
+            .map(|tool| tool.name.clone())
+            .collect::<BTreeSet<_>>();
         let tool_choice = if tools.is_empty() {
             ToolChoice::None
         } else {
@@ -430,6 +434,7 @@ async fn run_turn_inner(
         // file-changing tools are refused.
         let mediated = mediate(
             response.tool_calls.clone(),
+            &offered_tool_names,
             &cx.meta.policy.tools,
             cx.plan_active,
         );

@@ -16,7 +16,6 @@ const SECTION_MODELS: &str = "By model";
 const SECTION_TASKS: &str = "By task";
 const TITLE: &str = "Usage";
 
-// Rust guideline compliant 2026-07-14.
 pub(in crate::app::tui) fn view<'a>(frame: &mut Frame<'a>, state: &UsageState) {
     let [usage_area, footer_area] =
         Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(frame.area());

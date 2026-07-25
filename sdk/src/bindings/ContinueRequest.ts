@@ -32,7 +32,8 @@ decisions: Array<ApprovalDecisionEntry>,
  */
 encrypted?: { [key in ContentRef]?: EncryptedPayload }, } } | { "type": "decrypted", "data": { 
 /**
- * [`ContentRef`] -> opened plaintext.
+ * Opened `to_decrypt` records plus plaintext from same-turn
+ * `to_encrypt` records, keyed by [`ContentRef`].
  */
 plaintext: { [key in ContentRef]?: string }, 
 /**

@@ -23,7 +23,9 @@ use provider_integration_tests::{InMemoryStorage, init_tracing};
 use secrecy::SecretString;
 use smista_core::model::{ModelParameters, Provider as ProviderId};
 use smista_core::stream::StreamEvent;
-use smista_providers::api::{CompletionRequest, FinishReason, RequestMessage};
+use smista_providers::api::{
+    CompletionRequest, FinishReason, RequestMessage, ToolChoice, ToolDefinition,
+};
 use smista_providers::auth::Authentication;
 use smista_providers::memory::MemoryScope;
 use smista_providers::model::openai::{OpenAIModelArgs, gpt_5_4_mini};
@@ -43,6 +45,34 @@ fn ping_request() -> CompletionRequest {
             ..Default::default()
         },
         ..Default::default()
+    }
+}
+
+/// Builds a request that must produce a structured client tool call.
+fn tool_call_request() -> CompletionRequest {
+    CompletionRequest {
+        messages: vec![RequestMessage::User {
+            content: "Call `lookup_person` exactly once with `person` set to \
+                      `Rosario Muniz`. Do not answer in text."
+                .to_string(),
+        }],
+        parameters: ModelParameters {
+            temperature: Some(0.0),
+            max_tokens: Some(128),
+            ..Default::default()
+        },
+        tools: vec![ToolDefinition {
+            name: "lookup_person".to_string(),
+            description: "Look up one person by exact name.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "person": { "type": "string" }
+                },
+                "required": ["person"]
+            }),
+        }],
+        tool_choice: ToolChoice::Required,
     }
 }
 
@@ -127,4 +157,34 @@ async fn should_resolve_gpt_5_4_mini_and_run_complete_and_stream() {
         !streamed.trim().is_empty(),
         "stream produced no text deltas"
     );
+
+    // Steps 4 & 5: both completion modes must expose a model tool request as a
+    // structured call, never as JSON assistant prose.
+    let response = model
+        .complete(tool_call_request())
+        .await
+        .expect("tool-calling completion must succeed against the live API");
+    let call = response
+        .tool_calls
+        .iter()
+        .find(|call| call.name == "lookup_person")
+        .expect("complete returned no structured lookup_person call");
+    assert_eq!(call.arguments["person"], "Rosario Muniz");
+
+    let mut stream = model
+        .stream(tool_call_request())
+        .await
+        .expect("tool-calling stream must succeed against the live API");
+    let mut streamed_call = None;
+    while let Some(event) = stream.next().await {
+        if let StreamEvent::ToolCallRequested {
+            name, arguments, ..
+        } = event.expect("tool-calling stream yielded an error item")
+            && name == "lookup_person"
+        {
+            streamed_call = Some(arguments);
+        }
+    }
+    let arguments = streamed_call.expect("stream returned no structured lookup_person call");
+    assert_eq!(arguments["person"], "Rosario Muniz");
 }

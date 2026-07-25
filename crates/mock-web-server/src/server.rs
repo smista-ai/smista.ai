@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::net::{SocketAddr, TcpListener};
 use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
@@ -108,6 +108,8 @@ pub struct MockRouterBuilder {
     statuses: HashMap<Endpoint, EndpointStatus>,
     /// Success body overrides.
     responses: HashMap<Endpoint, ResponseTemplate>,
+    /// Scripted success bodies served before persistent responses.
+    response_sequences: HashMap<Endpoint, VecDeque<ResponseTemplate>>,
 }
 
 impl MockRouterBuilder {
@@ -131,6 +133,23 @@ impl MockRouterBuilder {
         self
     }
 
+    /// Scripts successful responses for `endpoint` in insertion order.
+    ///
+    /// Once the sequence is exhausted, the endpoint falls back to its
+    /// persistent override or default response.
+    #[must_use]
+    pub fn respond_sequence(
+        mut self,
+        endpoint: Endpoint,
+        responses: impl IntoIterator<Item = ResponseTemplate>,
+    ) -> Self {
+        self.response_sequences
+            .entry(endpoint)
+            .or_default()
+            .extend(responses);
+        self
+    }
+
     /// Starts the server, stopping it when `cancellation` is cancelled.
     pub async fn run(self, cancellation: CancellationToken) -> MockRouter {
         let permit = mock_server_slots()
@@ -150,6 +169,7 @@ impl MockRouterBuilder {
             base_url: Url::parse(&uri).expect("the mock router URI is a valid base URL"),
             statuses: Mutex::new(self.statuses),
             responses: self.responses,
+            response_sequences: Mutex::new(self.response_sequences),
             received: Mutex::new(Vec::new()),
         });
         let app = router(Arc::clone(&state));
@@ -194,6 +214,8 @@ struct MockRouterState {
     statuses: Mutex<HashMap<Endpoint, EndpointStatus>>,
     /// Success body overrides.
     responses: HashMap<Endpoint, ResponseTemplate>,
+    /// Scripted success bodies not yet served.
+    response_sequences: Mutex<HashMap<Endpoint, VecDeque<ResponseTemplate>>>,
     /// Recorded requests.
     received: Mutex<Vec<Request>>,
 }
@@ -210,7 +232,17 @@ impl MockRouterState {
     }
 
     /// Returns the configured success response for an endpoint.
-    fn response(&self, endpoint: Endpoint) -> ResponseTemplate {
+    async fn response(&self, endpoint: Endpoint) -> ResponseTemplate {
+        if let Some(response) = self
+            .response_sequences
+            .lock()
+            .await
+            .get_mut(&endpoint)
+            .and_then(VecDeque::pop_front)
+        {
+            return response;
+        }
+
         self.responses
             .get(&endpoint)
             .cloned()
@@ -311,15 +343,21 @@ async fn handle(
     ));
 
     match state.endpoint_status(endpoint).await {
-        EndpointStatus::Ok => state.response(endpoint).into_response(),
+        EndpointStatus::Ok => state.response(endpoint).await.into_response().await,
         EndpointStatus::Unauthorized => {
-            api_error(ApiErrorCode::MissingCredentials, "Unauthorized").into_response()
+            api_error(ApiErrorCode::MissingCredentials, "Unauthorized")
+                .into_response()
+                .await
         }
         EndpointStatus::ServerError => {
-            api_error(ApiErrorCode::InternalError, "Server error").into_response()
+            api_error(ApiErrorCode::InternalError, "Server error")
+                .into_response()
+                .await
         }
         EndpointStatus::NotFound => {
-            api_error(ApiErrorCode::SessionNotFound, "Not found").into_response()
+            api_error(ApiErrorCode::SessionNotFound, "Not found")
+                .into_response()
+                .await
         }
     }
 }

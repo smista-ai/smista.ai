@@ -17,8 +17,11 @@ use crate::app::tui::state::{
 
 const EDIT_FILE_TOOL: &str = "edit_file";
 const MODEL_AUTO: &str = "auto";
+const READ_FILE_TOOL: &str = "read_file";
 const WRITE_FILE_TOOL: &str = "write_file";
 const DEFAULT_LOG_LIMIT: usize = 100;
+const REJECTION_GUIDANCE: &str =
+    "The user rejected this request. Ask what Smista should do differently before continuing.";
 
 impl<B> Tui<B>
 where
@@ -535,9 +538,13 @@ where
             InputEvent::Char('2' | 'a') if approval_allows_session_acceptance(&approval) => Some(
                 approval_command(&approval, ApprovalOption::ApproveAlwaysForSession),
             ),
-            InputEvent::Char('3' | 'n') => {
+            InputEvent::Char('2') if !approval_allows_session_acceptance(&approval) => {
                 Some(approval_command(&approval, ApprovalOption::Reject))
             }
+            InputEvent::Char('3') if approval_allows_session_acceptance(&approval) => {
+                Some(approval_command(&approval, ApprovalOption::Reject))
+            }
+            InputEvent::Char('n') => Some(approval_command(&approval, ApprovalOption::Reject)),
             InputEvent::Escape | InputEvent::Interrupt => self.handle_interrupt(),
             _ => None,
         }
@@ -828,7 +835,7 @@ fn approval_decision_for_option(
             id: prompt.id.clone(),
             outcome: ApprovalOutcome::Rejected,
             scope: ApprovalScope::Once,
-            reason: None,
+            reason: Some(REJECTION_GUIDANCE.to_owned()),
         },
     }
 }
@@ -857,7 +864,11 @@ fn approval_option_count(prompt: &ApprovalPrompt) -> usize {
 }
 
 fn approval_allows_session_acceptance(prompt: &ApprovalPrompt) -> bool {
-    prompt.tool_name.as_deref().is_some_and(tool_changes_files) || prompt.wildcard_alias.is_some()
+    prompt
+        .tool_name
+        .as_deref()
+        .is_some_and(|name| name == READ_FILE_TOOL || tool_changes_files(name))
+        || prompt.wildcard_alias.is_some()
 }
 
 fn tool_changes_files(name: &str) -> bool {
@@ -1656,7 +1667,7 @@ mod tests {
             let cmd = approval_cmd_for_input(event, approval_prompt())
                 .expect("approval yes hotkey produces a command");
 
-            assert_approval_decision(cmd, ApprovalOutcome::Approved, ApprovalScope::Once);
+            assert_approval_decision(cmd, ApprovalOutcome::Approved, ApprovalScope::Once, None);
         }
     }
 
@@ -1670,6 +1681,7 @@ mod tests {
                 cmd,
                 ApprovalOutcome::Approved,
                 ApprovalScope::AlwaysForSession,
+                None,
             );
         }
     }
@@ -1680,17 +1692,28 @@ mod tests {
             let cmd = approval_cmd_for_input(event, approval_prompt())
                 .expect("approval no hotkey produces a command");
 
-            assert_approval_decision(cmd, ApprovalOutcome::Rejected, ApprovalScope::Once);
+            assert_approval_decision(
+                cmd,
+                ApprovalOutcome::Rejected,
+                ApprovalScope::Once,
+                Some(REJECTION_GUIDANCE),
+            );
         }
     }
 
     #[test]
-    fn approval_turn_always_hotkeys_require_session_option() {
-        for event in [InputEvent::Char('2'), InputEvent::Char('a')] {
-            let cmd = approval_cmd_for_input(event, approval_prompt_without_session_acceptance());
+    fn approval_turn_without_session_option_numbers_rejection_second() {
+        let prompt = approval_prompt_without_session_acceptance();
+        let cmd = approval_cmd_for_input(InputEvent::Char('2'), prompt.clone())
+            .expect("second option rejects when no session choice exists");
+        assert_approval_decision(
+            cmd,
+            ApprovalOutcome::Rejected,
+            ApprovalScope::Once,
+            Some(REJECTION_GUIDANCE),
+        );
 
-            assert_eq!(cmd, None);
-        }
+        assert_eq!(approval_cmd_for_input(InputEvent::Char('a'), prompt), None);
     }
 
     #[test]
@@ -2361,7 +2384,12 @@ mod tests {
         tui.on_input(event)
     }
 
-    fn assert_approval_decision(cmd: Cmd, outcome: ApprovalOutcome, scope: ApprovalScope) {
+    fn assert_approval_decision(
+        cmd: Cmd,
+        outcome: ApprovalOutcome,
+        scope: ApprovalScope,
+        reason: Option<&str>,
+    ) {
         let Cmd::Continue(ContinueExecution::ApprovalDecisions { decisions }) = cmd else {
             panic!("approval decision command expected");
         };
@@ -2369,5 +2397,6 @@ mod tests {
         assert_eq!(decisions[0].id, APPROVAL_ID);
         assert_eq!(decisions[0].outcome, outcome);
         assert_eq!(decisions[0].scope, scope);
+        assert_eq!(decisions[0].reason.as_deref(), reason);
     }
 }

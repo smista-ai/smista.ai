@@ -5,7 +5,6 @@ use ratatui::text::{Line, Span};
 
 use crate::app::tui::state::HelpEntry;
 
-// Rust guideline compliant 2026-07-14.
 pub(in crate::app::tui) fn help_line(entry: &HelpEntry) -> Line<'static> {
     Line::from(vec![
         Span::styled(

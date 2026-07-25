@@ -1708,7 +1708,7 @@
           },
           {
             "type": "object",
-            "description": "Plaintext of records the client opened, answering an `awaiting_decrypt`\nturn. Keyed by [`ContentRef`].",
+            "description": "Plaintext needed to resume an `awaiting_decrypt` turn.",
             "required": [
               "data",
               "type"
@@ -1716,14 +1716,14 @@
             "properties": {
               "data": {
                 "type": "object",
-                "description": "Plaintext of records the client opened, answering an `awaiting_decrypt`\nturn. Keyed by [`ContentRef`].",
+                "description": "Plaintext needed to resume an `awaiting_decrypt` turn.",
                 "required": [
                   "plaintext"
                 ],
                 "properties": {
                   "plaintext": {
                     "type": "object",
-                    "description": "[`ContentRef`] -> opened plaintext.",
+                    "description": "Opened `to_decrypt` records plus plaintext from same-turn\n`to_encrypt` records, keyed by [`ContentRef`].",
                     "additionalProperties": {
                       "type": "string"
                     },

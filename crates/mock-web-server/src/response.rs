@@ -1,13 +1,17 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use smista_sdk::core::api::{ApiError, ApiErrorBody, ApiErrorCode, TurnEvent};
+use tokio::sync::Notify;
 
 /// HTTP status returned by a successful read or update, per the router.
 const OK: u16 = 200;
 
 /// A response served by the mock router.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct ResponseTemplate {
     /// HTTP status code.
     pub(crate) status: StatusCode,
@@ -15,6 +19,8 @@ pub struct ResponseTemplate {
     pub(crate) content_type: &'static str,
     /// Raw response bytes.
     pub(crate) body: Vec<u8>,
+    /// Optional synchronization gate blocking this response.
+    pub(crate) gate: Option<ResponseGate>,
 }
 
 impl ResponseTemplate {
@@ -25,6 +31,7 @@ impl ResponseTemplate {
             status: StatusCode::from_u16(status).expect("the response status code is valid"),
             content_type: "application/octet-stream",
             body: Vec::new(),
+            gate: None,
         }
     }
 
@@ -55,14 +62,84 @@ impl ResponseTemplate {
         self
     }
 
+    /// Blocks this response until `gate` is opened.
+    #[must_use]
+    pub fn set_gate(mut self, gate: ResponseGate) -> Self {
+        self.gate = Some(gate);
+        self
+    }
+
     /// Converts this template into an HTTP response.
-    pub(crate) fn into_response(self) -> Response {
+    pub(crate) async fn into_response(self) -> Response {
+        if let Some(gate) = self.gate {
+            gate.wait().await;
+        }
+
         (
             self.status,
             [("content-type", self.content_type)],
             self.body,
         )
             .into_response()
+    }
+}
+
+/// Synchronizes a mock response with a test driver.
+#[derive(Debug, Clone)]
+pub struct ResponseGate {
+    inner: Arc<ResponseGateInner>,
+}
+
+#[derive(Debug)]
+struct ResponseGateInner {
+    entered: AtomicBool,
+    entered_notify: Notify,
+    opened: AtomicBool,
+    opened_notify: Notify,
+}
+
+impl ResponseGate {
+    /// Creates a closed response gate.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(ResponseGateInner {
+                entered: AtomicBool::new(false),
+                entered_notify: Notify::new(),
+                opened: AtomicBool::new(false),
+                opened_notify: Notify::new(),
+            }),
+        }
+    }
+
+    /// Waits until a mock request reaches the gated response.
+    pub async fn wait_until_blocked(&self) {
+        let notified = self.inner.entered_notify.notified();
+        if !self.inner.entered.load(Ordering::Acquire) {
+            notified.await;
+        }
+    }
+
+    /// Opens the gate and releases the blocked response.
+    pub fn open(&self) {
+        self.inner.opened.store(true, Ordering::Release);
+        self.inner.opened_notify.notify_one();
+    }
+
+    async fn wait(&self) {
+        self.inner.entered.store(true, Ordering::Release);
+        self.inner.entered_notify.notify_one();
+
+        let notified = self.inner.opened_notify.notified();
+        if !self.inner.opened.load(Ordering::Acquire) {
+            notified.await;
+        }
+    }
+}
+
+impl Default for ResponseGate {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

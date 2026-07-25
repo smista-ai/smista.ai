@@ -6,7 +6,7 @@ use crate::app::router_client::msg::{ApprovalPrompt, PreviewSummary, TraceEvent}
 /// Defines one renderable history block in the main pane.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HistoryEntry {
-    /// An approval request shown in the transcript.
+    /// An approval request retained in a restored transcript.
     ApprovalRequest(ApprovalPrompt),
     /// Plain assistant text.
     AssistantMessage(String),

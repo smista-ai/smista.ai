@@ -25,6 +25,7 @@ pub mod gemini;
 pub mod ollama;
 pub mod openai;
 pub mod openai_compat;
+pub(crate) mod tool_call;
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -9,10 +9,41 @@ use smista_sdk::core::api::{
 };
 
 use crate::app::router_client::approvals::ApprovalsStorage;
+use crate::app::router_client::handler::continuation::UserContinuation;
 use crate::app::router_client::msg::{ApprovalPrompt, AssistantTurn, ToolCallStarted};
 use crate::app::router_client::state::State;
-use crate::app::router_client::{Msg, RouterClient, tool_changes_files};
+use crate::app::router_client::{
+    Cmd, Msg, READ_FILE_TOOL, RouterClient, command_name, tool_changes_files,
+};
 use crate::tools::{ToolCall, ToolExecutor};
+
+/// Directs the stream loop after handling one router event.
+pub(in crate::app::router_client) enum StreamControl {
+    /// Keep draining the current stream.
+    Continue,
+    /// Replace the current stream with an automatic continuation.
+    Replace(BoxStream<'static, Result<TurnEvent, RouterClientError>>),
+    /// Stop draining after a terminal or paused outcome.
+    Stop,
+}
+
+#[cfg(test)]
+impl StreamControl {
+    /// Returns whether the current stream should keep draining.
+    pub(in crate::app::router_client) fn is_continue(&self) -> bool {
+        matches!(self, Self::Continue)
+    }
+
+    /// Returns whether a replacement stream was opened.
+    pub(in crate::app::router_client) fn is_replace(&self) -> bool {
+        matches!(self, Self::Replace(_))
+    }
+
+    /// Returns whether stream draining should stop.
+    pub(in crate::app::router_client) fn is_stop(&self) -> bool {
+        matches!(self, Self::Stop)
+    }
+}
 
 impl RouterClient {
     /// Handles the execution stream from the router.
@@ -33,16 +64,45 @@ impl RouterClient {
         mut stream: BoxStream<'static, Result<TurnEvent, RouterClientError>>,
     ) {
         tracing::debug!("handling execution stream");
+        let mut commands_open = true;
         loop {
             tokio::select! {
                 _ = self.context.exit.cancelled() => {
                     tracing::debug!("execution stream cancelled");
                     break;
                 }
+                maybe_cmd = self.cmd_rx.recv(), if commands_open => {
+                    let Some(cmd) = maybe_cmd else {
+                        tracing::debug!("router command channel closed while streaming");
+                        commands_open = false;
+                        continue;
+                    };
+                    let Cmd::Continue(continuation) = cmd else {
+                        tracing::warn!(
+                            command = command_name(&cmd),
+                            ?self.state,
+                            "received command while streaming, ignoring",
+                        );
+                        continue;
+                    };
+
+                    match self.open_user_continuation(continuation).await {
+                        UserContinuation::Ignored => {}
+                        UserContinuation::Handled if self.state == State::Idle => break,
+                        UserContinuation::Handled => {}
+                        UserContinuation::Replace(next_stream) => {
+                            stream = next_stream;
+                        }
+                    }
+                }
                 maybe_event = stream.next() => {
                     if let Some(event) = maybe_event {
-                        if let Some(next_stream) = self.on_exec_stream_event(event).await {
-                            stream = next_stream;
+                        match self.on_exec_stream_event(event).await {
+                            StreamControl::Continue => {}
+                            StreamControl::Replace(next_stream) => {
+                                stream = next_stream;
+                            }
+                            StreamControl::Stop => break,
                         }
                     } else {
                         tracing::debug!("last execution stream event received, ending stream");
@@ -56,7 +116,7 @@ impl RouterClient {
     pub(in crate::app::router_client) async fn on_exec_stream_event(
         &mut self,
         event: Result<TurnEvent, RouterClientError>,
-    ) -> Option<BoxStream<'static, Result<TurnEvent, RouterClientError>>> {
+    ) -> StreamControl {
         let event = match event {
             Ok(event) => event,
             Err(err) => {
@@ -64,7 +124,7 @@ impl RouterClient {
                 self.send_msg(Msg::Error(format!("Execution stream error: {err}")))
                     .await;
                 self.state = State::Idle;
-                return None;
+                return StreamControl::Stop;
             }
         };
 
@@ -107,13 +167,10 @@ impl RouterClient {
             }
         }
 
-        None
+        StreamControl::Continue
     }
 
-    async fn handle_awaiting_tool(
-        &mut self,
-        tool_requests: Vec<ToolRequest>,
-    ) -> Option<BoxStream<'static, Result<TurnEvent, RouterClientError>>> {
+    async fn handle_awaiting_tool(&mut self, tool_requests: Vec<ToolRequest>) -> StreamControl {
         for request in &tool_requests {
             self.handle_tool_call_requested(request.clone()).await;
         }
@@ -123,7 +180,7 @@ impl RouterClient {
             .all(|request| self.pending_tool_results.contains_key(&request.call_id));
         if !has_all_results {
             self.state = State::AwaitingTool;
-            return None;
+            return StreamControl::Stop;
         }
 
         let results = tool_requests
@@ -138,14 +195,14 @@ impl RouterClient {
     async fn continue_with_tool_results(
         &mut self,
         results: Vec<smista_sdk::core::api::ToolResult>,
-    ) -> Option<BoxStream<'static, Result<TurnEvent, RouterClientError>>> {
+    ) -> StreamControl {
         let Some(session_id) = self.session_id() else {
             self.state = State::Idle;
             self.send_msg(Msg::Error(
                 "Cannot submit tool results without an active session".to_owned(),
             ))
             .await;
-            return None;
+            return StreamControl::Stop;
         };
 
         let key_id = self.key_id().map(str::to_owned);
@@ -161,7 +218,7 @@ impl RouterClient {
                     "Failed to build tool results continuation: {err}"
                 )))
                 .await;
-                return None;
+                return StreamControl::Stop;
             }
         };
 
@@ -210,6 +267,9 @@ impl RouterClient {
             ToolApproval::Ask if self.accept_edits && tool_changes_files(&request.name) => {
                 Some(Some(ApiApprovalDecision::Approved))
             }
+            ToolApproval::Ask if self.accept_reads && request.name == READ_FILE_TOOL => {
+                Some(Some(ApiApprovalDecision::Approved))
+            }
             ToolApproval::Ask => {
                 let command = shell_command(&request.arguments)?;
                 match self.approvals.approved(command) {
@@ -227,7 +287,7 @@ impl RouterClient {
     async fn handle_turn_end(
         &mut self,
         turn_response: smista_sdk::core::api::TurnResponse,
-    ) -> Option<BoxStream<'static, Result<TurnEvent, RouterClientError>>> {
+    ) -> StreamControl {
         match turn_response.outcome {
             TurnOutcome::Completed(turn) => {
                 tracing::debug!(trace.id = %turn.trace_id, "execution stream completed");
@@ -242,7 +302,7 @@ impl RouterClient {
                 }))
                 .await;
                 if to_encrypt.is_empty() {
-                    None
+                    StreamControl::Stop
                 } else {
                     self.continue_with_sealed_content(to_encrypt).await
                 }
@@ -264,7 +324,7 @@ impl RouterClient {
                 self.state = State::AwaitingApproval;
                 self.send_msg(Msg::ApprovalPrompt(approval_prompt(approval)))
                     .await;
-                None
+                StreamControl::Stop
             }
             TurnOutcome::AwaitingDecrypt {
                 to_decrypt,
@@ -289,7 +349,7 @@ impl RouterClient {
                 self.pending_tool_requests.clear();
                 self.pending_tool_results.clear();
                 self.state = State::Idle;
-                None
+                StreamControl::Stop
             }
             TurnOutcome::Error { error } => {
                 tracing::error!(error.code = %error.code, "execution stream terminal error: {}", error.message);
@@ -299,7 +359,7 @@ impl RouterClient {
                 self.pending_tool_results.clear();
                 self.state = State::Idle;
                 self.send_msg(Msg::Error(error.message)).await;
-                None
+                StreamControl::Stop
             }
         }
     }
@@ -308,17 +368,17 @@ impl RouterClient {
         &mut self,
         to_decrypt: std::collections::BTreeMap<ContentRef, EncryptedPayload>,
         to_encrypt: std::collections::BTreeMap<ContentRef, String>,
-    ) -> Option<BoxStream<'static, Result<TurnEvent, RouterClientError>>> {
+    ) -> StreamControl {
         let Some(session_id) = self.session_id() else {
             self.state = State::Idle;
             self.send_msg(Msg::Error(
                 "Cannot submit decrypted content without an active session".to_owned(),
             ))
             .await;
-            return None;
+            return StreamControl::Stop;
         };
 
-        let plaintext = match self.decrypt_content(to_decrypt) {
+        let mut plaintext = match self.decrypt_content(to_decrypt) {
             Ok(plaintext) => plaintext,
             Err(err) => {
                 tracing::error!(
@@ -330,9 +390,14 @@ impl RouterClient {
                     "Failed to decrypt continuation content: {err}"
                 )))
                 .await;
-                return None;
+                return StreamControl::Stop;
             }
         };
+        plaintext.extend(
+            to_encrypt
+                .iter()
+                .map(|(reference, content)| (reference.clone(), content.clone())),
+        );
         let key_id = self.key_id().map(str::to_owned);
         let encrypted = match self.seal_content(key_id.as_deref(), to_encrypt) {
             Ok(encrypted) => encrypted,
@@ -346,7 +411,7 @@ impl RouterClient {
                     "Failed to seal continuation content: {err}"
                 )))
                 .await;
-                return None;
+                return StreamControl::Stop;
             }
         };
 
@@ -364,14 +429,14 @@ impl RouterClient {
     async fn continue_with_sealed_content(
         &mut self,
         to_encrypt: std::collections::BTreeMap<ContentRef, String>,
-    ) -> Option<BoxStream<'static, Result<TurnEvent, RouterClientError>>> {
+    ) -> StreamControl {
         let Some(session_id) = self.session_id() else {
             self.state = State::Idle;
             self.send_msg(Msg::Error(
                 "Cannot submit sealed content without an active session".to_owned(),
             ))
             .await;
-            return None;
+            return StreamControl::Stop;
         };
 
         let key_id = self.key_id().map(str::to_owned);
@@ -387,7 +452,7 @@ impl RouterClient {
                     "Failed to seal continuation content: {err}"
                 )))
                 .await;
-                return None;
+                return StreamControl::Stop;
             }
         };
 
@@ -404,7 +469,7 @@ impl RouterClient {
         session_id: uuid::Uuid,
         request: ContinueRequest,
         error_prefix: &str,
-    ) -> Option<BoxStream<'static, Result<TurnEvent, RouterClientError>>> {
+    ) -> StreamControl {
         match self
             .context
             .router_client
@@ -413,14 +478,14 @@ impl RouterClient {
         {
             Ok(stream) => {
                 self.state = State::Streaming;
-                Some(stream)
+                StreamControl::Replace(stream)
             }
             Err(err) => {
                 tracing::error!("failed to submit continuation: {err}");
                 self.state = State::Idle;
                 self.send_msg(Msg::Error(format!("{error_prefix}: {err}")))
                     .await;
-                None
+                StreamControl::Stop
             }
         }
     }
@@ -470,12 +535,51 @@ fn tool_approval_prompt(approvals: &ApprovalsStorage, request: &ToolRequest) -> 
         title: format!("Approve {}", request.name),
         detail: command
             .map(str::to_owned)
-            .unwrap_or_else(|| format_json_detail(&request.arguments)),
+            .unwrap_or_else(|| format_tool_detail(&request.name, &request.arguments)),
         tool_name: Some(request.name.clone()),
         wildcard_alias,
     }
 }
 
+fn format_tool_detail(name: &str, arguments: &serde_json::Value) -> String {
+    if name == "read_file"
+        && let Some(path) = arguments.get("path").and_then(serde_json::Value::as_str)
+    {
+        return format!("Path: {path}");
+    }
+    format_json_detail(arguments)
+}
+
 fn format_json_detail(value: &serde_json::Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_file_approval_detail_uses_a_readable_path() {
+        let detail = format_tool_detail(
+            "read_file",
+            &serde_json::json!({
+                "path": "crates/integration-tests/provider-integration-tests/Cargo.toml"
+            }),
+        );
+
+        assert_eq!(
+            detail,
+            "Path: crates/integration-tests/provider-integration-tests/Cargo.toml"
+        );
+    }
+
+    #[test]
+    fn other_tool_approval_detail_remains_pretty_json() {
+        let detail = format_tool_detail(
+            "custom_tool",
+            &serde_json::json!({ "first": 1, "second": true }),
+        );
+
+        assert_eq!(detail, "{\n  \"first\": 1,\n  \"second\": true\n}");
+    }
 }

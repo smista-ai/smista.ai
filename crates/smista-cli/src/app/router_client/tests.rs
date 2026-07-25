@@ -195,13 +195,17 @@ async fn build_execute_request_attaches_files_instructions_and_available_skills(
 
     let request = router_client
         .build_execute_request(
-            "explain this file".to_owned(),
+            "What does @src/lib.rs do? Mention @someone too.".to_owned(),
             [PathBuf::from("src/lib.rs")].into_iter().collect(),
             false,
             None,
         )
         .await;
 
+    assert_eq!(
+        request.input.text,
+        "What does src/lib.rs do? Mention @someone too."
+    );
     assert_eq!(request.input.command, None);
     assert_eq!(request.attachments.files.len(), 1);
     let file = &request.attachments.files[0];
@@ -541,7 +545,7 @@ async fn tool_call_started_emits_progress_message() {
         }))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_continue());
     assert_eq!(
         recv_msg(&mut msg_rx).await,
         Msg::ToolCallStarted(msg::ToolCallStarted {
@@ -564,7 +568,7 @@ async fn tool_call_requested_prompts_when_shell_approval_is_missing() {
         }))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_continue());
     assert_eq!(router_client.state, State::AwaitingTool);
     assert_eq!(
         recv_msg(&mut msg_rx).await,
@@ -595,7 +599,7 @@ async fn tool_call_requested_executes_shell_when_session_alias_is_approved() {
         }))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_continue());
     let result = router_client
         .pending_tool_results
         .get("call-1")
@@ -713,6 +717,49 @@ async fn edit_approval_can_accept_later_edits_for_session() {
 }
 
 #[tokio::test]
+async fn read_approval_can_accept_later_reads_for_session() {
+    let router = MockRouter::builder()
+        .respond(
+            Endpoint::ContinueRun,
+            sse(&[TurnEvent::TurnEnd(Box::new(defaults::turn()))]),
+        )
+        .start()
+        .await;
+    let (mut router_client, mut msg_rx) = router_client_for_mock(&router).await;
+    router_client.state = State::Streaming;
+    router_client.session = Some(session_info(Uuid::nil(), "Active session", None));
+    std::fs::write(router_client.context.cwd.join("src.txt"), "contents\n")
+        .expect("fixture file is written");
+
+    router_client
+        .on_exec_stream_event(Ok(TurnEvent::ToolCallRequested {
+            call_id: "read-1".to_owned(),
+            name: "read_file".to_owned(),
+            arguments: serde_json::json!({ "path": "src.txt" }),
+            requires_approval: ToolApproval::Ask,
+        }))
+        .await;
+    assert!(matches!(
+        recv_msg(&mut msg_rx).await,
+        Msg::ApprovalPrompt(_)
+    ));
+
+    let handled = router_client
+        .continue_execution(cmd::ContinueExecution::ApprovalDecisions {
+            decisions: vec![cmd::ApprovalDecision {
+                id: "read-1".to_owned(),
+                outcome: cmd::ApprovalOutcome::Approved,
+                scope: cmd::ApprovalScope::AlwaysForSession,
+                reason: None,
+            }],
+        })
+        .await;
+
+    assert!(handled);
+    assert!(router_client.accept_reads);
+}
+
+#[tokio::test]
 async fn accepted_edit_session_runs_later_edit_without_prompt() {
     let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
     router_client.accept_edits = true;
@@ -732,7 +779,7 @@ async fn accepted_edit_session_runs_later_edit_without_prompt() {
         }))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_continue());
     assert!(msg_rx.try_recv().is_err());
     assert_eq!(
         std::fs::read_to_string(path).expect("fixture file is readable"),
@@ -746,6 +793,32 @@ async fn accepted_edit_session_runs_later_edit_without_prompt() {
 }
 
 #[tokio::test]
+async fn accepted_read_session_runs_later_read_without_prompt() {
+    let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
+    router_client.accept_reads = true;
+    std::fs::write(router_client.context.cwd.join("src.txt"), "contents\n")
+        .expect("fixture file is written");
+
+    let next_stream = router_client
+        .on_exec_stream_event(Ok(TurnEvent::ToolCallRequested {
+            call_id: "read-1".to_owned(),
+            name: "read_file".to_owned(),
+            arguments: serde_json::json!({ "path": "src.txt" }),
+            requires_approval: ToolApproval::Ask,
+        }))
+        .await;
+
+    assert!(next_stream.is_continue());
+    assert!(msg_rx.try_recv().is_err());
+    let result = router_client
+        .pending_tool_results
+        .get("read-1")
+        .expect("read result is stored");
+    assert_eq!(result.content, "contents\n");
+    assert_eq!(result.decision, Some(ApiApprovalDecision::Approved));
+}
+
+#[tokio::test]
 async fn turn_end_completed_sends_assistant_turn_and_returns_idle() {
     let (mut router_client, mut msg_rx) = router_client_with_receiver(State::Streaming);
 
@@ -755,7 +828,7 @@ async fn turn_end_completed_sends_assistant_turn_and_returns_idle() {
         )))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert_eq!(
         recv_msg(&mut msg_rx).await,
@@ -776,7 +849,7 @@ async fn text_and_reasoning_events_emit_stream_chunks() {
                 delta: "hello".to_owned(),
             }))
             .await
-            .is_none()
+            .is_continue()
     );
     assert!(
         router_client
@@ -784,7 +857,7 @@ async fn text_and_reasoning_events_emit_stream_chunks() {
                 delta: "because".to_owned(),
             }))
             .await
-            .is_none()
+            .is_continue()
     );
 
     assert_eq!(
@@ -807,7 +880,7 @@ async fn stream_errors_emit_error_and_return_idle() {
         )))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert_error_contains(&mut msg_rx, "Execution stream error").await;
 }
@@ -864,7 +937,7 @@ async fn turn_end_idle_clears_pending_tool_state() {
         }))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert!(router_client.pending_tool_prompts.is_empty());
     assert!(router_client.pending_tool_results.is_empty());
@@ -891,7 +964,7 @@ async fn turn_end_error_clears_pending_state_and_emits_error() {
         }))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert!(router_client.pending_tool_prompts.is_empty());
     assert_error_contains(&mut msg_rx, "No route matched").await;
@@ -913,7 +986,7 @@ async fn completed_turn_with_content_to_seal_reports_missing_session() {
         .on_exec_stream_event(Ok(TurnEvent::TurnEnd(Box::new(response))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(
         recv_msg(&mut msg_rx).await,
         Msg::AssistantTurn(msg::AssistantTurn {
@@ -944,7 +1017,7 @@ async fn turn_end_awaiting_approval_emits_approval_prompt() {
         }))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::AwaitingApproval);
     assert_eq!(
         recv_msg(&mut msg_rx).await,
@@ -973,7 +1046,7 @@ async fn awaiting_decrypt_without_session_reports_error() {
         }))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert_error_contains(&mut msg_rx, "Cannot submit decrypted content").await;
 }
@@ -999,7 +1072,7 @@ async fn awaiting_decrypt_reports_decrypt_errors() {
         }))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert_error_contains(&mut msg_rx, "Failed to decrypt continuation content").await;
 }
@@ -1025,7 +1098,7 @@ async fn awaiting_decrypt_reports_seal_errors() {
         }))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert_error_contains(&mut msg_rx, "Failed to seal continuation content").await;
 }
@@ -1070,7 +1143,7 @@ async fn awaiting_encrypt_submits_sealed_content() {
         }))))
         .await;
 
-    assert!(next_stream.is_some());
+    assert!(next_stream.is_replace());
     let request = continue_request_body(&router).await;
     let ContinueRequest::Sealed { encrypted } = request else {
         panic!("sealed continuation expected");
@@ -1107,7 +1180,7 @@ async fn awaiting_encrypt_without_session_reports_error() {
         }))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert_error_contains(&mut msg_rx, "Cannot submit sealed content").await;
 }
@@ -1132,7 +1205,7 @@ async fn awaiting_encrypt_reports_seal_errors() {
         }))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert_error_contains(&mut msg_rx, "Failed to seal continuation content").await;
 }
@@ -1165,7 +1238,7 @@ async fn continuation_stream_open_failure_reports_error() {
         }))))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_stop());
     assert_eq!(router_client.state, State::Idle);
     assert_error_contains(&mut msg_rx, "Failed to submit sealed content").await;
 }
@@ -1218,7 +1291,7 @@ async fn awaiting_decrypt_submits_plaintext_and_sealed_content() {
         }))))
         .await;
 
-    assert!(next_stream.is_some());
+    assert!(next_stream.is_replace());
     let request = continue_request_body(&router).await;
     let ContinueRequest::Decrypted {
         plaintext,
@@ -1230,6 +1303,10 @@ async fn awaiting_decrypt_submits_plaintext_and_sealed_content() {
     assert_eq!(
         plaintext.get(&ContentRef::Message("history-1".to_owned())),
         Some(&"history text".to_owned())
+    );
+    assert_eq!(
+        plaintext.get(&ContentRef::RunInput(Uuid::nil().to_string())),
+        Some(&"run input".to_owned())
     );
     let payload = encrypted
         .get(&ContentRef::RunInput(Uuid::nil().to_string()))
@@ -1258,13 +1335,13 @@ async fn duplicate_tool_requests_do_not_prompt_twice() {
         router_client
             .on_exec_stream_event(Ok(event.clone()))
             .await
-            .is_none()
+            .is_continue()
     );
     assert!(
         router_client
             .on_exec_stream_event(Ok(event))
             .await
-            .is_none()
+            .is_continue()
     );
 
     assert!(matches!(
@@ -1287,7 +1364,7 @@ async fn invalid_shell_approval_request_prompts_without_alias() {
         }))
         .await;
 
-    assert!(next_stream.is_none());
+    assert!(next_stream.is_continue());
     assert_eq!(router_client.state, State::AwaitingTool);
     assert_eq!(
         recv_msg(&mut msg_rx).await,
@@ -1328,7 +1405,7 @@ async fn awaiting_tool_with_all_results_opens_continue_stream() {
         }))))
         .await;
 
-    assert!(next_stream.is_some());
+    assert!(next_stream.is_replace());
     assert_eq!(router_client.state, State::Streaming);
     assert!(router_client.pending_tool_prompts.is_empty());
     assert!(router_client.pending_tool_results.is_empty());

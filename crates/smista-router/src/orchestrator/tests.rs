@@ -458,6 +458,28 @@ async fn should_feed_denied_tool_back_without_pausing() {
     assert!(matches!(response.outcome, TurnOutcome::Completed(_)));
 }
 
+#[tokio::test]
+async fn should_feed_unoffered_tool_back_without_asking_for_approval() {
+    let (orchestrator, user_id, session_id) =
+        orchestrator_with_router(Router::mock_scripted(vec![
+            tool_call_response("smista-conventions"),
+            completed_response(),
+        ]))
+        .await;
+
+    let response = orchestrator
+        .execute(
+            user_id,
+            session_id,
+            sample_execute_request(),
+            HashMap::new(),
+        )
+        .await
+        .expect("turn completes after the unoffered tool is rejected");
+
+    assert!(matches!(response.outcome, TurnOutcome::Completed(_)));
+}
+
 /// Drives a fresh run to a pause on an `allow`-mode `read_file` tool.
 async fn paused_on_allow_tool() -> (Orchestrator, Uuid, Uuid) {
     let (orchestrator, user_id, session_id) =
