@@ -4,8 +4,8 @@ publish_all: publish_crates publish_sdk
 
 # Publish all crates in dependency order. `cargo publish` automatically infers the correct dependency order
 [group('publish')]
-publish_crates:
-  cargo publish
+publish_crates args="":
+  cargo publish --locked {{ args }}
 
 [group('publish')]
 publish_smista_core: (_publish "smista-core")

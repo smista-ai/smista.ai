@@ -69,7 +69,6 @@ serde_json = "1"
 sha-crypt = { version = "0.6", default-features = false }
 sha2 = "0.11"
 smista-core = { version = "0.0", path = "crates/smista-core" }
-smista-mock-web-server = { version = "0.0", path = "crates/mock-web-server" }
 smista-providers = { version = "0.0", path = "crates/smista-providers" }
 smista-router = { version = "0.0", path = "crates/smista-router" }
 smista-router-client = { version = "0.0", path = "crates/smista-router-client" }
