@@ -97,6 +97,7 @@ ignore = false
 multiple-versions = "warn"
 # A `version = "*"` requirement is forbidden; pin to a real range.
 wildcards = "deny"
+allow-wildcard-paths = true
 highlight = "all"
 workspace-default-features = "allow"
 external-default-features = "allow"

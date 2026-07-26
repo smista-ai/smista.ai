@@ -43,5 +43,5 @@ chrono = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
-smista-mock-web-server = { workspace = true }
+smista-mock-web-server = { path = "../mock-web-server" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
