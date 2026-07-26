@@ -12,6 +12,11 @@ build_crates args="":
 build_crates_release:
   just build_crates "--release"
 
+# Build the smista release binary for a target triple
+[group('build')]
+build_smista_release target:
+  cargo build --locked --release --package smista-cli --target {{ target }}
+
 # Update Cargo.lock; pass cargo update arguments to scope the update.
 [group('build')]
 update_lock args="":
