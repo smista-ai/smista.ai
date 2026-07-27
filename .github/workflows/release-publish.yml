@@ -12,6 +12,11 @@ on:
         required: true
         type: boolean
         default: true
+      skip_package_publish:
+        description: "Skip crates.io and npm publishing"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -223,6 +228,7 @@ jobs:
   publish-crates:
     name: Publish crates.io packages
     needs: prepare
+    if: ${{ !inputs.skip_package_publish }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -249,6 +255,7 @@ jobs:
   publish-sdk:
     name: Publish npm package
     needs: prepare
+    if: ${{ !inputs.skip_package_publish }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -289,6 +296,18 @@ jobs:
   github-release:
     name: Create GitHub release
     needs: [build, publish-crates, publish-sdk]
+    if: >-
+      ${{
+        always() &&
+        needs.build.result == 'success' &&
+        (
+          inputs.skip_package_publish ||
+          (
+            needs.publish-crates.result == 'success' &&
+            needs.publish-sdk.result == 'success'
+          )
+        )
+      }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -319,10 +338,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
+          release_flags=()
+          if [[ "$VERSION" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+
           gh release create "v$VERSION" out/* \
+            --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "v$VERSION" \
-            --notes-file notes/release-notes.md
+            --notes-file notes/release-notes.md \
+            "${release_flags[@]}"
 
   publish-homebrew:
     name: Update Homebrew tap
@@ -358,8 +386,8 @@ jobs:
           class Smista < Formula
             desc "Local-first agent with deterministic model routing"
             homepage "https://smista.ai"
-            license "Elastic-2.0"
             version "$VERSION"
+            license "Elastic-2.0"
 
             on_macos do
               on_arm do
