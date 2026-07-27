@@ -355,6 +355,12 @@ jobs:
   publish-homebrew:
     name: Update Homebrew tap
     needs: [build, github-release]
+    if: >-
+      ${{
+        always() &&
+        needs.build.result == 'success' &&
+        needs.github-release.result == 'success'
+      }}
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ inputs.version }}
@@ -386,7 +392,6 @@ jobs:
           class Smista < Formula
             desc "Local-first agent with deterministic model routing"
             homepage "https://smista.ai"
-            version "$VERSION"
             license "Elastic-2.0"
 
             on_macos do
@@ -432,6 +437,6 @@ jobs:
           git config user.name "smista release"
           git config user.email "release@smista.ai"
           git add Formula/smista.rb
-          git commit -m "smista $VERSION"
+          git commit -m "chore: update smista to $VERSION"
           gh auth setup-git
           git push origin HEAD:main
