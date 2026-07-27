@@ -277,9 +277,13 @@ jobs:
           fi
       - name: Dry-run npm publish
         if: ${{ inputs.dry_run }}
+        env:
+          NPM_CONFIG_TAG: ${{ contains(inputs.version, '-') && 'next' || 'latest' }}
         run: just sdk_npm publish --dry-run
       - name: Publish npm package
         if: ${{ !inputs.dry_run }}
+        env:
+          NPM_CONFIG_TAG: ${{ contains(inputs.version, '-') && 'next' || 'latest' }}
         run: just publish_sdk
 
   github-release:
