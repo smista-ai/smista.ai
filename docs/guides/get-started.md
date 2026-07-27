@@ -6,6 +6,7 @@
 
 - [Get Started](#get-started)
   - [Understand the workflow](#understand-the-workflow)
+  - [Install smista](#install-smista)
   - [Create your configuration](#create-your-configuration)
   - [Choose a provider and model](#choose-a-provider-and-model)
     - [Use a remote provider](#use-a-remote-provider)
@@ -36,6 +37,40 @@ do. This process is deterministic: an LLM never chooses the route.
 The `smista` binary contains both the CLI and the router. The CLI reads your
 configuration and shows results. The router selects the model, runs the task,
 mediates tools, and records an explanation of the decision.
+
+## Install smista
+
+Install the latest release with the install script. On macOS and Linux:
+
+```sh
+curl -sSLf https://smista.ai/install/install.sh | sh
+```
+
+On Windows (PowerShell):
+
+```powershell
+irm https://smista.ai/install/install.ps1 | iex
+```
+
+The script detects your platform, verifies the download checksum and uses
+Homebrew when it is available. Prefer a package manager? Install directly
+with [Homebrew](https://brew.sh):
+
+```sh
+brew install smista-ai/smista/smista
+```
+
+Or build from source with [Cargo](https://doc.rust-lang.org/cargo/):
+
+```sh
+cargo install smista --locked
+```
+
+Check the installation:
+
+```sh
+smista --version
+```
 
 ## Create your configuration
 

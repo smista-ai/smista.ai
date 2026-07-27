@@ -33,6 +33,36 @@ modern coding/text agent — prompt templates, plan mode, skills, tool
 permissions, context management, diff and review, traceability — on top of
 deterministic routing.
 
+## Install
+
+Install the latest release with the install script (macOS and Linux):
+
+```sh
+curl -sSLf https://smista.ai/install/install.sh | sh
+```
+
+On Windows (PowerShell):
+
+```powershell
+irm https://smista.ai/install/install.ps1 | iex
+```
+
+With [Homebrew](https://brew.sh):
+
+```sh
+brew install smista-ai/smista/smista
+```
+
+With [Cargo](https://doc.rust-lang.org/cargo/):
+
+```sh
+cargo install smista --locked
+```
+
+The install scripts pick the right binary for your platform, verify its
+checksum and use Homebrew when it is available. To install a specific
+version, pass `--version=X.Y.Z` (`-Version X.Y.Z` on Windows).
+
 ## Components
 
 | Component                                                       | Description                                                                                    | License     |

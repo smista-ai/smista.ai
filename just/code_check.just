@@ -44,6 +44,17 @@ setup_githooks:
     git config core.hooksPath .githooks
     @echo "git hooks installed: core.hooksPath = .githooks"
 
+# Lint the install scripts (shellcheck; PowerShell parse when pwsh is available)
+[group('code_check')]
+check_install_scripts:
+    sh -n scripts/install.sh
+    shellcheck scripts/install.sh
+    @if command -v pwsh >/dev/null 2>&1; then \
+      pwsh -NoProfile -Command '$t = $null; $e = $null; $null = [System.Management.Automation.Language.Parser]::ParseFile("scripts/install.ps1", [ref]$t, [ref]$e); if ($e) { $e; exit 1 }'; \
+    else \
+      echo "pwsh not found: skipping install.ps1 parse check"; \
+    fi
+
 # Run all code checks. Fails if any check fails
 [group('code_check')]
 check_code:
