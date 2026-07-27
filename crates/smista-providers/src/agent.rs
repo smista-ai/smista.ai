@@ -701,7 +701,9 @@ fn additional_params(parameters: &ModelParameters) -> Option<serde_json::Value> 
 /// until complete. `started_calls` tracks which calls (by `rig`'s internal
 /// id) already signalled their start, so each call starts at most once. The
 /// provider's final payload yields [`StreamEvent::Usage`], priced via
-/// `pricing`, when it reports token usage.
+/// `pricing`, when it reports token usage. Provider-native items that `rig`
+/// does not model are skipped because the provider-neutral stream vocabulary
+/// has no corresponding event.
 fn map_stream_item<R>(
     item: Result<StreamedAssistantContent<R>, CompletionError>,
     started_calls: &mut BTreeSet<String>,
@@ -759,6 +761,7 @@ where
             raw.token_usage(),
             pricing,
         )))),
+        Ok(StreamedAssistantContent::Unknown(_)) => None,
         Err(error) => Some(Err(crate::error::provider_error(
             crate::error::category_from_completion(&error),
             provider,
@@ -1172,6 +1175,15 @@ mod tests {
                 delta: "Hello".to_string(),
             }))
         );
+    }
+
+    #[test]
+    fn should_skip_unknown_stream_content() {
+        let item = map_item(Ok(StreamedAssistantContent::Unknown(
+            serde_json::json!({"type": "web_search_call"}),
+        )));
+
+        assert_eq!(item, None);
     }
 
     #[test]
