@@ -12,7 +12,6 @@
 
 use std::sync::Arc;
 
-use rig_core::completion::ToolDefinition;
 use rig_core::tool::Tool;
 use serde::Deserialize;
 
@@ -136,48 +135,48 @@ where
     type Args = MemoryArgs;
     type Output = String;
 
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: concat!(
-                "Record or forget a memory addressed by `key`.\n\n",
-                "Use scope `user` for durable facts about the user that should ",
-                "persist across sessions (preferences, identity, long-lived ",
-                "context). Use scope `session` for working memory tied to the ",
-                "current session only.\n\n",
-                "Operations:\n",
-                "- `record`: store `value` under `key`, replacing any existing ",
-                "fact filed under the same key.\n",
-                "- `forget`: remove the fact filed under `key`.\n\n",
-                "You do not need to recall memories: everything recorded is ",
-                "already provided to you as context at the start of the turn."
-            )
-            .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "op": {
-                        "type": "string",
-                        "enum": ["record", "forget"],
-                        "description": "The operation to perform."
-                    },
-                    "scope": {
-                        "type": "string",
-                        "enum": ["user", "session"],
-                        "description": "Which store to target: durable user memory or session-only working memory."
-                    },
-                    "key": {
-                        "type": "string",
-                        "description": "Topic the fact is filed under; reuse the same key to replace or forget it."
-                    },
-                    "value": {
-                        "type": "string",
-                        "description": "The fact to record. Required for `record`, ignored for `forget`."
-                    }
+    fn description(&self) -> String {
+        concat!(
+            "Record or forget a memory addressed by `key`.\n\n",
+            "Use scope `user` for durable facts about the user that should ",
+            "persist across sessions (preferences, identity, long-lived ",
+            "context). Use scope `session` for working memory tied to the ",
+            "current session only.\n\n",
+            "Operations:\n",
+            "- `record`: store `value` under `key`, replacing any existing ",
+            "fact filed under the same key.\n",
+            "- `forget`: remove the fact filed under `key`.\n\n",
+            "You do not need to recall memories: everything recorded is ",
+            "already provided to you as context at the start of the turn."
+        )
+        .to_string()
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "op": {
+                    "type": "string",
+                    "enum": ["record", "forget"],
+                    "description": "The operation to perform."
                 },
-                "required": ["op", "scope", "key"]
-            }),
-        }
+                "scope": {
+                    "type": "string",
+                    "enum": ["user", "session"],
+                    "description": "Which store to target: durable user memory or session-only working memory."
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Topic the fact is filed under; reuse the same key to replace or forget it."
+                },
+                "value": {
+                    "type": "string",
+                    "description": "The fact to record. Required for `record`, ignored for `forget`."
+                }
+            },
+            "required": ["op", "scope", "key"]
+        })
     }
 
     async fn call(&self, args: MemoryArgs) -> Result<String, Self::Error> {
@@ -497,5 +496,17 @@ mod tests {
         assert!(matches!(args.scope, MemoryStore::User));
         assert_eq!(args.key, "editor");
         assert_eq!(args.value.as_deref(), Some("neovim"));
+    }
+
+    #[test]
+    fn should_expose_memory_tool_definition() {
+        let tool = tool();
+
+        assert!(tool.description().contains("Record or forget a memory"));
+        assert_eq!(tool.parameters()["type"], "object");
+        assert_eq!(
+            tool.parameters()["required"],
+            serde_json::json!(["op", "scope", "key"])
+        );
     }
 }

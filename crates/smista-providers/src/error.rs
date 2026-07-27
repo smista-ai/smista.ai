@@ -156,6 +156,13 @@ pub(crate) fn category_from_completion(error: &CompletionError) -> ProviderError
         CompletionError::ProviderError(message) => {
             message_or(message, ProviderErrorCategory::Unknown)
         }
+        CompletionError::ProviderResponse(response) => {
+            let fallback = response
+                .status
+                .map_or(ProviderErrorCategory::Unknown, Into::into);
+            message_or(&response.body, fallback)
+        }
+        _ => ProviderErrorCategory::Unknown,
     }
 }
 
@@ -349,6 +356,45 @@ mod test {
     #[test]
     fn should_map_provider_error_rate_limit_message() {
         let error = CompletionError::ProviderError("Rate limit reached for requests".to_string());
+
+        assert_eq!(
+            category_from_completion(&error),
+            ProviderErrorCategory::RateLimit
+        );
+    }
+
+    #[test]
+    fn should_map_provider_response_status() {
+        let error = CompletionError::ProviderResponse(rig_core::ProviderResponseError {
+            status: Some(reqwest::StatusCode::SERVICE_UNAVAILABLE),
+            body: "temporarily unavailable".to_string(),
+        });
+
+        assert_eq!(
+            category_from_completion(&error),
+            ProviderErrorCategory::ProviderUnavailable
+        );
+    }
+
+    #[test]
+    fn should_refine_provider_response_status_with_body() {
+        let error = CompletionError::ProviderResponse(rig_core::ProviderResponseError {
+            status: Some(reqwest::StatusCode::BAD_REQUEST),
+            body: "This model's maximum context length is 8192 tokens".to_string(),
+        });
+
+        assert_eq!(
+            category_from_completion(&error),
+            ProviderErrorCategory::ContextLength
+        );
+    }
+
+    #[test]
+    fn should_map_provider_response_without_status_from_body() {
+        let error = CompletionError::ProviderResponse(rig_core::ProviderResponseError {
+            status: None,
+            body: "Rate limit reached for requests".to_string(),
+        });
 
         assert_eq!(
             category_from_completion(&error),

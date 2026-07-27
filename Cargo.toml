@@ -61,7 +61,7 @@ ratatui = { version = "0.30", default-features = false }
 ratatui-core = { version = "0.1.2", default-features = false, features = ["scrolling-regions"] }
 ratatui-crossterm = { version = "0.1.2", default-features = false, features = ["scrolling-regions"] }
 reqwest = { version = "0.13", default-features = false }
-rig-core = "0.39"
+rig-core = "0.40"
 rust_decimal = { version = "1", default-features = false }
 secrecy = "0.10"
 serde = "1"
