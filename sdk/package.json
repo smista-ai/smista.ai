@@ -1,6 +1,6 @@
 {
   "name": "@smista-ai/sdk",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.1",
   "description": "TypeScript/JavaScript SDK for interacting with the smista-router HTTP API.",
   "license": "MIT",
   "author": "Christian Visintin <christian.visintin@veeso.dev>",
