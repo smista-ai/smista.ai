@@ -45,9 +45,11 @@ cargo add smista-sdk --features reqwest-client
 
 ## Features
 
-| Feature          | Default | Description                                                                  |
-| ---------------- | ------- | ---------------------------------------------------------------------------- |
-| `reqwest-client` | no      | Surfaces `ReqwestClient`, the default `reqwest`-backed client over `rustls`. |
+| name             | description                                                                                                                                           | default |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `isahc-client`   | Surface [`client::IsahcClient`], the runtime-agnostic async [`isahc`](https://docs.rs/isahc)-backed client, by enabling `smista-router-client/isahc`. | no      |
+| `reqwest-client` | Surface [`client::ReqwestClient`], the async [`reqwest`](https://docs.rs/reqwest)-backed client, by enabling `smista-router-client/reqwest`.          | no      |
+| `ureq-client`    | Surface [`client::UreqClient`], the blocking [`ureq`](https://docs.rs/ureq)-backed client, by enabling `smista-router-client/ureq`.                   | no      |
 
 ## Documentation
 

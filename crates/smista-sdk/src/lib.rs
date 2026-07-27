@@ -33,9 +33,9 @@
 //!
 //! | name             | description                                                                                                                                          | default |
 //! |------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
-//! | `isahc-client`   | Surface [`client::IsahcClient`], the runtime-agnostic async [`isahc`](https://docs.rs/isahc)-backed client, by enabling `smista-router-client/isahc`. |         |
-//! | `reqwest-client` | Surface [`client::ReqwestClient`], the async [`reqwest`](https://docs.rs/reqwest)-backed client, by enabling `smista-router-client/reqwest`.          |         |
-//! | `ureq-client`    | Surface [`client::UreqClient`], the blocking [`ureq`](https://docs.rs/ureq)-backed client, by enabling `smista-router-client/ureq`.                   |         |
+//! | `isahc-client`   | Surface [`client::IsahcClient`], the runtime-agnostic async [`isahc`](https://docs.rs/isahc)-backed client, by enabling `smista-router-client/isahc`. | no      |
+//! | `reqwest-client` | Surface [`client::ReqwestClient`], the async [`reqwest`](https://docs.rs/reqwest)-backed client, by enabling `smista-router-client/reqwest`.          | no      |
+//! | `ureq-client`    | Surface [`client::UreqClient`], the blocking [`ureq`](https://docs.rs/ureq)-backed client, by enabling `smista-router-client/ureq`.                   | no      |
 
 pub mod client;
 
