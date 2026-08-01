@@ -166,9 +166,29 @@ The following sections describe each part in detail.
 
 ## Task intents
 
-smista.ai classifies each request into a fixed set of intents: `chat`, `plan`,
-`edit`, `review`, `summarize`, `prompt`, `skill`. Classification is
-deterministic — ordered rules, never an LLM.
+An intent is the kind of work a request asks for. smista.ai classifies each
+request into one of a fixed set of intents, then routes it with the rules you
+wrote for that intent. Classification is deterministic — ordered rules, never an
+LLM.
+
+| Intent      | The request asks smista to…                        | Typical prompt                                     |
+| ----------- | -------------------------------------------------- | -------------------------------------------------- |
+| `chat`      | Talk, answer a question, explain something.        | "How does the retry backoff work?"                 |
+| `plan`      | Think a task through and break it into steps.      | "Plan the migration to the new storage backend."   |
+| `edit`      | Change code or text.                               | "Fix the off-by-one in the pagination cursor."     |
+| `review`    | Judge existing code or text and give feedback.     | "Review this diff for security problems."          |
+| `summarize` | Condense long content into a shorter form.         | "Summarize this 400-line changelog."               |
+| `prompt`    | Write or improve a prompt meant for another model. | "Rewrite this system prompt to be less ambiguous." |
+| `skill`     | Run a named skill or tool-driven capability.       | "Run the changelog skill for release 1.4."         |
+
+Intents are a routing signal, nothing more: they exist so you can send cheap work
+to a cheap model and hard work to a strong one. A common starting policy sends
+`plan` and `review` to a reasoning model, `summarize` and `chat` to a small or
+local one, and leaves `edit` on your everyday coding model.
+
+`chat` is the default, used when no rule matches. For how the classifier picks
+an intent — signals, rule order, confidence — see
+[Task intent classification](../technical/task-classification.md).
 
 ```toml
 [[classification.rules]]
