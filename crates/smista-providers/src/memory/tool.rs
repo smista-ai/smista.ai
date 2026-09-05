@@ -12,7 +12,7 @@
 
 use std::sync::Arc;
 
-use rig_core::tool::Tool;
+use rig_core::tool::PortableTool;
 use serde::Deserialize;
 
 use crate::memory::MemoryScope;
@@ -125,15 +125,15 @@ where
     }
 }
 
-impl<S> Tool for MemoryTool<S>
+impl<S> PortableTool for MemoryTool<S>
 where
     S: MemoryStorage + 'static,
 {
     const NAME: &'static str = "memory";
 
-    type Error = MemoryToolError<S::Error>;
     type Args = MemoryArgs;
     type Output = String;
+    type Error = MemoryToolError<S::Error>;
 
     fn description(&self) -> String {
         concat!(

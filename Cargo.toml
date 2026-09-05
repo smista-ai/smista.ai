@@ -35,7 +35,7 @@ description = "Local-first agent and CLI that deterministically routes each phas
 [workspace.dependencies]
 anyhow = "1"
 apple-native-keyring-store = { version = "1", default-features = false }
-argon2 = { version = "0.5", default-features = false }
+argon2 = { version = "0.6", default-features = false }
 async-trait = "0.1"
 axum = { version = "0.8", default-features = false }
 base64 = "0.23"
@@ -45,7 +45,7 @@ clap = { version = "4", default-features = false }
 crossterm = { version = "0.29", default-features = false }
 dirs = "6"
 futures = "0.3"
-gix = { version = "0.86", default-features = false }
+gix = { version = "0.87", default-features = false }
 globset = "0.4"
 http = "1"
 isahc = { version = "2", default-features = false }
@@ -61,7 +61,8 @@ ratatui = { version = "0.30", default-features = false }
 ratatui-core = { version = "0.1.2", default-features = false, features = ["scrolling-regions"] }
 ratatui-crossterm = { version = "0.1.2", default-features = false, features = ["scrolling-regions"] }
 reqwest = { version = "0.13", default-features = false }
-rig-core = "0.40"
+rig-agent = "0.42"
+rig-core = "0.42"
 rust_decimal = { version = "1", default-features = false }
 secrecy = "0.10"
 serde = "1"
@@ -78,7 +79,7 @@ surrealdb = "3"
 surrealdb-types = "3"
 sysinfo = { version = "0.39", default-features = false }
 tempfile = "3"
-testcontainers = "0.27"
+testcontainers = "0.28"
 thiserror = "2"
 tokio = "1"
 tokio-util = "0.7"
