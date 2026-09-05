@@ -10,7 +10,9 @@ use smista_core::error::ProviderError;
 use smista_core::model::{ModelDescriptor, ModelReference, Provider};
 
 #[doc(inline)]
-pub use self::gpt::{gpt_5_4, gpt_5_4_mini, gpt_5_5, gpt_5_6_luna, gpt_5_6_sol, gpt_5_6_terra};
+pub use self::gpt::{
+    gpt_5_4, gpt_5_4_mini, gpt_5_5, gpt_5_6_luna, gpt_5_6_sol, gpt_5_6_terra, gpt_6_astra,
+};
 use crate::ProviderResult;
 use crate::agent::{Agent, AgentArgs};
 use crate::api::{CompletionRequest, CompletionResponse, ResponseStream};
@@ -30,6 +32,7 @@ pub fn catalog() -> Vec<ModelDescriptor> {
         gpt_5_6_sol(),
         gpt_5_6_terra(),
         gpt_5_6_luna(),
+        gpt_6_astra(),
     ]
 }
 
