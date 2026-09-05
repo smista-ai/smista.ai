@@ -16,12 +16,12 @@ openapi = ["dep:utoipa", "smista-core/openapi"]
 
 [dependencies]
 anyhow = { workspace = true }
-argon2 = { workspace = true, features = ["password-hash"] }
+argon2 = { workspace = true, features = ["alloc", "password-hash"] }
 axum = { workspace = true, features = ["http1", "http2", "json", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing"] }
 chrono = { workspace = true, features = ["serde"] }
 futures = { workspace = true }
 globset = { workspace = true }
-password-hash = { workspace = true }
+password-hash = { workspace = true, features = ["phc"] }
 rand = { workspace = true }
 rapidfuzz = { workspace = true }
 rust_decimal = { workspace = true, features = ["serde-with-str"] }

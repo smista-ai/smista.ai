@@ -2,25 +2,26 @@
 //! passwords.
 //!
 //! Each supported algorithm is a variant of [`SecretHasher`]. Generics are deliberately avoided:
-//! the backing crates live on incompatible `password-hash` major versions (`argon2` on `0.5`,
-//! `sha-crypt` on `0.6`) with incompatible trait shapes and hash types, so no single trait bound
-//! can cover both. Enum dispatch keeps each algorithm native to its own crate.
+//! `argon2` and `sha-crypt` each bring their own hash type through `password-hash`'s
+//! [`PasswordHasher`]/[`PasswordVerifier`] traits, so a single generic function would still need
+//! to branch on the concrete algorithm to name its output type. Enum dispatch keeps that branch
+//! in one place instead of pushing it onto every caller.
 
 use argon2::Argon2;
-use argon2::password_hash::rand_core::{OsRng, RngCore as _};
-use argon2::password_hash::{PasswordHash, PasswordHasher as _, PasswordVerifier as _, SaltString};
+use password_hash::phc::PasswordHash;
 use password_hash::{PasswordHasher as _, PasswordVerifier as _};
+use rand::RngExt as _;
 use secrecy::{ExposeSecret as _, SecretString};
 use sha_crypt::ShaCrypt;
 
 use crate::auth::{AuthenticationResult, AuthenticatorError};
 
-/// Length, in bytes, of the random salt generated for SHA-crypt hashes.
+/// Length, in bytes, of the random salt generated for a new hash, for both algorithms.
 ///
-/// SHA-crypt accepts up to 16 salt characters; 16 random bytes are Base64-encoded by the hasher
-/// into the salt field, giving the full salt budget. Changing this only affects newly issued
-/// hashes; previously stored hashes embed their own salt and remain verifiable.
-const SHA_CRYPT_SALT_LEN: usize = 16;
+/// 16 bytes is `password-hash`'s own recommended salt length, and is also the full salt budget
+/// SHA-crypt's Base64 encoding accepts. Changing this only affects newly issued hashes;
+/// previously stored hashes embed their own salt and remain verifiable.
+const RANDOM_SALT_LEN: usize = 16;
 
 /// Hashes and verifies secrets using a selectable password-hashing algorithm.
 ///
@@ -54,15 +55,16 @@ impl SecretHasher {
 
         let hash = match self {
             Self::Argon2 => {
-                let salt = SaltString::generate(&mut OsRng);
+                let mut salt = [0u8; RANDOM_SALT_LEN];
+                rand::rng().fill(&mut salt);
                 Argon2::default()
-                    .hash_password(password, &salt)
+                    .hash_password_with_salt(password, &salt)
                     .map_err(|e| AuthenticatorError::InternalError(e.into()))?
                     .to_string()
             }
             Self::Sha512Crypt => {
-                let mut salt = [0u8; SHA_CRYPT_SALT_LEN];
-                OsRng.fill_bytes(&mut salt);
+                let mut salt = [0u8; RANDOM_SALT_LEN];
+                rand::rng().fill(&mut salt);
                 ShaCrypt::SHA512
                     .hash_password_with_salt(password, &salt)
                     .map_err(|e| AuthenticatorError::InternalError(e.into()))?

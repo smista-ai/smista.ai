@@ -9,8 +9,7 @@
 //! providers.
 //!
 //! `rig` has no single error type: a call can fail with a [`CompletionError`], a
-//! transport-level [`RigHttpClientError`], a [`reqwest::Error`], or a
-//! [`serde_json::Error`] while (de)serializing payloads. Each gets a
+//! transport-level [`RigHttpClientError`], or a [`reqwest::Error`]. Each gets a
 //! `category_from_*` classifier.
 //!
 //! Two facts shape the heuristics:
@@ -130,14 +129,6 @@ pub(crate) fn category_from_reqwest(error: &reqwest::Error) -> ProviderErrorCate
     }
 }
 
-/// Classifies a [`serde_json::Error`] from a malformed request or response body.
-///
-/// A (de)serialization failure means the body did not match the expected shape,
-/// which maps to [`ProviderErrorCategory::InvalidRequest`].
-pub(crate) fn category_from_serde(_error: &serde_json::Error) -> ProviderErrorCategory {
-    ProviderErrorCategory::InvalidRequest
-}
-
 /// Classifies a [`CompletionError`], the root of `rig`'s provider failures.
 pub(crate) fn category_from_completion(error: &CompletionError) -> ProviderErrorCategory {
     match error {
@@ -162,7 +153,6 @@ pub(crate) fn category_from_completion(error: &CompletionError) -> ProviderError
                 .map_or(ProviderErrorCategory::Unknown, Into::into);
             message_or(&response.body, fallback)
         }
-        _ => ProviderErrorCategory::Unknown,
     }
 }
 
@@ -365,10 +355,10 @@ mod test {
 
     #[test]
     fn should_map_provider_response_status() {
-        let error = CompletionError::ProviderResponse(rig_core::ProviderResponseError {
-            status: Some(reqwest::StatusCode::SERVICE_UNAVAILABLE),
-            body: "temporarily unavailable".to_string(),
-        });
+        let error = CompletionError::ProviderResponse(rig_core::ProviderResponseError::new(
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily unavailable",
+        ));
 
         assert_eq!(
             category_from_completion(&error),
@@ -378,10 +368,10 @@ mod test {
 
     #[test]
     fn should_refine_provider_response_status_with_body() {
-        let error = CompletionError::ProviderResponse(rig_core::ProviderResponseError {
-            status: Some(reqwest::StatusCode::BAD_REQUEST),
-            body: "This model's maximum context length is 8192 tokens".to_string(),
-        });
+        let error = CompletionError::ProviderResponse(rig_core::ProviderResponseError::new(
+            reqwest::StatusCode::BAD_REQUEST,
+            "This model's maximum context length is 8192 tokens",
+        ));
 
         assert_eq!(
             category_from_completion(&error),
@@ -391,10 +381,9 @@ mod test {
 
     #[test]
     fn should_map_provider_response_without_status_from_body() {
-        let error = CompletionError::ProviderResponse(rig_core::ProviderResponseError {
-            status: None,
-            body: "Rate limit reached for requests".to_string(),
-        });
+        let error = CompletionError::ProviderResponse(
+            rig_core::ProviderResponseError::without_status("Rate limit reached for requests"),
+        );
 
         assert_eq!(
             category_from_completion(&error),
@@ -428,14 +417,6 @@ mod test {
 
         assert_eq!(
             category_from_completion(&error),
-            ProviderErrorCategory::InvalidRequest
-        );
-    }
-
-    #[test]
-    fn should_map_bare_serde_error_to_invalid_request() {
-        assert_eq!(
-            category_from_serde(&json_error()),
             ProviderErrorCategory::InvalidRequest
         );
     }

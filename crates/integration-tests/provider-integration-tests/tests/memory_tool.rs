@@ -18,8 +18,9 @@
 use std::sync::Arc;
 
 use provider_integration_tests::{InMemoryStorage, init_tracing};
-use rig_core::completion::Prompt;
-use rig_core::prelude::{CompletionClient, ProviderClient};
+use rig_agent::client::AgentClientExt;
+use rig_agent::completion::Prompt;
+use rig_core::prelude::ProviderClient;
 use rig_core::providers::anthropic;
 use rig_core::providers::anthropic::completion::CLAUDE_HAIKU_4_5;
 use smista_providers::memory::{MemoryScope, MemoryStorage, MemoryTool, build_preamble};

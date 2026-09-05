@@ -1,27 +1,26 @@
 //! Shared `rig`-backed agent used by every remote model adapter.
 //!
-//! [`Agent`] wraps a [`RigAgent`] built from the provider configuration and the
-//! memory storage, and is the single place where the internal request/response
-//! vocabulary in [`crate::api`] is mapped onto `rig` types. Nothing outside the
-//! adapter layer sees `rig`.
+//! [`Agent`] wraps a `rig` completion model built from the provider
+//! configuration and the memory storage, and is the single place where the
+//! internal request/response vocabulary in [`crate::api`] is mapped onto
+//! `rig` types. Nothing outside the adapter layer sees `rig`.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use futures::StreamExt;
-use rig_core::OneOrMany;
-use rig_core::agent::Agent as RigAgent;
 use rig_core::client::CompletionClient;
 use rig_core::completion::request::{
-    Completion, CompletionError, CompletionRequestBuilder, GetTokenUsage,
+    CompletionError, CompletionModel as RigCompletionModel, CompletionRequestBuilder,
     ToolDefinition as RigToolDefinition, Usage as RigUsage,
 };
 use rig_core::message::{
     AssistantContent, Message as RigMessage, Reasoning, ReasoningContent, Text,
-    ToolCall as RigToolCall, ToolChoice as RigToolChoice, ToolFunction,
+    ToolCall as RigToolCall, ToolCallId, ToolChoice as RigToolChoice, ToolFunction,
     ToolResult as RigToolResult, ToolResultContent, UserContent,
 };
 use rig_core::streaming::{StreamedAssistantContent, ToolCallDeltaContent};
+use rig_core::tool::{PortableTool, portable_tool_definition};
 use rust_decimal::Decimal;
 use serde::Serialize;
 use smista_core::error::{ProviderError, ProviderErrorCategory};
@@ -47,6 +46,35 @@ const MEMORIES_MAX_RECORDS: usize = 40;
 /// stop a model that keeps requesting internal tool calls from looping
 /// forever. Raising it increases worst-case latency and cost per completion.
 const MAX_INTERNAL_TOOL_TURNS: usize = 8;
+
+/// A tool [`Agent`] executes itself, erased so the agent stays generic only
+/// over the completion client and not over every [`PortableTool`]'s own
+/// generic parameters (the memory tool is generic over its [`MemoryStorage`]
+/// backend).
+#[async_trait::async_trait]
+trait InternalTool: Send + Sync {
+    /// The tool definition advertised to the model.
+    fn definition(&self) -> RigToolDefinition;
+
+    /// Executes the tool from the model's raw JSON arguments, returning its
+    /// output or a display-ready error.
+    async fn invoke(&self, arguments: serde_json::Value) -> Result<String, String>;
+}
+
+#[async_trait::async_trait]
+impl<T> InternalTool for T
+where
+    T: PortableTool<Output = String> + Send + Sync,
+{
+    fn definition(&self) -> RigToolDefinition {
+        portable_tool_definition(self)
+    }
+
+    async fn invoke(&self, arguments: serde_json::Value) -> Result<String, String> {
+        let args: T::Args = serde_json::from_value(arguments).map_err(|error| error.to_string())?;
+        self.call(args).await.map_err(|error| error.to_string())
+    }
+}
 
 /// Arguments for creating a new [`Agent`].
 pub struct AgentArgs<C, S>
@@ -74,7 +102,7 @@ where
     pub scope: MemoryScope,
 }
 
-/// Internal structure which wraps an [`RigAgent`], and is built from the provider configuration and memory storage.
+/// Internal structure which wraps a `rig` completion model, built from the provider configuration and memory storage.
 ///
 /// The agent is responsible for maintaining the conversation state, and for executing the tool calls to collect memory records.
 ///
@@ -84,22 +112,29 @@ pub struct Agent<C>
 where
     C: CompletionClient,
 {
-    agent: RigAgent<C::CompletionModel>,
+    model: C::CompletionModel,
+    /// The full system preamble: the caller's base text, the memory preamble
+    /// and any extra segments, each appended as its own line-separated block.
+    preamble: String,
+    /// The agent-executed tool (the memory tool), type-erased over its
+    /// storage backend.
+    internal_tool: Arc<dyn InternalTool>,
+    /// The internal tool's definition, precomputed once and advertised on
+    /// every turn alongside the caller's own tools.
+    internal_tool_definition: RigToolDefinition,
     /// The driven model's descriptor: source of the model name, provider,
     /// pricing and streaming capability.
     descriptor: ModelDescriptor,
-    /// Names of the tools the agent executes itself (the memory tool); calls to
-    /// any other tool are returned to the caller for router mediation.
-    internal_tools: BTreeSet<String>,
 }
 
 impl<C> Agent<C>
 where
     C: CompletionClient,
+    C::CompletionModel: Clone,
 {
-    /// Creates a new [`Agent`] by loading the preamble from the [`MemoryStorage`], and building a [`RigAgent`] with the provided configuration.
+    /// Creates a new [`Agent`] by loading the preamble from the [`MemoryStorage`], and building the underlying completion model with the provided configuration.
     ///
-    /// Fails if there is an error loading the preamble from the storage, or if there is an error building the agent.
+    /// Fails if there is an error loading the preamble from the storage.
     pub async fn new<S>(
         AgentArgs {
             completion_model,
@@ -113,17 +148,17 @@ where
     where
         S: MemoryStorage + 'static,
     {
-        let model = descriptor.model.clone();
+        let model_name = descriptor.model.clone();
         let provider = descriptor.provider.clone();
 
         // load preamble from memory storage
         tracing::debug!(
             model.provider = %provider,
-            model.name = %model,
+            model.name = %model_name,
             "loading preamble from memory storage"
         );
         let memory_preamble =
-            load_memories_preamble(storage.as_ref(), scope, provider.clone(), &model).await?;
+            load_memories_preamble(storage.as_ref(), scope, provider.clone(), &model_name).await?;
 
         // load memory tool
         let memory_tool = MemoryTool::new(storage.clone(), scope);
@@ -131,52 +166,37 @@ where
         // build agent
         tracing::debug!(
             model.provider = %provider,
-            model.name = %model,
+            model.name = %model_name,
             "creating agent"
         );
-        let mut builder = completion_model
-            .agent(model.clone())
-            .preamble(&preamble)
-            .tool(memory_tool);
+        let mut full_preamble = preamble;
         // `preamble` replaces the system prompt, so the memory preamble must be
         // appended rather than set or it would wipe the base preamble.
         if let Some(memories) = memory_preamble {
-            builder = builder.append_preamble(&memories);
+            full_preamble.push('\n');
+            full_preamble.push_str(&memories);
         }
         // Extra segments follow the memory, each appended as its own block so
         // the final preamble order is base, then memory, then the segments.
         for segment in &preamble_segments {
-            builder = builder.append_preamble(segment);
+            full_preamble.push('\n');
+            full_preamble.push_str(segment);
         }
-        let agent = builder.build();
 
-        // snapshot the names of the tools the agent executes itself, so
-        // completions can tell internal tool calls apart from router-mediated ones
-        let internal_tools = agent
-            .tool_server_handle
-            .get_tool_defs(None)
-            .await
-            .map_err(|error| {
-                crate::error::provider_error(
-                    ProviderErrorCategory::Unknown,
-                    provider.clone(),
-                    Some(model.clone()),
-                    format!("failed to enumerate agent tools: {error}"),
-                )
-            })?
-            .into_iter()
-            .map(|tool| tool.name)
-            .collect();
+        let internal_tool_definition = InternalTool::definition(&memory_tool);
+        let model = completion_model.completion_model(model_name.clone());
         tracing::debug!(
             model.provider = %provider,
-            model.name = %model,
+            model.name = %model_name,
             "agent created successfully"
         );
 
         Ok(Self {
-            agent,
+            model,
+            preamble: full_preamble,
+            internal_tool: Arc::new(memory_tool),
+            internal_tool_definition,
             descriptor,
-            internal_tools,
         })
     }
 
@@ -206,7 +226,11 @@ where
         );
         let text_tool_call_decoder = decoder_for_provider(&self.descriptor.provider);
 
-        let mut history: Vec<RigMessage> = messages.into_iter().map(into_rig_message).collect();
+        let tool_result_names = tool_result_names(&messages);
+        let mut history: Vec<RigMessage> = messages
+            .into_iter()
+            .map(|message| into_rig_message(message, &tool_result_names))
+            .collect();
         let Some(mut prompt) = history.pop() else {
             return Err(self.error(
                 ProviderErrorCategory::InvalidRequest,
@@ -224,7 +248,6 @@ where
                     tools.clone(),
                     tool_choice,
                 )
-                .await?
                 .send()
                 .await
                 .map_err(|error| {
@@ -257,7 +280,7 @@ where
                         content.clear();
                         tool_calls.extend(calls.into_iter().enumerate().map(|(index, call)| {
                             RigToolCall::new(
-                                format!("text-tool-call-{index}"),
+                                ToolCallId::new_or_mint(format!("text-tool-call-{index}")),
                                 ToolFunction::new(call.name, call.arguments),
                             )
                         }));
@@ -271,7 +294,7 @@ where
             let all_internal = !tool_calls.is_empty()
                 && tool_calls
                     .iter()
-                    .all(|call| self.internal_tools.contains(&call.function.name));
+                    .all(|call| call.function.name == self.internal_tool_definition.name);
             if !all_internal {
                 tracing::debug!(
                     model.provider = %self.descriptor.provider,
@@ -285,7 +308,7 @@ where
                     finish_reason: if recovered_text_tool_calls {
                         FinishReason::ToolCalls
                     } else {
-                        finish_reason(&response.raw_response, !tool_calls.is_empty())
+                        finish_reason(&response.raw, !tool_calls.is_empty())
                     },
                     content,
                     tool_calls: tool_calls.into_iter().map(api_tool_call).collect(),
@@ -310,10 +333,7 @@ where
                 id: response.message_id.clone(),
                 content: response.choice.clone(),
             });
-            prompt = RigMessage::User {
-                content: OneOrMany::many(results)
-                    .expect("tool results are non-empty because tool calls were non-empty"),
-            };
+            prompt = RigMessage::User { content: results };
         }
 
         Err(self.error(
@@ -365,7 +385,11 @@ where
         );
         let text_tool_call_decoder = decoder_for_provider(&self.descriptor.provider);
 
-        let mut history: Vec<RigMessage> = messages.into_iter().map(into_rig_message).collect();
+        let tool_result_names = tool_result_names(&messages);
+        let mut history: Vec<RigMessage> = messages
+            .into_iter()
+            .map(|message| into_rig_message(message, &tool_result_names))
+            .collect();
         let Some(prompt) = history.pop() else {
             return Err(self.error(
                 ProviderErrorCategory::InvalidRequest,
@@ -375,7 +399,6 @@ where
 
         let stream = self
             .request_builder(prompt, &history, &parameters, tools, tool_choice)
-            .await?
             .stream()
             .await
             .map_err(|error| {
@@ -424,45 +447,39 @@ where
         Ok(ResponseStream::new(events))
     }
 
-    /// Builds the `rig` completion request for one turn, layering the
+    /// Builds the `rig` completion request builder for one turn, layering the
     /// per-request tools, tool choice and generation parameters on top of the
-    /// agent's own configuration (preamble and memory tool).
-    async fn request_builder(
+    /// agent's own configuration (preamble and the internal tool).
+    fn request_builder(
         &self,
         prompt: RigMessage,
         history: &[RigMessage],
         parameters: &ModelParameters,
         tools: Vec<ToolDefinition>,
         tool_choice: ToolChoice,
-    ) -> ProviderResult<CompletionRequestBuilder<C::CompletionModel>> {
+    ) -> CompletionRequestBuilder<C::CompletionModel> {
+        let mut all_tools: Vec<RigToolDefinition> = tools.into_iter().map(into_rig_tool).collect();
+        all_tools.push(self.internal_tool_definition.clone());
+
         let builder = self
-            .agent
-            .completion(prompt, history.iter().cloned())
-            .await
-            .map_err(|error| {
-                self.error(
-                    crate::error::category_from_completion(&error),
-                    error.to_string(),
-                )
-            })?
-            .tools(tools.into_iter().map(into_rig_tool).collect())
+            .model
+            .completion_request(prompt)
+            .preamble(self.preamble.clone())
+            .messages(history.iter().cloned())
+            .tools(all_tools)
             .temperature_opt(parameters.temperature.map(f64::from))
             .max_tokens_opt(parameters.max_tokens.map(u64::from))
             .additional_params_opt(additional_params(parameters));
 
-        Ok(match into_rig_tool_choice(tool_choice) {
+        match into_rig_tool_choice(tool_choice) {
             Some(choice) => builder.tool_choice(choice),
             None => builder,
-        })
+        }
     }
 
     /// Executes one agent-internal tool call and wraps its output as the tool
     /// result content to feed back to the model.
     async fn execute_internal_tool(&self, call: &RigToolCall) -> ProviderResult<UserContent> {
-        let arguments = serde_json::to_string(&call.function.arguments).map_err(|error| {
-            self.error(crate::error::category_from_serde(&error), error.to_string())
-        })?;
-
         // log only the tool name: arguments and output can carry user data
         tracing::debug!(
             model.provider = %self.descriptor.provider,
@@ -471,9 +488,8 @@ where
             "executing internal tool call"
         );
         let output = self
-            .agent
-            .tool_server_handle
-            .call_tool(&call.function.name, &arguments)
+            .internal_tool
+            .invoke(call.function.arguments.clone())
             .await
             .map_err(|error| {
                 self.error(
@@ -483,9 +499,10 @@ where
             })?;
 
         Ok(UserContent::ToolResult(RigToolResult {
-            id: call.id.clone(),
-            call_id: call.call_id.clone(),
-            content: OneOrMany::one(ToolResultContent::Text(Text::new(output))),
+            call: call.id.clone(),
+            provider: call.provider.clone(),
+            name: call.function.name.clone(),
+            content: vec![ToolResultContent::Text(Text::new(output))],
         }))
     }
 
@@ -543,12 +560,35 @@ impl Pricing {
     }
 }
 
+/// Maps each tool call's `call_id` (from every assistant turn in the history)
+/// to its tool name.
+///
+/// `rig`'s tool-result content requires the executed tool's name for wire
+/// replay (Gemini, Ollama); the name is not otherwise available at the point
+/// a bare [`RequestMessage::ToolResult`] is mapped, so it is recovered here
+/// from the assistant turn that requested the call.
+fn tool_result_names(messages: &[RequestMessage]) -> HashMap<String, String> {
+    messages
+        .iter()
+        .filter_map(|message| match message {
+            RequestMessage::Assistant { tool_calls, .. } => Some(tool_calls.iter()),
+            _ => None,
+        })
+        .flatten()
+        .map(|call| (call.call_id.clone(), call.name.clone()))
+        .collect()
+}
+
 /// Converts an internal [`RequestMessage`] into the `rig` message vocabulary.
 ///
 /// Tool results become user-side tool-result content correlated by `call_id`;
 /// the `is_error` flag has no `rig` equivalent, so a failed call must convey
-/// the failure through its result text.
-fn into_rig_message(message: RequestMessage) -> RigMessage {
+/// the failure through its result text. `tool_result_names` recovers the
+/// executed tool's name (see [`tool_result_names`]).
+fn into_rig_message(
+    message: RequestMessage,
+    tool_result_names: &HashMap<String, String>,
+) -> RigMessage {
     match message {
         RequestMessage::System { content } => RigMessage::system(content),
         RequestMessage::User { content } => RigMessage::user(content),
@@ -559,29 +599,37 @@ fn into_rig_message(message: RequestMessage) -> RigMessage {
             let text = (!content.is_empty()).then(|| AssistantContent::Text(Text::new(content)));
             let calls = tool_calls.into_iter().map(|call| {
                 AssistantContent::ToolCall(RigToolCall::new(
-                    call.call_id,
+                    ToolCallId::new_or_mint(call.call_id),
                     ToolFunction::new(call.name, call.arguments),
                 ))
             });
+            let items: Vec<AssistantContent> = text.into_iter().chain(calls).collect();
             RigMessage::Assistant {
                 id: None,
-                content: OneOrMany::many(text.into_iter().chain(calls))
-                    // providers reject empty assistant turns, so an assistant
-                    // message with no text and no calls degrades to empty text
-                    .unwrap_or_else(|_| OneOrMany::one(AssistantContent::text(""))),
+                // providers reject empty assistant turns, so an assistant
+                // message with no text and no calls degrades to empty text
+                content: if items.is_empty() {
+                    vec![AssistantContent::text("")]
+                } else {
+                    items
+                },
             }
         }
         RequestMessage::ToolResult {
             call_id,
             content,
             is_error: _,
-        } => RigMessage::User {
-            content: OneOrMany::one(UserContent::ToolResult(RigToolResult {
-                id: call_id,
-                call_id: None,
-                content: OneOrMany::one(ToolResultContent::Text(Text::new(content))),
-            })),
-        },
+        } => {
+            let name = tool_result_names.get(&call_id).cloned().unwrap_or_default();
+            RigMessage::User {
+                content: vec![UserContent::ToolResult(RigToolResult {
+                    call: ToolCallId::new_or_mint(call_id),
+                    provider: None,
+                    name,
+                    content: vec![ToolResultContent::Text(Text::new(content))],
+                })],
+            }
+        }
     }
 }
 
@@ -608,11 +656,13 @@ fn into_rig_tool_choice(tool_choice: ToolChoice) -> Option<RigToolChoice> {
 
 /// Converts a `rig` tool call into the internal [`ToolCall`].
 ///
-/// The provider-specific `call_id` takes precedence over the generic `id` when
-/// present, matching how providers correlate tool results.
+/// The provider-specific call id takes precedence over rig's minted
+/// correlation handle when present, matching how providers correlate tool
+/// results.
 fn api_tool_call(call: RigToolCall) -> ToolCall {
+    let call_id = call.wire_call_id().to_string();
     ToolCall {
-        call_id: call.call_id.unwrap_or(call.id),
+        call_id,
         name: call.function.name,
         arguments: call.function.arguments,
     }
@@ -704,16 +754,13 @@ fn additional_params(parameters: &ModelParameters) -> Option<serde_json::Value> 
 /// `pricing`, when it reports token usage. Provider-native items that `rig`
 /// does not model are skipped because the provider-neutral stream vocabulary
 /// has no corresponding event.
-fn map_stream_item<R>(
-    item: Result<StreamedAssistantContent<R>, CompletionError>,
+fn map_stream_item(
+    item: Result<StreamedAssistantContent, CompletionError>,
     started_calls: &mut BTreeSet<String>,
     pricing: Pricing,
     provider: Provider,
     model: &str,
-) -> Option<Result<StreamEvent, ProviderError>>
-where
-    R: Clone + Unpin + GetTokenUsage,
-{
+) -> Option<Result<StreamEvent, ProviderError>> {
     match item {
         Ok(StreamedAssistantContent::Text(text)) => {
             Some(Ok(StreamEvent::TextDelta { delta: text.text }))
@@ -738,29 +785,33 @@ where
             }))
         }
         Ok(StreamedAssistantContent::ToolCallDelta {
-            id,
             internal_call_id,
             content: ToolCallDeltaContent::Name(name),
-        }) => started_calls
-            .insert(internal_call_id)
-            .then_some(Ok(StreamEvent::ToolCallStarted { call_id: id, name })),
+        }) => {
+            // no provider call id is known yet at this point in the stream;
+            // rig's own per-call correlator is the best available signal.
+            let is_new = started_calls.insert(internal_call_id.clone());
+            is_new.then_some(Ok(StreamEvent::ToolCallStarted {
+                call_id: internal_call_id,
+                name,
+            }))
+        }
         // argument fragments are buffered by `rig` and surface as the
         // complete `ToolCall` above; partial JSON is unusable on its own
         Ok(StreamedAssistantContent::ToolCallDelta {
             content: ToolCallDeltaContent::Delta(_),
             ..
         }) => None,
-        Ok(StreamedAssistantContent::Reasoning(reasoning)) => {
+        Ok(StreamedAssistantContent::Reasoning { reasoning, .. }) => {
             let text = reasoning_text(&reasoning);
             (!text.is_empty()).then_some(Ok(StreamEvent::ReasoningDelta { delta: text }))
         }
         Ok(StreamedAssistantContent::ReasoningDelta { reasoning, .. }) => {
             Some(Ok(StreamEvent::ReasoningDelta { delta: reasoning }))
         }
-        Ok(StreamedAssistantContent::Final(raw)) => Some(Ok(StreamEvent::Usage(api_usage(
-            raw.token_usage(),
-            pricing,
-        )))),
+        Ok(StreamedAssistantContent::Final(final_record)) => Some(Ok(StreamEvent::Usage(
+            api_usage(final_record.usage, pricing),
+        ))),
         Ok(StreamedAssistantContent::Unknown(_)) => None,
         Err(error) => Some(Err(crate::error::provider_error(
             crate::error::category_from_completion(&error),
@@ -892,6 +943,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use rig_core::message::ProviderCallId;
+
     use super::*;
 
     /// Pricing with no declared prices, for tests not exercising costs.
@@ -910,16 +963,21 @@ mod tests {
         }
     }
 
+    /// Maps a bare `RequestMessage` with no assistant tool-call history.
+    fn map_message(message: RequestMessage) -> RigMessage {
+        into_rig_message(message, &HashMap::new())
+    }
+
     #[test]
     fn should_map_system_and_user_messages() {
         assert_eq!(
-            into_rig_message(RequestMessage::System {
+            map_message(RequestMessage::System {
                 content: "be brief".to_string(),
             }),
             RigMessage::system("be brief")
         );
         assert_eq!(
-            into_rig_message(RequestMessage::User {
+            map_message(RequestMessage::User {
                 content: "hello".to_string(),
             }),
             RigMessage::user("hello")
@@ -928,7 +986,7 @@ mod tests {
 
     #[test]
     fn should_map_assistant_message_with_tool_calls() {
-        let message = into_rig_message(RequestMessage::Assistant {
+        let message = map_message(RequestMessage::Assistant {
             content: "checking".to_string(),
             tool_calls: vec![ToolCall {
                 call_id: "call-1".to_string(),
@@ -941,13 +999,12 @@ mod tests {
             panic!("expected an assistant message");
         };
         assert_eq!(id, None);
-        let items: Vec<_> = content.into_iter().collect();
-        assert_eq!(items.len(), 2);
-        assert_eq!(items[0], AssistantContent::text("checking"));
-        let AssistantContent::ToolCall(call) = &items[1] else {
+        assert_eq!(content.len(), 2);
+        assert_eq!(content[0], AssistantContent::text("checking"));
+        let AssistantContent::ToolCall(call) = &content[1] else {
             panic!("expected a tool call");
         };
-        assert_eq!(call.id, "call-1");
+        assert_eq!(call.id.as_str(), "call-1");
         assert_eq!(call.function.name, "search");
         assert_eq!(
             call.function.arguments,
@@ -957,7 +1014,7 @@ mod tests {
 
     #[test]
     fn should_map_empty_assistant_message_to_empty_text() {
-        let message = into_rig_message(RequestMessage::Assistant {
+        let message = map_message(RequestMessage::Assistant {
             content: String::new(),
             tool_calls: Vec::new(),
         });
@@ -965,15 +1022,12 @@ mod tests {
         let RigMessage::Assistant { content, .. } = message else {
             panic!("expected an assistant message");
         };
-        assert_eq!(
-            content.into_iter().collect::<Vec<_>>(),
-            vec![AssistantContent::text("")]
-        );
+        assert_eq!(content, vec![AssistantContent::text("")]);
     }
 
     #[test]
     fn should_map_tool_result_to_user_tool_result_content() {
-        let message = into_rig_message(RequestMessage::ToolResult {
+        let message = map_message(RequestMessage::ToolResult {
             call_id: "call-1".to_string(),
             content: "42".to_string(),
             is_error: false,
@@ -982,30 +1036,58 @@ mod tests {
         let RigMessage::User { content } = message else {
             panic!("expected a user message");
         };
-        let UserContent::ToolResult(result) = content.first() else {
+        let Some(UserContent::ToolResult(result)) = content.first() else {
             panic!("expected tool result content");
         };
-        assert_eq!(result.id, "call-1");
+        assert_eq!(result.call.as_str(), "call-1");
         assert_eq!(
             result.content.first(),
-            ToolResultContent::Text(Text::new("42"))
+            Some(&ToolResultContent::Text(Text::new("42")))
         );
     }
 
     #[test]
+    fn should_recover_tool_result_name_from_the_requesting_assistant_turn() {
+        let names = tool_result_names(&[RequestMessage::Assistant {
+            content: String::new(),
+            tool_calls: vec![ToolCall {
+                call_id: "call-1".to_string(),
+                name: "search".to_string(),
+                arguments: serde_json::json!({}),
+            }],
+        }]);
+        let message = into_rig_message(
+            RequestMessage::ToolResult {
+                call_id: "call-1".to_string(),
+                content: "42".to_string(),
+                is_error: false,
+            },
+            &names,
+        );
+
+        let RigMessage::User { content } = message else {
+            panic!("expected a user message");
+        };
+        let Some(UserContent::ToolResult(result)) = content.first() else {
+            panic!("expected tool result content");
+        };
+        assert_eq!(result.name, "search");
+    }
+
+    #[test]
     fn should_prefer_provider_call_id_when_mapping_tool_calls() {
-        let with_call_id = RigToolCall::new(
-            "id-1".to_string(),
+        let with_provider_id = RigToolCall::new(
+            ToolCallId::new("id-1").expect("non-empty id"),
             ToolFunction::new("search".to_string(), serde_json::json!({})),
         )
-        .with_call_id("call-7".to_string());
-        assert_eq!(api_tool_call(with_call_id).call_id, "call-7");
+        .with_provider(ProviderCallId::new("call-7").expect("non-empty call id"));
+        assert_eq!(api_tool_call(with_provider_id).call_id, "call-7");
 
-        let without_call_id = RigToolCall::new(
-            "id-1".to_string(),
+        let without_provider_id = RigToolCall::new(
+            ToolCallId::new("id-1").expect("non-empty id"),
             ToolFunction::new("search".to_string(), serde_json::json!({})),
         );
-        assert_eq!(api_tool_call(without_call_id).call_id, "id-1");
+        assert_eq!(api_tool_call(without_provider_id).call_id, "id-1");
     }
 
     #[test]
@@ -1138,24 +1220,9 @@ mod tests {
         assert_eq!(additional_params(&ModelParameters::default()), None);
     }
 
-    /// Raw streaming payload reporting fixed token usage for the tests below.
-    #[derive(Clone)]
-    struct RawWithUsage;
-
-    impl GetTokenUsage for RawWithUsage {
-        fn token_usage(&self) -> RigUsage {
-            RigUsage {
-                input_tokens: 5,
-                output_tokens: 7,
-                total_tokens: 12,
-                ..RigUsage::new()
-            }
-        }
-    }
-
     /// Maps one item with fresh tool-call state and no pricing.
     fn map_item(
-        item: Result<StreamedAssistantContent<RawWithUsage>, CompletionError>,
+        item: Result<StreamedAssistantContent, CompletionError>,
     ) -> Option<Result<StreamEvent, ProviderError>> {
         map_stream_item(
             item,
@@ -1180,7 +1247,7 @@ mod tests {
     #[test]
     fn should_skip_unknown_stream_content() {
         let item = map_item(Ok(StreamedAssistantContent::Unknown(
-            serde_json::json!({"type": "web_search_call"}),
+            serde_json::json!({"type": "web_search_call"}).into(),
         )));
 
         assert_eq!(item, None);
@@ -1188,8 +1255,8 @@ mod tests {
 
     #[test]
     fn should_map_stream_tool_call_to_tool_call_requested() {
-        let tool_call = RigToolCall::new(
-            "call-1".to_string(),
+        let tool_call = RigToolCall::from_wire(
+            "call-1",
             ToolFunction::new("search".to_string(), serde_json::json!({ "query": "rust" })),
         );
         let item = map_item(Ok(StreamedAssistantContent::ToolCall {
@@ -1210,8 +1277,7 @@ mod tests {
     fn should_emit_tool_call_started_once_per_call() {
         let mut started_calls = BTreeSet::new();
         let name_delta = || {
-            Ok(StreamedAssistantContent::<RawWithUsage>::ToolCallDelta {
-                id: "call-1".to_string(),
+            Ok(StreamedAssistantContent::ToolCallDelta {
                 internal_call_id: "internal".to_string(),
                 content: ToolCallDeltaContent::Name("search".to_string()),
             })
@@ -1227,7 +1293,7 @@ mod tests {
         assert_eq!(
             first,
             Some(Ok(StreamEvent::ToolCallStarted {
-                call_id: "call-1".to_string(),
+                call_id: "internal".to_string(),
                 name: "search".to_string(),
             }))
         );
@@ -1245,11 +1311,11 @@ mod tests {
     #[test]
     fn should_not_start_a_tool_call_that_arrived_complete() {
         let mut started_calls = BTreeSet::new();
-        let tool_call = RigToolCall::new(
-            "call-1".to_string(),
+        let tool_call = RigToolCall::from_wire(
+            "call-1",
             ToolFunction::new("search".to_string(), serde_json::json!({})),
         );
-        let complete = map_stream_item::<RawWithUsage>(
+        let complete = map_stream_item(
             Ok(StreamedAssistantContent::ToolCall {
                 tool_call,
                 internal_call_id: "internal".to_string(),
@@ -1265,9 +1331,8 @@ mod tests {
         ));
 
         // a stray name fragment for the same call must not signal a start
-        let late_name = map_stream_item::<RawWithUsage>(
+        let late_name = map_stream_item(
             Ok(StreamedAssistantContent::ToolCallDelta {
-                id: "call-1".to_string(),
                 internal_call_id: "internal".to_string(),
                 content: ToolCallDeltaContent::Name("search".to_string()),
             }),
@@ -1282,7 +1347,6 @@ mod tests {
     #[test]
     fn should_drop_tool_call_argument_fragments() {
         let item = map_item(Ok(StreamedAssistantContent::ToolCallDelta {
-            id: "call-1".to_string(),
             internal_call_id: "internal".to_string(),
             content: ToolCallDeltaContent::Delta(r#"{"que"#.to_string()),
         }));
@@ -1292,7 +1356,8 @@ mod tests {
     #[test]
     fn should_map_stream_reasoning_delta() {
         let item = map_item(Ok(StreamedAssistantContent::ReasoningDelta {
-            id: None,
+            id: "r1".to_string(),
+            provider_id: None,
             reasoning: "thinking".to_string(),
         }));
         assert_eq!(
@@ -1315,7 +1380,10 @@ mod tests {
             ReasoningContent::Encrypted("opaque".to_string()),
             ReasoningContent::Summary("step two".to_string()),
         ];
-        let item = map_item(Ok(StreamedAssistantContent::Reasoning(reasoning)));
+        let item = map_item(Ok(StreamedAssistantContent::Reasoning {
+            reasoning,
+            id: "r1".to_string(),
+        }));
         assert_eq!(
             item,
             Some(Ok(StreamEvent::ReasoningDelta {
@@ -1330,13 +1398,24 @@ mod tests {
         reasoning.content = vec![ReasoningContent::Redacted {
             data: "opaque".to_string(),
         }];
-        let item = map_item(Ok(StreamedAssistantContent::Reasoning(reasoning)));
+        let item = map_item(Ok(StreamedAssistantContent::Reasoning {
+            reasoning,
+            id: "r1".to_string(),
+        }));
         assert_eq!(item, None);
     }
 
     #[test]
     fn should_map_stream_final_to_usage_event() {
-        let item = map_item(Ok(StreamedAssistantContent::Final(RawWithUsage)));
+        let usage = RigUsage {
+            input_tokens: 5,
+            output_tokens: 7,
+            total_tokens: 12,
+            ..RigUsage::new()
+        };
+        let item = map_item(Ok(StreamedAssistantContent::final_response(
+            rig_core::streaming::StreamFinal::new("test", usage),
+        )));
         let Some(Ok(StreamEvent::Usage(usage))) = item else {
             panic!("expected a usage event");
         };
@@ -1348,8 +1427,15 @@ mod tests {
 
     #[test]
     fn should_price_stream_usage_event() {
+        let usage = RigUsage {
+            input_tokens: 5,
+            output_tokens: 7,
+            ..RigUsage::new()
+        };
         let item = map_stream_item(
-            Ok(StreamedAssistantContent::Final(RawWithUsage)),
+            Ok(StreamedAssistantContent::final_response(
+                rig_core::streaming::StreamFinal::new("test", usage),
+            )),
             &mut BTreeSet::new(),
             dollar_pricing(),
             Provider::Anthropic,
@@ -1545,7 +1631,7 @@ mod tests {
         .await
         .expect("agent builds");
 
-        agent.agent.preamble.expect("a preamble was set")
+        agent.preamble
     }
 
     #[tokio::test]
