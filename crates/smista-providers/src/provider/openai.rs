@@ -231,13 +231,14 @@ mod tests {
             .await
             .expect("listing cannot fail");
 
-        assert_eq!(listed.len(), 6);
+        assert_eq!(listed.len(), 7);
         assert!(listed.contains_key(&openai::gpt_5_4().reference()));
         assert!(listed.contains_key(&openai::gpt_5_4_mini().reference()));
         assert!(listed.contains_key(&openai::gpt_5_5().reference()));
         assert!(listed.contains_key(&openai::gpt_5_6_sol().reference()));
         assert!(listed.contains_key(&openai::gpt_5_6_terra().reference()));
         assert!(listed.contains_key(&openai::gpt_5_6_luna().reference()));
+        assert!(listed.contains_key(&openai::gpt_6_astra().reference()));
     }
 
     #[tokio::test]
